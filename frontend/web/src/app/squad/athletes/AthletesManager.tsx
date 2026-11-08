@@ -63,6 +63,16 @@ interface Props {
   lateEntryOpen?: boolean;
 }
 
+/**
+ * Exact relay event checks. Never use substring matching: the Mixed Relay code '4X400M-MIX'
+ * CONTAINS '4X400M-M', which used to make mixed-relay athletes look like 4x400m athletes.
+ */
+const RELAY_400_DIVISIONAL = new Set(['4X400M-M', '4X400M-W']);
+const RELAY_100_DIVISIONAL = new Set(['4X100M-M', '4X100M-W']);
+const isRelay400Code = (code?: string) => RELAY_400_DIVISIONAL.has(String(code || '').toUpperCase());
+const isRelay100Code = (code?: string) => RELAY_100_DIVISIONAL.has(String(code || '').toUpperCase());
+const isMixedRelayCode = (code?: string) => String(code || '').toUpperCase() === '4X400M-MIX';
+
 /** Relay team fee shown per member: ₹100 for members 1–4 (runners), ₹0 for members 5–6 (reserves). */
 const RELAY_MEMBER_FEE = 100;
 function relayMemberShare(alreadyNominated: number): number {
@@ -172,18 +182,18 @@ export default function AthletesManager({
 
   // Live relay squad counts strictly derived from current squad roster (6 members per relay team)
   const registered100mRelay = athletes.filter((a) =>
-    a.registrations.some((r) => r.events?.code?.includes('4X100'))
+    a.registrations.some((r) => isRelay100Code(r.events?.code))
   ).length;
   const is100mRelayFull = registered100mRelay >= 6;
 
   const registered400mRelay = athletes.filter((a) =>
-    a.registrations.some((r) => r.events?.code?.includes('4X400M-M') || r.events?.code?.includes('4X400M-W'))
+    a.registrations.some((r) => isRelay400Code(r.events?.code))
   ).length;
   const is400mRelayFull = registered400mRelay >= 6;
 
   // Mixed team is shared by the college: include the other division's nominations
   const registeredMixedRelay = athletes.filter((a) =>
-    a.registrations.some((r) => r.events?.code?.includes('4X400M-MIX'))
+    a.registrations.some((r) => isMixedRelayCode(r.events?.code))
   ).length + siblingMixedCount;
 
   // Real-time fee calculation for current athlete modal:
@@ -715,9 +725,9 @@ export default function AthletesManager({
                   athletes.map((athlete) => {
                     const regularRegs = athlete.registrations.filter((r) => r.kind === 'regular');
                     const reserveRegs = athlete.registrations.filter((r) => r.kind === 'reserve');
-                    const relay100Regs = athlete.registrations.filter((r) => r.events?.code?.includes('4X100'));
-                    const relay400Regs = athlete.registrations.filter((r) => r.events?.code?.includes('4X400M-M') || r.events?.code?.includes('4X400M-W'));
-                    const mixedRelayRegs = athlete.registrations.filter((r) => r.events?.code?.includes('4X400M-MIX'));
+                    const relay100Regs = athlete.registrations.filter((r) => isRelay100Code(r.events?.code));
+                    const relay400Regs = athlete.registrations.filter((r) => isRelay400Code(r.events?.code));
+                    const mixedRelayRegs = athlete.registrations.filter((r) => isMixedRelayCode(r.events?.code));
                     const otherRelayRegs = athlete.registrations.filter((r) => r.kind === 'relay' && !r.events?.code?.includes('4X'));
                     const hmRegs = athlete.registrations.filter((r) => r.kind === 'half_marathon');
 
