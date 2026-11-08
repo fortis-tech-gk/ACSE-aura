@@ -6,6 +6,7 @@ import { normalizePaymentStatus } from '@/lib/payment-status';
 import { listSquadAthletesAction, getSquadRelayCountAction } from '@/app/actions/athletes';
 import './dashboard.css';
 import PedContactCard from './PedContactCard';
+import CollegeDetailsCard from './CollegeDetailsCard';
 import { canEditRoster, isLateEntryWindow } from '@/lib/roster-window';
 
 export const metadata = {
@@ -19,7 +20,7 @@ export default async function SquadDashboardPage() {
   // Fetch squad details from DB
   const { data: squad } = await supabaseAdmin
     .from('squads')
-    .select('*, colleges(name, code, district)')
+    .select('*, colleges(*)')
     .eq('id', session.squadId)
     .single();
 
@@ -151,11 +152,22 @@ export default async function SquadDashboardPage() {
         </div>
       </section>
 
-      {/* 2. PED / SPORTS DIRECTOR CONTACT (required before payment) */}
+      {/* 2. PHYSICAL EDUCATION DIRECTOR (PED) DETAILS (required before payment) */}
       <PedContactCard
         initialName={squad?.ped_name || ''}
         initialPhone={squad?.ped_phone || ''}
         initialEmail={squad?.ped_email || ''}
+      />
+
+      {/* 2a. COLLEGE DETAILS — college name + Principal (shared by Men's & Women's logins) */}
+      <CollegeDetailsCard
+        collegeCode={collegeCode}
+        initial={{
+          collegeName: college?.name || collegeName,
+          principalName: college?.principal_name || '',
+          principalEmail: college?.principal_email || '',
+          principalPhone: college?.principal_phone || '',
+        }}
       />
 
       {/* 2b. Athletes missing date of birth (needed for AURA Athletes app login) */}

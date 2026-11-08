@@ -43,9 +43,9 @@ export default function PedContactCard({ initialName, initialPhone, initialEmail
         setPhone(next.phone);
         setEmail(next.email);
         setEditing(false);
-        setNotice('Contact details saved.');
+        setNotice('PED details saved.');
       } else {
-        setError(res.error || 'Failed to save contact details.');
+        setError(res.error || 'Failed to save PED details.');
       }
     } catch (err: any) {
       setError(err?.message || 'Failed to save contact details.');
@@ -68,7 +68,7 @@ export default function PedContactCard({ initialName, initialPhone, initialEmail
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '1rem', flexWrap: 'wrap' }}>
         <div>
           <h2 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 800, color: '#0f172a' }}>
-            PED / Sports Director Contact
+            Physical Education Director (PED) Details
           </h2>
           {!isComplete && (
             <p style={{ margin: '0.35rem 0 0', fontSize: '0.875rem', color: '#b45309', fontWeight: 600 }}>
@@ -106,9 +106,9 @@ export default function PedContactCard({ initialName, initialPhone, initialEmail
 
       {!editing ? (
         <dl style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '0.75rem', margin: '1rem 0 0' }}>
-          <Field label="Name" value={saved.name} />
-          <Field label="Mobile" value={saved.phone} />
-          <Field label="Email" value={saved.email || '—'} />
+          <Field label="Name of the Physical Education Director" value={saved.name} />
+          <Field label="Mobile Number of the PED" value={saved.phone} />
+          <Field label="Email ID of the PED" value={saved.email || '—'} />
         </dl>
       ) : (
         <form onSubmit={handleSubmit} style={{ marginTop: '1rem' }}>
@@ -130,11 +130,11 @@ export default function PedContactCard({ initialName, initialPhone, initialEmail
           )}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '0.75rem' }}>
             <div>
-              <label style={labelStyle} htmlFor="ped-name">Full Name *</label>
-              <input id="ped-name" value={name} onChange={(e) => setName(e.target.value)} style={inputStyle} autoComplete="name" required />
+              <label style={labelStyle} htmlFor="ped-name">Name of the Physical Education Director *</label>
+              <input id="ped-name" value={name} onChange={(e) => setName(e.target.value)} style={inputStyle} autoComplete="name" placeholder="e.g. Dr. Ravi Kumar S" required />
             </div>
             <div>
-              <label style={labelStyle} htmlFor="ped-phone">Mobile Number *</label>
+              <label style={labelStyle} htmlFor="ped-phone">Mobile Number of the PED *</label>
               <input
                 id="ped-phone"
                 value={phone}
@@ -142,13 +142,13 @@ export default function PedContactCard({ initialName, initialPhone, initialEmail
                 style={inputStyle}
                 inputMode="tel"
                 autoComplete="tel"
-                placeholder="10-digit mobile"
+                placeholder="10-digit mobile number"
                 required
               />
             </div>
             <div>
-              <label style={labelStyle} htmlFor="ped-email">Email (optional)</label>
-              <input id="ped-email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} style={inputStyle} autoComplete="email" />
+              <label style={labelStyle} htmlFor="ped-email">Email ID of the PED (optional)</label>
+              <input id="ped-email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} style={inputStyle} autoComplete="email" placeholder="ped@college.edu.in" />
             </div>
           </div>
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', marginTop: '0.9rem', flexWrap: 'wrap' }}>
@@ -183,7 +183,7 @@ export default function PedContactCard({ initialName, initialPhone, initialEmail
                 opacity: saving ? 0.7 : 1,
               }}
             >
-              {saving ? 'Saving…' : 'Save Contact'}
+              {saving ? 'Saving…' : 'Save PED Details'}
             </button>
           </div>
         </form>
