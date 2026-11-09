@@ -1,5 +1,6 @@
 'use client';
 
+import { MAX_UPLOAD_DATA_URL_CHARS, readAsDataUrl, shrinkImageToDataUrl } from '@/lib/compress-image';
 import React, { useState } from 'react';
 import { submitPaymentAction, FeeBreakdown, PaymentRecord } from '@/app/actions/payment';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
@@ -75,28 +76,48 @@ export default function PaymentClient({ breakdown, payments, squadCode, athletes
     breakdown.hostAccountName
   )}&am=${payableTarget}&cu=INR&tn=${encodeURIComponent(`VTU Athletics ${squadCode}`)}`;
 
-  function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
+  async function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const input = e.target;
+    const file = input.files?.[0];
     if (!file) return;
 
-    if (file.size > 5 * 1024 * 1024) {
-      alert('Screenshot file size must be less than 5MB.');
-      e.target.value = '';
-      return;
-    }
-
     const validTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'application/pdf'];
-    if (!validTypes.includes(file.type.toLowerCase())) {
+    const type = file.type.toLowerCase();
+    if (!validTypes.includes(type)) {
       alert('Invalid file format. Please upload JPG, PNG, WebP or PDF receipt.');
-      e.target.value = '';
+      input.value = '';
       return;
     }
 
-    const reader = new FileReader();
-    reader.onload = () => {
-      setScreenshotData(reader.result as string);
-    };
-    reader.readAsDataURL(file);
+    try {
+      let data: string;
+      if (type === 'application/pdf') {
+        // PDFs cannot be shrunk here; the server host rejects uploads over ~4.5MB
+        if (file.size > 2.5 * 1024 * 1024) {
+          alert('PDF receipt must be under 2.5MB. A screenshot of the payment works too.');
+          input.value = '';
+          return;
+        }
+        data = await readAsDataUrl(file);
+      } else {
+        if (file.size > 20 * 1024 * 1024) {
+          alert('This screenshot is too large. Please choose an image under 20MB.');
+          input.value = '';
+          return;
+        }
+        // Keep the UTR and amount readable: shrink only to 1600px on the long side
+        data = await shrinkImageToDataUrl(file, 1600, 0.9);
+      }
+      if (data.length > MAX_UPLOAD_DATA_URL_CHARS) {
+        alert('This file is too large to upload. Please use a smaller screenshot.');
+        input.value = '';
+        return;
+      }
+      setScreenshotData(data);
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'This file could not be opened. Please choose another one.');
+      input.value = '';
+    }
   }
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {

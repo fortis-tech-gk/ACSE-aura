@@ -1,5 +1,6 @@
 'use client';
 
+import { MAX_UPLOAD_DATA_URL_CHARS, shrinkImageToDataUrl } from '@/lib/compress-image';
 import React, { useState, useMemo, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { addAthleteAction, deleteAthleteAction } from '@/app/actions/athletes';
@@ -239,28 +240,37 @@ export default function AthletesManager({
   const confirmedCount = paymentStatus === 'VERIFIED' ? athletes.length : 0;
   const pendingCount = paymentStatus !== 'VERIFIED' ? athletes.length : 0;
 
-  function handlePhotoSelect(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
+  async function handlePhotoSelect(e: React.ChangeEvent<HTMLInputElement>) {
+    const input = e.target;
+    const file = input.files?.[0];
     if (!file) return;
 
     const okTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
     if (!okTypes.includes(file.type.toLowerCase())) {
       alert('Invalid photo format. Please upload a JPG, PNG or WebP image (iPhone HEIC photos must be converted first).');
-      e.target.value = '';
+      input.value = '';
       return;
     }
 
-    if (file.size > 4 * 1024 * 1024) {
-      alert('Photo must be less than 4MB.');
-      e.target.value = '';
+    if (file.size > 20 * 1024 * 1024) {
+      alert('This photo file is too large. Please choose a photo under 20MB.');
+      input.value = '';
       return;
     }
 
-    const reader = new FileReader();
-    reader.onload = () => {
-      setPhotoPreview(reader.result as string);
-    };
-    reader.readAsDataURL(file);
+    // Shrink in the browser: uploads over ~4.5MB are rejected by the server host
+    try {
+      const data = await shrinkImageToDataUrl(file, 1000);
+      if (data.length > MAX_UPLOAD_DATA_URL_CHARS) {
+        alert('This photo is too large to upload. Please choose a smaller photo.');
+        input.value = '';
+        return;
+      }
+      setPhotoPreview(data);
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'This photo could not be opened. Please choose another photo.');
+      input.value = '';
+    }
   }
 
   function resetModalForm() {

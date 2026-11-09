@@ -1,5 +1,6 @@
 'use client';
 
+import { MAX_UPLOAD_DATA_URL_CHARS, shrinkImageToDataUrl } from '@/lib/compress-image';
 import React, { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { updateAthleteAction, UpdateAthleteResult } from '@/app/actions/athletes';
@@ -55,23 +56,35 @@ export default function EditAthleteModal({ athlete, onClose, onSaved }: Props) {
     };
   }, [onClose, saving]);
 
-  function handlePhotoSelect(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
+  async function handlePhotoSelect(e: React.ChangeEvent<HTMLInputElement>) {
+    const input = e.target;
+    const file = input.files?.[0];
     if (!file) return;
     const okTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
     if (!okTypes.includes(file.type.toLowerCase())) {
       setError('Invalid photo format. Please upload a JPG, PNG or WebP image.');
-      e.target.value = '';
+      input.value = '';
       return;
     }
-    if (file.size > 4 * 1024 * 1024) {
-      setError('Photo must be less than 4MB.');
-      e.target.value = '';
+    if (file.size > 20 * 1024 * 1024) {
+      setError('This photo file is too large. Please choose a photo under 20MB.');
+      input.value = '';
       return;
     }
-    const reader = new FileReader();
-    reader.onload = () => setPhotoPreview(reader.result as string);
-    reader.readAsDataURL(file);
+    // Shrink in the browser: uploads over ~4.5MB are rejected by the server host
+    try {
+      const data = await shrinkImageToDataUrl(file, 1000);
+      if (data.length > MAX_UPLOAD_DATA_URL_CHARS) {
+        setError('This photo is too large to upload. Please choose a smaller photo.');
+        input.value = '';
+        return;
+      }
+      setError(null);
+      setPhotoPreview(data);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'This photo could not be opened. Please choose another photo.');
+      input.value = '';
+    }
   }
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {

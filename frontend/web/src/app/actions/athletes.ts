@@ -16,6 +16,8 @@ export interface AddAthleteResult {
 /** Official VTU USN pattern, e.g. 1RV21CS001, 4MT22MBA05, 2KE20EC400 */
 const VTU_USN_REGEX = /^[1-4][A-Z]{2}\d{2}[A-Z]{2,3}\d{2,3}$/;
 
+const BLOOD_GROUPS = new Set(['A+', 'A-', 'B+', 'B-', 'O+', 'O-', 'AB+', 'AB-']);
+
 /** Indian 10-digit mobile number (starts 6–9). */
 const PHONE_REGEX = /^[6-9]\d{9}$/;
 
@@ -106,6 +108,10 @@ export async function addAthleteAction(formData: FormData): Promise<AddAthleteRe
 
   if (!PHONE_REGEX.test(phone)) {
     return { success: false, error: "Enter the student's 10-digit mobile number (e.g. 9876543210)." };
+  }
+
+  if (!BLOOD_GROUPS.has(bloodGroup)) {
+    return { success: false, error: 'Please select a valid blood group.' };
   }
 
   const dobError = validateDateOfBirth(dateOfBirth);
@@ -636,8 +642,6 @@ export interface UpdateAthleteResult {
     photo_url?: string;
   };
 }
-
-const BLOOD_GROUPS = new Set(['A+', 'A-', 'B+', 'B-', 'O+', 'O-', 'AB+', 'AB-']);
 
 /**
  * Corrects an athlete's identification bio-data (name, USN, semester, blood group, dates,
