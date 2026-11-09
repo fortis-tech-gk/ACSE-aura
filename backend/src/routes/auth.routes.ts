@@ -1,4 +1,5 @@
 import { Router, Request, Response } from 'express';
+import { isLoginThrottled, recordLoginFailure, clearLoginFailures, THROTTLE_MESSAGE } from '../utils/login-throttle';
 import { supabase } from '../config/supabase';
 import { generateToken } from '../middleware/auth';
 import { verifyPassword } from '../utils/passphrase';
@@ -75,6 +76,12 @@ authRouter.post('/staff/login', async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'Username and password are required.' });
     }
 
+    const ip = req.ip || 'unknown';
+    const userKey = username.toLowerCase();
+    if (await isLoginThrottled('admin', userKey, ip, 8, 100)) {
+      return res.status(429).json({ error: THROTTLE_MESSAGE });
+    }
+
     const { data: staff, error } = await supabase
       .from('staff')
       .select('*')
@@ -82,6 +89,7 @@ authRouter.post('/staff/login', async (req: Request, res: Response) => {
       .single();
 
     if (error || !staff) {
+      await recordLoginFailure('admin', userKey, ip);
       return res.status(401).json({ error: 'Invalid credentials.' });
     }
 
@@ -89,10 +97,15 @@ authRouter.post('/staff/login', async (req: Request, res: Response) => {
       return res.status(403).json({ error: 'Account is deactivated.' });
     }
 
+    if (!staff.password_hash) {
+      return res.status(400).json({ error: 'This account signs in with a PIN.' });
+    }
     const isValid = await verifyPassword(password, staff.password_hash);
     if (!isValid) {
+      await recordLoginFailure('admin', userKey, ip);
       return res.status(401).json({ error: 'Invalid credentials.' });
     }
+    await clearLoginFailures('admin', userKey);
 
     const token = generateToken({
       role: staff.role,
@@ -124,8 +137,16 @@ authRouter.post('/staff/pin-login', async (req: Request, res: Response) => {
     const role = (req.body.role || '').trim();
     const pin = (req.body.pin || '').trim();
 
-    if (!pin) {
-      return res.status(400).json({ error: 'PIN is required.' });
+    if (!/^\d{4,8}$/.test(pin)) {
+      return res.status(400).json({ error: 'Enter your 4–8 digit PIN.' });
+    }
+
+    // Throttle per role+device network (not per role alone — that would let anyone lock out
+    // every official of a role on meet day), plus an overall cap per IP.
+    const ip = req.ip || 'unknown';
+    const pinKey = `${role || 'any'}|${ip}`;
+    if (await isLoginThrottled('pin', pinKey, ip, 15, 30)) {
+      return res.status(429).json({ error: THROTTLE_MESSAGE });
     }
 
     const query = supabase
@@ -153,8 +174,10 @@ authRouter.post('/staff/pin-login', async (req: Request, res: Response) => {
     }
 
     if (!matchedStaff) {
+      await recordLoginFailure('pin', pinKey, ip);
       return res.status(401).json({ error: 'Invalid PIN.' });
     }
+    await clearLoginFailures('pin', pinKey);
 
     const token = generateToken({
       role: matchedStaff.role,

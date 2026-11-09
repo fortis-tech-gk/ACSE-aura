@@ -22,9 +22,11 @@ const IST_OFFSET = '+05:30';
 /** Fallback when an event has no explicit call room time: report this long before the start */
 const DEFAULT_CALL_ROOM_LEAD_MIN = 30;
 
+// Per-IP cap sized for 3000 athletes logging in over shared venue Wi-Fi / carrier NAT.
+// The real brute-force guard is per bib (8 failures / 15 min, login_attempts table).
 const loginLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 40,
+  max: 3000,
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: 'Too many login attempts from this network. Please wait 15 minutes.' },
@@ -67,7 +69,7 @@ athleteRouter.post('/login', loginLimiter, async (req: Request, res: Response) =
       const bib = parseInt(bibRaw, 10);
       throttleKey = String(bib);
 
-      if (await isLoginThrottled('athlete', throttleKey, ip, 8, 40)) {
+      if (await isLoginThrottled('athlete', throttleKey, ip, 8, 1000)) {
         return res.status(429).json({ error: THROTTLE_MESSAGE });
       }
 
@@ -366,4 +368,207 @@ athleteRouter.delete('/push-token', authenticate, requireRole(['athlete']), asyn
     await supabase.from('device_push_tokens').delete().eq('expo_push_token', token).eq('profile_id', req.user!.entityId);
   }
   return res.json({ success: true });
+});
+
+// ----------------------------------------------------------------------------
+// My Performance
+// ----------------------------------------------------------------------------
+
+type Attempt = { round?: number; attempt?: number; type?: string; mark?: number | null; height?: number; result?: string; wind?: number | null };
+
+function bestOf(entry: any, category: string): { value: number | null; status: string | null; reaction: number | null; wind: number | null; dq: string | null; attempts: Attempt[] } {
+  if (category === 'field_vertical_jump') {
+    const att: any[] = entry.vertical_jump_attempts || [];
+    const cleared = att.filter((a) => a.result === 'O').map((a) => Number(a.bar_height_meters));
+    return {
+      value: cleared.length ? Math.max(...cleared) : null,
+      status: att.length && !cleared.length ? 'NM' : null,
+      reaction: null,
+      wind: null,
+      dq: null,
+      attempts: att
+        .map((a) => ({ height: Number(a.bar_height_meters), attempt: a.attempt_number, result: a.result }))
+        .sort((x, y) => x.height! - y.height! || x.attempt! - y.attempt!),
+    };
+  }
+  if (category.startsWith('field_')) {
+    const att: any[] = entry.field_attempts || [];
+    const valid = att.filter((a) => a.attempt_type === 'VALID' && a.mark_meters != null).map((a) => Number(a.mark_meters));
+    return {
+      value: valid.length ? Math.max(...valid) : null,
+      status: att.length && !valid.length ? 'NM' : null,
+      reaction: null,
+      wind: null,
+      dq: null,
+      attempts: att
+        .map((a) => ({ round: a.round_number, type: a.attempt_type, mark: a.mark_meters != null ? Number(a.mark_meters) : null, wind: a.wind_reading != null ? Number(a.wind_reading) : null }))
+        .sort((x, y) => x.round! - y.round!),
+    };
+  }
+  // Track / relay / road: one result row
+  const tr = Array.isArray(entry.track_results) ? entry.track_results[0] : entry.track_results;
+  if (!tr) return { value: null, status: null, reaction: null, wind: null, dq: null, attempts: [] };
+  return {
+    value: tr.status === 'FINISHED' && tr.time_seconds != null ? Number(tr.time_seconds) : null,
+    status: tr.status === 'FINISHED' ? null : tr.status,
+    reaction: tr.reaction_time_ms ?? null,
+    wind: tr.wind_reading != null ? Number(tr.wind_reading) : null,
+    dq: tr.dq_rule || null,
+    attempts: [],
+  };
+}
+
+/**
+ * GET /api/athlete/performance
+ * The athlete's results per round (incl. relays): time / best mark, place within the heat,
+ * attempts, official placings (medals + points) and the college's current standing.
+ */
+athleteRouter.get('/performance', authenticate, requireRole(['athlete']), async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const athleteId = req.user!.entityId;
+
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('id, squad_id, squads ( gender, college_id )')
+      .eq('id', athleteId)
+      .maybeSingle();
+    if (!profile) return res.status(404).json({ error: 'Athlete profile not found.' });
+    const squad: any = profile.squads;
+
+    const { data: memberships } = await supabase
+      .from('relay_members')
+      .select('relay_team_id, leg_order, is_reserve')
+      .eq('profile_id', athleteId);
+    const teamIds = (memberships || []).map((m: any) => m.relay_team_id);
+    const legByTeam = new Map((memberships || []).map((m: any) => [m.relay_team_id, m]));
+
+    // Which heats this athlete (or their relay team) is in
+    const mine = await Promise.all([
+      supabase.from('heat_athletes').select('id, heat_id, relay_team_id').eq('profile_id', athleteId),
+      teamIds.length ? supabase.from('heat_athletes').select('id, heat_id, relay_team_id').in('relay_team_id', teamIds) : Promise.resolve({ data: [] as any[] }),
+    ]);
+    const myEntries: any[] = [...(mine[0].data || []), ...(mine[1].data || [])];
+    const heatIds = Array.from(new Set(myEntries.map((e) => e.heat_id)));
+
+    // Everyone in those heats (to compute places) + heat/event/schedule info
+    const [{ data: heats }, { data: allEntries }] = heatIds.length
+      ? await Promise.all([
+          supabase
+            .from('heats')
+            .select('id, stage, heat_number, status, wind_reading, events ( id, name, code, category, measurement_unit ), schedule_items ( scheduled_time, schedule_sessions ( session_date ) )')
+            .in('id', heatIds),
+          supabase
+            .from('heat_athletes')
+            .select(`
+              id, heat_id, lane_number,
+              track_results ( time_seconds, status, reaction_time_ms, wind_reading, dq_rule ),
+              field_attempts ( round_number, attempt_type, mark_meters, wind_reading ),
+              vertical_jump_attempts ( bar_height_meters, attempt_number, result )
+            `)
+            .in('heat_id', heatIds),
+        ])
+      : [{ data: [] as any[] }, { data: [] as any[] }];
+
+    const heatById = new Map((heats || []).map((h: any) => [h.id, h]));
+    const entriesByHeat = new Map<string, any[]>();
+    for (const e of allEntries || []) {
+      const list = entriesByHeat.get(e.heat_id) || [];
+      list.push(e);
+      entriesByHeat.set(e.heat_id, list);
+    }
+
+    const results = myEntries.map((mineEntry) => {
+      const heat: any = heatById.get(mineEntry.heat_id);
+      const category: string = heat?.events?.category || 'track_sprint';
+      const lowerIsBetter = !category.startsWith('field_');
+      const heatEntries = entriesByHeat.get(mineEntry.heat_id) || [];
+      const scored = heatEntries.map((e) => ({ id: e.id, lane: e.lane_number, ...bestOf(e, category) }));
+      const me = scored.find((s) => s.id === mineEntry.id) || { value: null, status: null, reaction: null, wind: null, dq: null, attempts: [], lane: null };
+      let placeInHeat: number | null = null;
+      if (me.value != null) {
+        const better = scored.filter((s) => s.value != null && (lowerIsBetter ? s.value < me.value! : s.value > me.value!)).length;
+        placeInHeat = better + 1;
+      }
+      const relay = mineEntry.relay_team_id ? legByTeam.get(mineEntry.relay_team_id) : null;
+      const date = heat?.schedule_items?.schedule_sessions?.session_date;
+      return {
+        key: mineEntry.id,
+        eventId: heat?.events?.id,
+        eventName: heat?.events?.name || 'Event',
+        eventCode: heat?.events?.code || '',
+        category,
+        unit: lowerIsBetter ? 'seconds' : 'metres',
+        stage: heat?.stage || null,
+        heatNumber: heat?.heat_number ?? null,
+        heatStatus: heat?.status || 'SCHEDULED',
+        lane: (me as any).lane ?? null,
+        relayLeg: relay?.leg_order ?? null,
+        startAt: istIso(date, heat?.schedule_items?.scheduled_time),
+        value: me.value,
+        status: me.status,
+        dqRule: me.dq,
+        reactionMs: me.reaction,
+        wind: me.wind ?? (heat?.wind_reading != null ? Number(heat.wind_reading) : null),
+        attempts: me.attempts,
+        placeInHeat,
+        finishers: scored.filter((s) => s.value != null).length,
+        entrants: scored.length,
+      };
+    });
+    results.sort((a, b) => String(b.startAt || '').localeCompare(String(a.startAt || '')));
+
+    // Official placings (medals / championship points)
+    const orFilter = [`profile_id.eq.${athleteId}`, ...teamIds.map((t: string) => `relay_team_id.eq.${t}`)].join(',');
+    const { data: placings } = await supabase
+      .from('team_points')
+      .select('place, points, relay_team_id, events ( id, name, code, category )')
+      .or(orFilter);
+    const official = (placings || [])
+      .map((p: any) => ({
+        eventId: p.events?.id,
+        eventName: p.events?.name,
+        eventCode: p.events?.code,
+        isRelay: !!p.relay_team_id,
+        isMixed: String(p.events?.code || '').toUpperCase() === '4X400M-MIX',
+        place: p.place,
+        points: Number(p.points) || 0,
+      }))
+      .sort((a: any, b: any) => a.place - b.place);
+
+    // College standing (same rules as the public leaderboard)
+    let collegeStanding: any = null;
+    try {
+      const { data: standings } = await supabase.rpc('get_championship_standings');
+      const s: any = standings || {};
+      const find = (list: any[]) => (list || []).find((r: any) => r.college_id === squad?.college_id) || null;
+      const overall = find(s.combined);
+      const division = find(squad?.gender === 'women' ? s.womens : s.mens);
+      collegeStanding = {
+        overallRank: overall?.rank ?? null,
+        overallPoints: overall ? Number(overall.total_points) : null,
+        divisionRank: division?.rank ?? null,
+        divisionPoints: division ? Number(division.total_points) : null,
+        colleges: (s.combined || []).length,
+      };
+    } catch {
+      // standings optional
+    }
+
+    const individual = official.filter((o: any) => !o.isRelay);
+    return res.json({
+      serverTime: new Date().toISOString(),
+      summary: {
+        golds: official.filter((o: any) => o.place === 1).length,
+        silvers: official.filter((o: any) => o.place === 2).length,
+        bronzes: official.filter((o: any) => o.place === 3).length,
+        individualPoints: individual.reduce((sum: number, o: any) => sum + o.points, 0),
+        eventsCompleted: results.filter((r) => r.value != null || r.status).length,
+      },
+      official,
+      results,
+      collegeStanding,
+    });
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message });
+  }
 });

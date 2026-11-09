@@ -42,6 +42,20 @@ export function generateToken(payload: TokenPayload): string {
   return jwt.sign(payload, EFFECTIVE_JWT_SECRET, { expiresIn: '7d' });
 }
 
+/**
+ * Returns the verified token payload, or null — never rejects the request.
+ * Used by the rate limiter to key logged-in traffic per user instead of per IP.
+ */
+export function peekUser(req: Request): TokenPayload | null {
+  const h = req.headers.authorization;
+  if (!h || !h.startsWith('Bearer ')) return null;
+  try {
+    return jwt.verify(h.slice(7), EFFECTIVE_JWT_SECRET) as unknown as TokenPayload;
+  } catch {
+    return null;
+  }
+}
+
 export function authenticate(req: AuthenticatedRequest, res: Response, next: NextFunction) {
   const authHeader = req.headers.authorization;
   if (!authHeader || !authHeader.startsWith('Bearer ')) {

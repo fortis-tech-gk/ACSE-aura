@@ -1,6 +1,8 @@
 import { Router, Response } from 'express';
 import { supabase } from '../config/supabase';
 import { authenticate, requireRole, AuthenticatedRequest } from '../middleware/auth';
+import { fetchAll } from '../utils/fetch-all';
+import { isClientScanUuid, resolveAthlete } from '../utils/athlete-resolve';
 
 export const accommodationRouter = Router();
 
@@ -21,16 +23,16 @@ accommodationRouter.get('/hostels', async (_req: AuthenticatedRequest, res: Resp
     if (hostelErr) return res.status(400).json({ error: hostelErr.message });
 
     // Fetch scan counts per hostel
-    const { data: scans, error: scanErr } = await supabase
-      .from('accommodation_scans')
-      .select('hostel_id');
+    const scans = await fetchAll<{ hostel_id: string; profile_id: string }>((from, to) =>
+      supabase.from('accommodation_scans').select('hostel_id, profile_id').order('id').range(from, to)
+    );
 
-    if (scanErr) return res.status(400).json({ error: scanErr.message });
-
-    const countMap: Record<string, number> = {};
+    // One bed per athlete, however many times they were scanned
+    const seen: Record<string, Set<string>> = {};
     (scans || []).forEach((s) => {
-      countMap[s.hostel_id] = (countMap[s.hostel_id] || 0) + 1;
+      (seen[s.hostel_id] ||= new Set()).add(s.profile_id);
     });
+    const countMap: Record<string, number> = Object.fromEntries(Object.entries(seen).map(([k, v]) => [k, v.size]));
 
     const enrichedHostels = (hostels || []).map((h) => {
       const occupied = countMap[h.id] || 0;
@@ -49,33 +51,50 @@ accommodationRouter.get('/hostels', async (_req: AuthenticatedRequest, res: Resp
 
 /**
  * POST /api/accommodation/checkin
- * Idempotent hostel check-in with caution deposit recording
+ * Body: { clientScanUuid, qrToken | bib | athleteId, hostelId?, roomAssigned?, cautionDeposit?,
+ *         cautionReceiptNo?, deviceTimestamp? }
+ * hostelId defaults to the hostel allotted to the athlete's squad. Idempotent per clientScanUuid.
  */
 accommodationRouter.post('/checkin', async (req: AuthenticatedRequest, res: Response) => {
   try {
-    const {
-      clientScanUuid,
-      athleteId,
-      hostelId,
-      roomAssigned,
-      cautionDeposit,
-      cautionReceiptNo,
-      deviceTimestamp,
-    } = req.body;
+    const { clientScanUuid, roomAssigned, cautionDeposit, cautionReceiptNo, deviceTimestamp } = req.body || {};
+    let hostelId: string | undefined = req.body?.hostelId || undefined;
 
-    if (!clientScanUuid || !athleteId || !hostelId) {
-      return res.status(400).json({
-        error: 'clientScanUuid, athleteId, and hostelId are required.',
-      });
+    if (!isClientScanUuid(clientScanUuid)) {
+      return res.status(400).json({ error: 'clientScanUuid (UUID) is required.' });
+    }
+    const who = await resolveAthlete(req.body);
+    if (!who.ok) return res.status(who.status).json({ error: who.error });
+
+    let roomRange: string | null = null;
+    if (!hostelId) {
+      const { data: prof } = await supabase
+        .from('profiles')
+        .select('squad_id, accommodation_checked_in')
+        .eq('id', who.athleteId)
+        .maybeSingle();
+      if (!prof) return res.status(404).json({ error: 'Athlete profile not found.' });
+      const { data: alloc } = await supabase
+        .from('hostel_allocations')
+        .select('hostel_id, room_range')
+        .eq('squad_id', prof.squad_id)
+        .maybeSingle();
+      // Already checked in: the RPC reports where, so no hostel needs to be chosen
+      if (!alloc && !prof.accommodation_checked_in) {
+        return res.status(400).json({ error: 'No hostel is allotted to this athlete\'s college yet. Pick the hostel in the app and scan again.' });
+      }
+      hostelId = alloc?.hostel_id;
+      roomRange = alloc?.room_range || null;
     }
 
     const { data, error } = await supabase.rpc('process_accommodation_checkin', {
       p_client_uuid: clientScanUuid,
-      p_profile_id: athleteId,
-      p_hostel_id: hostelId,
+      p_profile_id: who.athleteId,
+      p_hostel_id: hostelId ?? null,
       p_warden_id: req.user!.entityId,
-      p_room_assigned: roomAssigned || 'General Dorm',
-      p_caution_deposit: cautionDeposit ? parseFloat(cautionDeposit) : 500.0,
+      p_room_assigned: roomAssigned || roomRange || 'General Dorm',
+      // No caution deposit is collected for this meet unless the warden records one
+      p_caution_deposit: cautionDeposit ? parseFloat(cautionDeposit) : 0,
       p_caution_receipt_no: cautionReceiptNo || '',
       p_device_timestamp: deviceTimestamp || new Date().toISOString(),
     });
@@ -93,32 +112,30 @@ accommodationRouter.post('/checkin', async (req: AuthenticatedRequest, res: Resp
  */
 accommodationRouter.get('/stats', async (_req: AuthenticatedRequest, res: Response) => {
   try {
-    const { data: athletes, error: athletesErr } = await supabase
-      .from('profiles')
-      .select('id, accommodation_checked_in, squad_id, squads(gender)');
+    const active = () =>
+      supabase.from('profiles').select('id, squads!inner(gender)', { count: 'exact', head: true }).neq('accreditation_status', 'WITHDrAWN');
+    const [all, inn, men, women] = await Promise.all([
+      active(),
+      active().eq('accommodation_checked_in', true),
+      active().eq('accommodation_checked_in', true).eq('squads.gender', 'men'),
+      active().eq('accommodation_checked_in', true).eq('squads.gender', 'women'),
+    ]);
+    const err = all.error || inn.error || men.error || women.error;
+    if (err) return res.status(400).json({ error: err.message });
 
-    if (athletesErr) return res.status(400).json({ error: athletesErr.message });
+    const deposits = await fetchAll<{ caution_deposit: string | number }>((from, to) =>
+      supabase.from('accommodation_scans').select('caution_deposit').order('id').range(from, to)
+    );
+    const totalCautionCollected = deposits.reduce((acc, s) => acc + (parseFloat(String(s.caution_deposit)) || 0), 0);
 
-    const total = athletes?.length || 0;
-    const checkedIn = athletes?.filter((a) => a.accommodation_checked_in).length || 0;
-    const menCheckedIn = athletes?.filter((a: any) => a.accommodation_checked_in && a.squads?.gender === 'men').length || 0;
-    const womenCheckedIn = athletes?.filter((a: any) => a.accommodation_checked_in && a.squads?.gender === 'women').length || 0;
-
-    // Caution deposit total
-    const { data: scans, error: scansErr } = await supabase
-      .from('accommodation_scans')
-      .select('caution_deposit');
-
-    if (scansErr) return res.status(400).json({ error: scansErr.message });
-
-    const totalCautionCollected = (scans || []).reduce((acc, s) => acc + (parseFloat(s.caution_deposit) || 0), 0);
-
+    const total = all.count || 0;
+    const checkedIn = inn.count || 0;
     return res.json({
       totalAthletes: total,
       checkedInAthletes: checkedIn,
       pendingCheckIn: total - checkedIn,
-      menCheckedIn,
-      womenCheckedIn,
+      menCheckedIn: men.count || 0,
+      womenCheckedIn: women.count || 0,
       totalCautionCollected,
     });
   } catch (err: any) {

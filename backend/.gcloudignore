@@ -1,0 +1,9 @@
+# Uploaded by `gcloud run deploy --source` (Cloud Build). Never send secrets or local builds.
+.gcloudignore
+.git
+node_modules/
+dist/
+.env
+.env.*
+!.env.example
+*.log

@@ -31,7 +31,9 @@ fieldRouter.get('/heats/:heatId', async (req: AuthenticatedRequest, res: Respons
       .select(`
         id,
         lane_number,
+        call_room_reported,
         profiles(id, sslc_name, usn, bid_number, squads(colleges(name, code))),
+        call_room_inspections(reported_status),
         ${isVertical ? 'vertical_jump_attempts(*)' : 'field_attempts(*)'}
       `)
       .eq('heat_id', heatId)

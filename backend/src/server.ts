@@ -1,9 +1,11 @@
 import express, { Request, Response, NextFunction } from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
-import rateLimit from 'express-rate-limit';
+import compression from 'compression';
+import rateLimit, { ipKeyGenerator } from 'express-rate-limit';
 import dotenv from 'dotenv';
 import { supabase } from './config/supabase';
+import { peekUser } from './middleware/auth';
 import { authRouter } from './routes/auth.routes';
 import { squadRouter } from './routes/squad.routes';
 import { adminRouter } from './routes/admin.routes';
@@ -18,6 +20,7 @@ import { leaderboardRouter } from './routes/leaderboard.routes';
 import { publicRouter } from './routes/public.routes';
 import { athleteRouter } from './routes/athlete.routes';
 import { cateringRouter } from './routes/catering.routes';
+import { officialsRouter } from './routes/officials.routes';
 
 dotenv.config();
 
@@ -46,21 +49,33 @@ app.use(cors({
 }));
 
 // 3. Body parsers with size limit
+app.use(compression()); // gzip JSON — the officials roster is ~1 MB raw
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
-// 4. Rate Limiting: High-throughput capacity for 3000 concurrent users + brute-force protection
+// 4. Rate Limiting — designed for shared networks.
+// At the venue hundreds of phones share ONE public IP (stadium Wi-Fi, Jio/Airtel carrier NAT),
+// so limiting per IP alone would lock everyone out. Logged-in traffic (the AURA apps) is limited
+// per user; anonymous traffic (public leaderboard, logins) gets a high per-IP ceiling — those
+// endpoints are cached. Brute-force protection for logins is per account (login_attempts table).
+const WINDOW_MS = 15 * 60 * 1000;
 const generalLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 1000, // 1000 requests per 15 min per IP
+  windowMs: WINDOW_MS,
+  max: (req: Request) => (peekUser(req) ? 600 : 20000), // 600 per user · 20k per shared IP
+  keyGenerator: (req: Request) => {
+    const user = peekUser(req);
+    return user ? `user:${user.role}:${user.entityId}` : `ip:${ipKeyGenerator(req.ip || '')}`;
+  },
   standardHeaders: true,
   legacyHeaders: false,
-  message: { error: 'Too many requests from this IP, please try again later.' },
+  message: { error: 'Too many requests. Please wait a minute and try again.' },
 });
 
+// Staff/squad logins: per-IP cap high enough for a venue full of officials on one network
 const authLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 60, // 60 login attempts per 15 min
+  windowMs: WINDOW_MS,
+  max: 1000,
+  keyGenerator: (req: Request) => `ip:${ipKeyGenerator(req.ip || '')}`,
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: 'Too many authentication attempts, please wait 15 minutes.' },
@@ -103,6 +118,21 @@ app.get('/health', async (_req: Request, res: Response) => {
 });
 
 // 6. Mount modular API routes
+// Legacy registration/finance/admin endpoints duplicate the website (frontend/web), which is the
+// only place enforcing the full registration rules (uniqueness, quotas, DOB, photos, roster lock,
+// bank-confirmed payment amounts). They are OFF in production so they can't be used to bypass it.
+// Local development keeps them for the old scripts/test-*.mjs flows.
+const LEGACY_REGISTRATION_ROUTES =
+  process.env.NODE_ENV !== 'production' || process.env.ENABLE_LEGACY_REGISTRATION_ROUTES === 'true';
+if (!LEGACY_REGISTRATION_ROUTES) {
+  const gone = (_req: Request, res: Response) =>
+    res.status(410).json({ error: 'This endpoint is not available. Use the VTU SportsOS website.' });
+  app.use('/api/auth/squad', gone);
+  app.use('/api/squad', gone);
+  app.use('/api/finance', gone);
+  app.use('/api/admin', gone);
+}
+
 app.use('/api/auth', authRouter);
 app.use('/api/squad', squadRouter);
 app.use('/api/admin', adminRouter);
@@ -116,6 +146,7 @@ app.use('/api/track', trackRouter);
 app.use('/api/leaderboard', leaderboardRouter);
 app.use('/api/athlete', athleteRouter);
 app.use('/api/catering', cateringRouter);
+app.use('/api/officials', officialsRouter);
 app.use('/api', publicRouter);
 
 // 7. Global 404 handler

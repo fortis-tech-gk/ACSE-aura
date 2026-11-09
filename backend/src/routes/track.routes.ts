@@ -33,6 +33,7 @@ trackRouter.get('/heats/:heatId', async (req: AuthenticatedRequest, res: Respons
         call_room_reported_at,
         profiles(id, sslc_name, usn, bid_number, squads(colleges(name, code))),
         relay_teams(id, squads(colleges(name, code))),
+        call_room_inspections(reported_status),
         track_results(
           id,
           time_seconds,
