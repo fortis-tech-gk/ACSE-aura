@@ -211,6 +211,7 @@ export default function StaffManager({ initialStaff }: Props) {
                 >
                   <option value="accreditation_volunteer">Gate Accreditation Scanner</option>
                   <option value="warden">Hostel Accommodation Warden</option>
+                  <option value="food_volunteer">Food Counter Volunteer (Meals)</option>
                   <option value="call_room_official">Call Room Marshal / Track Marshal</option>
                   <option value="referee">Field / Track Judge (Referee)</option>
                   <option value="finance_desk">Finance Verification Desk</option>

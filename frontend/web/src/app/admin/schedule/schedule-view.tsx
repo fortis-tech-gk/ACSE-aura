@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import { listEventHeatsAction, generateHeatDrawAction, setCallRoomReportedAction } from '@/app/actions/schedule';
 
 interface Event {
   id: string;
@@ -97,11 +98,9 @@ export function ScheduleManagerView({
     setLoadingHeats(true);
     setStatusMessage('');
     try {
-      const res = await fetch(`http://localhost:5000/api/schedule/heats/${eventId}?stage=${stage}`);
-      const data = await res.json();
-      if (res.ok) {
-        setHeats(data.heats || []);
-      }
+      const res = await listEventHeatsAction(eventId, stage);
+      if (res.error) setStatusMessage(res.error);
+      setHeats((res.heats || []) as any);
     } catch (e) {
       console.warn('Failed to fetch heats:', e);
     } finally {
@@ -114,26 +113,11 @@ export function ScheduleManagerView({
     setDrawingHeats(true);
     setStatusMessage('');
     try {
-      const res = await fetch('http://localhost:5000/api/schedule/draw', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          // Backend authenticate middleware allows requests with Bearer or internal
-          Authorization: `Bearer admin-token`, // Using admin auth in real app or session
-        },
-        body: JSON.stringify({
-          eventId: selectedEvent.id,
-          stage: selectedStage,
-          numLanes,
-        }),
-      });
-
-      const data = await res.json();
-      if (!res.ok) {
-        // If auth header fails, try via server action or direct RPC call
-        setStatusMessage(data.error || 'Failed to generate heat draw');
+      const res = await generateHeatDrawAction(selectedEvent.id, selectedStage, numLanes);
+      if (!res.success) {
+        setStatusMessage(res.error || 'Failed to generate heat draw');
       } else {
-        setStatusMessage(`✅ Seeding complete! Generated ${data.draw?.num_heats} heats for ${data.draw?.total_athletes} athletes.`);
+        setStatusMessage(`✅ Seeding complete! Generated ${res.draw?.num_heats ?? '?'} heats for ${res.draw?.total_athletes ?? '?'} athletes.`);
         fetchHeats(selectedEvent.id, selectedStage);
       }
     } catch (err: any) {
@@ -145,15 +129,12 @@ export function ScheduleManagerView({
 
   const toggleCallRoom = async (heatAthleteId: string, currentStatus: boolean) => {
     try {
-      const res = await fetch(`http://localhost:5000/api/schedule/call-room/${heatAthleteId}`, {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer admin-token`,
-        },
-        body: JSON.stringify({ reported: !currentStatus }),
-      });
-      if (res.ok) {
+      const res = await setCallRoomReportedAction(heatAthleteId, !currentStatus);
+      if (!res.success) {
+        setStatusMessage(res.error || 'Could not update call room status');
+        return;
+      }
+      {
         setHeats((prev) =>
           prev.map((h) => ({
             ...h,
@@ -163,7 +144,9 @@ export function ScheduleManagerView({
           }))
         );
       }
-    } catch (e) { }
+    } catch (e: any) {
+      setStatusMessage('Could not update call room status: ' + (e?.message || 'network error'));
+    }
   };
 
   const handlePrint = () => {
