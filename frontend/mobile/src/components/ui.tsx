@@ -37,25 +37,29 @@ export function Screen({
   onRefresh,
   scroll = true,
   edges = ['top'],
+  maxWidth,
 }: {
   children: React.ReactNode;
   refreshing?: boolean;
   onRefresh?: () => void;
   scroll?: boolean;
   edges?: ('top' | 'bottom')[];
+  /** Keep content readable on tablets: centred column at most this wide */
+  maxWidth?: number;
 }) {
+  const limit = maxWidth ? { width: '100%' as const, maxWidth, alignSelf: 'center' as const } : null;
   return (
     <SafeAreaView style={styles.safe} edges={edges}>
       {scroll ? (
         <ScrollView
-          contentContainerStyle={styles.scroll}
+          contentContainerStyle={[styles.scroll, limit]}
           refreshControl={onRefresh ? <RefreshControl refreshing={!!refreshing} onRefresh={onRefresh} tintColor={colors.blue} /> : undefined}
           keyboardShouldPersistTaps="handled"
         >
           {children}
         </ScrollView>
       ) : (
-        <View style={[styles.scroll, { flex: 1 }]}>{children}</View>
+        <View style={[styles.scroll, { flex: 1 }, limit]}>{children}</View>
       )}
     </SafeAreaView>
   );
@@ -126,13 +130,21 @@ export function Button({
   );
 }
 
-export function OfflineBanner({ offline, lastSyncedAt }: { offline: boolean; lastSyncedAt: number | null }) {
+export function OfflineBanner({
+  offline,
+  lastSyncedAt,
+  note = 'Reminders still work.',
+}: {
+  offline: boolean;
+  lastSyncedAt: number | null;
+  note?: string;
+}) {
   if (!offline) return null;
   const mins = lastSyncedAt ? Math.max(0, Math.round((Date.now() - lastSyncedAt) / 60000)) : null;
   return (
     <View style={styles.offline} accessibilityRole="alert">
       <Text style={styles.offlineText}>
-        📶 Offline — showing saved info{mins !== null ? ` from ${mins < 1 ? 'just now' : `${mins} min ago`}` : ''}. Reminders still work.
+        📶 Offline — showing saved info{mins !== null ? ` from ${mins < 1 ? 'just now' : `${mins} min ago`}` : ''}. {note}
       </Text>
     </View>
   );

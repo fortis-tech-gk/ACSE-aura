@@ -66,3 +66,30 @@ export function toIsoDate(dd: string, mm: string, yyyy: string): string | null {
   if (dt.getUTCFullYear() !== y || dt.getUTCMonth() !== m - 1 || dt.getUTCDate() !== d) return null;
   return `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
 }
+
+/** 10.42 → "10.42" · 112.34 → "1:52.34" · 4521.5 → "1:15:21.50" */
+export function fmtSeconds(sec: number | null | undefined): string {
+  if (sec == null) return '—';
+  const h = Math.floor(sec / 3600);
+  const m = Math.floor((sec % 3600) / 60);
+  const s = sec - h * 3600 - m * 60;
+  const ss = s.toFixed(2).padStart(h || m ? 5 : 1, '0');
+  if (h) return `${h}:${String(m).padStart(2, '0')}:${ss}`;
+  if (m) return `${m}:${ss}`;
+  return s.toFixed(2);
+}
+
+export function fmtMark(value: number | null | undefined, unit: 'seconds' | 'metres'): string {
+  if (value == null) return '—';
+  return unit === 'seconds' ? fmtSeconds(value) : `${value.toFixed(2)} m`;
+}
+
+export function ordinal(n: number): string {
+  const s = ['th', 'st', 'nd', 'rd'];
+  const v = n % 100;
+  return `${n}${s[(v - 20) % 10] || s[v] || s[0]}`;
+}
+
+export function medal(place: number | null | undefined): string {
+  return place === 1 ? '🥇' : place === 2 ? '🥈' : place === 3 ? '🥉' : '';
+}

@@ -11,7 +11,7 @@ export class ApiError extends Error {
   }
 }
 
-type Options = { method?: 'GET' | 'POST' | 'DELETE'; body?: unknown; token?: string | null; timeoutMs?: number };
+type Options = { method?: 'GET' | 'POST' | 'PATCH' | 'DELETE'; body?: unknown; token?: string | null; timeoutMs?: number };
 
 export async function api<T>(path: string, { method = 'GET', body, token, timeoutMs = 15000 }: Options = {}): Promise<T> {
   const controller = new AbortController();

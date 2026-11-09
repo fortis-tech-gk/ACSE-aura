@@ -1,5 +1,7 @@
 import React from 'react';
+import { BackLink } from '@/components/BackLink';
 import { StyleSheet, Text, View } from 'react-native';
+import { Redirect } from 'expo-router';
 import { useAthleteSession } from '@/lib/athlete-session';
 import { fmtTime } from '@/lib/format';
 import { Card, Muted, OfflineBanner, Pill, Screen, Title, colors } from '@/components/ui';
@@ -12,13 +14,16 @@ const MEALS: { key: string; label: string }[] = [
 ];
 
 export default function StayScreen() {
-  const { me, refreshing, refresh, offline, lastSyncedAt } = useAthleteSession();
+  const { status, me, refreshing, refresh, offline, lastSyncedAt } = useAthleteSession();
   const hostel = me?.hostel;
   const claimed = new Map((me?.meals.claimed || []).map((m) => [m.mealType, m.at]));
 
+  if (status === 'signedOut') return <Redirect href="/login" />;
+
   return (
-    <Screen refreshing={refreshing} onRefresh={refresh}>
+    <Screen refreshing={refreshing} onRefresh={refresh} edges={['top', 'bottom']}>
       <OfflineBanner offline={offline} lastSyncedAt={lastSyncedAt} />
+      <BackLink />
       <Title>Stay & Meals</Title>
 
       <Card style={{ gap: 8 }}>
@@ -39,7 +44,7 @@ export default function StayScreen() {
       </Card>
 
       <Card style={{ gap: 10 }}>
-        <Text style={s.cardTitle}>🍽️ Today's meals</Text>
+        <Text style={s.cardTitle}>🍽️ Today’s meals</Text>
         <Muted>Show your pass QR at the dining hall. Each meal can be claimed once per day.</Muted>
         <View style={s.grid}>
           {MEALS.map((m) => {

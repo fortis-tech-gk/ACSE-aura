@@ -40,6 +40,9 @@ export default function RootLayout() {
           <Stack.Screen name="login" />
           <Stack.Screen name="scan" options={{ presentation: 'modal' }} />
           <Stack.Screen name="(tabs)" />
+          {/* Opened from More, on top of the tabs, so Back returns to More */}
+          <Stack.Screen name="stay" />
+          <Stack.Screen name="settings" />
           <Stack.Screen name="officials" />
         </Stack>
       </AthleteSessionProvider>

@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
+import { BackLink } from '@/components/BackLink';
 import { Alert, AppState, Linking, Platform, StyleSheet, Switch, Text, View } from 'react-native';
-import { router } from 'expo-router';
+import { Redirect, router } from 'expo-router';
 import Constants from 'expo-constants';
 import { useAthleteSession } from '@/lib/athlete-session';
 import {
@@ -16,7 +17,7 @@ import { REMINDER_OFFSETS_MIN } from '@/lib/config';
 import { Button, Card, Muted, Pill, Screen, Title, colors } from '@/components/ui';
 
 export default function SettingsScreen() {
-  const { me, logout, refresh, refreshing, lastSyncedAt, remindersScheduled, resyncReminders } = useAthleteSession();
+  const { status, me, logout, refresh, refreshing, lastSyncedAt, remindersScheduled, resyncReminders } = useAthleteSession();
   const [enabled, setEnabled] = useState(true);
   const [perm, setPerm] = useState<PermissionState>('undetermined');
   const [exact, setExact] = useState<boolean | null>(null);
@@ -78,10 +79,13 @@ export default function SettingsScreen() {
     ]);
   }
 
+  if (status === 'signedOut') return <Redirect href="/login" />;
+
   const synced = lastSyncedAt ? new Date(lastSyncedAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) : 'never';
 
   return (
-    <Screen>
+    <Screen edges={['top', 'bottom']}>
+      <BackLink />
       <Title>Settings</Title>
 
       <Card style={{ gap: 12 }}>

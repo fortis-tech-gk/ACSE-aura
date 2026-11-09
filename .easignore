@@ -1,0 +1,37 @@
+# EAS Build uploads the whole git repository. Exclude everything except frontend/mobile —
+# in particular docs/ (PED phone numbers, principal e-mails), backend/, supabase/ and the website.
+# NOTE: when this file exists EAS ignores .gitignore. If you add a new top-level folder,
+# add it here too, then check with:  npx eas-cli build:inspect -p android --stage archive ...
+/.claude/
+/backend/
+/docs/
+/nginx/
+/prototype/
+/scripts/
+/supabase/
+/frontend/web/
+/frontend/android
+/frontend/ios
+/AGENTS.md
+/CLAUDE.md
+/claude.md
+/README.md
+/brouchure_text.txt
+/information_text.txt
+/docker-compose.yml
+
+# Mobile build outputs / local-only files
+/frontend/mobile/node_modules/
+/frontend/mobile/android/
+/frontend/mobile/ios/
+/frontend/mobile/.expo/
+/frontend/mobile/dist/
+/frontend/mobile/legacy/
+node_modules/
+*.jks
+*.keystore
+*.p8
+*.p12
+*.key
+*.mobileprovision
+.env*

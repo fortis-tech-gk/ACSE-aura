@@ -6,30 +6,52 @@
   "build": {
     "base": {
       "env": {
-        "EXPO_PUBLIC_API_URL": "https://REPLACE-WITH-YOUR-API-DOMAIN/api"
+        "EXPO_PUBLIC_API_URL": "https://aura-api-1080803822966.asia-south1.run.app/api"
       }
     },
     "athletes-preview": {
       "extends": "base",
       "distribution": "internal",
-      "android": { "buildType": "apk" },
-      "env": { "APP_VARIANT": "athletes", "EAS_PROJECT_ID": "REPLACE-WITH-ATHLETES-EAS-PROJECT-ID" }
+      "android": {
+        "buildType": "apk"
+      },
+      "env": {
+        "APP_VARIANT": "athletes"
+      }
     },
     "athletes-production": {
       "extends": "base",
       "autoIncrement": true,
-      "env": { "APP_VARIANT": "athletes", "EAS_PROJECT_ID": "REPLACE-WITH-ATHLETES-EAS-PROJECT-ID" }
+      "env": {
+        "APP_VARIANT": "athletes"
+      }
     },
     "officials-preview": {
       "extends": "base",
       "distribution": "internal",
-      "android": { "buildType": "apk" },
-      "env": { "APP_VARIANT": "officials", "EAS_PROJECT_ID": "REPLACE-WITH-OFFICIALS-EAS-PROJECT-ID" }
+      "android": {
+        "buildType": "apk"
+      },
+      "env": {
+        "APP_VARIANT": "officials"
+      }
     },
     "officials-production": {
       "extends": "base",
       "autoIncrement": true,
-      "env": { "APP_VARIANT": "officials", "EAS_PROJECT_ID": "REPLACE-WITH-OFFICIALS-EAS-PROJECT-ID" }
+      "env": {
+        "APP_VARIANT": "officials"
+      }
+    },
+    "athletes-usb-test": {
+      "distribution": "internal",
+      "android": {
+        "buildType": "apk"
+      },
+      "env": {
+        "APP_VARIANT": "athletes",
+        "EXPO_PUBLIC_API_URL": "http://localhost:5000/api"
+      }
     }
   },
   "submit": {

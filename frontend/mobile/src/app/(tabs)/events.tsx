@@ -46,7 +46,7 @@ export default function EventsScreen() {
       <OfflineBanner offline={offline} lastSyncedAt={lastSyncedAt} />
       <Title>My Events</Title>
       <Muted>
-        You'll get reminders {REMINDER_OFFSETS_MIN.join(', ')} minutes before each call room time. Pull down to refresh.
+        You’ll get reminders {REMINDER_OFFSETS_MIN.join(', ')} minutes before each call room time. Pull down to refresh.
       </Muted>
 
       {schedule.length === 0 && (

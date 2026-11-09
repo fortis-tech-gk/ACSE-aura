@@ -1,9 +1,10 @@
 import React, { useRef, useState } from 'react';
-import { KeyboardAvoidingView, Platform, StyleSheet, Text, TextInput, View, type TextInputInstance } from 'react-native';
+import { KeyboardAvoidingView, Platform, Pressable, StyleSheet, Text, TextInput, View, type TextInputInstance } from 'react-native';
 import { router } from 'expo-router';
 import { useAthleteSession } from '@/lib/athlete-session';
 import { ApiError } from '@/lib/api';
 import { MEET } from '@/lib/config';
+import { openVenueDirections } from '@/lib/venue';
 import { toIsoDate } from '@/lib/format';
 import { Button, Card, Muted, Screen, colors } from '@/components/ui';
 
@@ -41,7 +42,18 @@ export default function LoginScreen() {
     <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <Screen>
         <View style={s.hero}>
-          <Text style={s.brand}>AURA ATHLETES</Text>
+          <View style={s.heroTop}>
+            <Text style={s.brand}>AURA ATHLETES</Text>
+            <Pressable
+              accessibilityRole="link"
+              accessibilityLabel="Directions to the venue in Maps"
+              onPress={openVenueDirections}
+              hitSlop={10}
+              style={({ pressed }) => [s.mapBtn, pressed && { opacity: 0.7 }]}
+            >
+              <Text style={s.mapBtnText}>📍 Venue map</Text>
+            </Pressable>
+          </View>
           <Text style={s.meet}>{MEET.name}</Text>
           <Text style={s.sub}>{MEET.subtitle}</Text>
           <Text style={s.sub}>{MEET.dates}</Text>
@@ -142,6 +154,9 @@ export default function LoginScreen() {
 
 const s = StyleSheet.create({
   hero: { backgroundColor: colors.navy, borderRadius: 20, padding: 22, gap: 4 },
+  heroTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 },
+  mapBtn: { backgroundColor: 'rgba(255,255,255,0.14)', borderColor: 'rgba(255,255,255,0.35)', borderWidth: 1, borderRadius: 999, paddingHorizontal: 12, paddingVertical: 7 },
+  mapBtnText: { color: '#fff', fontWeight: '800', fontSize: 13 },
   brand: { color: colors.gold, fontWeight: '900', letterSpacing: 2, fontSize: 13 },
   meet: { color: '#fff', fontSize: 26, fontWeight: '900', marginTop: 4 },
   sub: { color: '#c7d2fe', fontSize: 13 },

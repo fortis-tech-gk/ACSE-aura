@@ -5,6 +5,7 @@
   "dependencies": {
     "@react-native-async-storage/async-storage": "2.2.0",
     "expo": "~58.0.14",
+    "expo-build-properties": "~58.0.12",
     "expo-camera": "~58.0.11",
     "expo-constants": "~58.0.15",
     "expo-device": "~58.0.5",
@@ -24,6 +25,8 @@
   },
   "devDependencies": {
     "@types/react": "~19.3.0",
+    "eslint": "^9.0.0",
+    "eslint-config-expo": "~58.0.4",
     "typescript": "~6.0.3"
   },
   "scripts": {
@@ -34,7 +37,11 @@
     "android:officials": "APP_VARIANT=officials expo run:android",
     "ios:athletes": "APP_VARIANT=athletes expo run:ios",
     "typecheck": "tsc --noEmit",
-    "lint": "expo lint"
+    "lint": "expo lint",
+    "eas:athletes:test-apk": "EAS_NO_VCS=1 npx eas-cli@latest build -p android --profile athletes-preview",
+    "eas:athletes:play": "EAS_NO_VCS=1 npx eas-cli@latest build -p android --profile athletes-production",
+    "eas:athletes:ios": "EAS_NO_VCS=1 npx eas-cli@latest build -p ios --profile athletes-production",
+    "eas:officials:test-apk": "EAS_NO_VCS=1 npx eas-cli@latest build -p android --profile officials-preview"
   },
   "private": true
 }

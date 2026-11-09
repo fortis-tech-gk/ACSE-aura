@@ -3,12 +3,11 @@
  * schedule open with no internet), background refresh, reminder + push sync.
  */
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
-import { AppState } from 'react-native';
-import { Platform } from 'react-native';
+import { AppState, Platform } from 'react-native';
 import * as SecureStoreNative from 'expo-secure-store';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { api, ApiError } from './api';
-import { syncReminders } from './reminders';
+import { syncReminders, getNotificationPermission, requestNotificationPermission } from './reminders';
 import { registerPushToken, unregisterPushToken } from './push';
 import type { AthleteMe } from './types';
 
@@ -25,6 +24,22 @@ const SecureStore =
     : SecureStoreNative;
 const CACHE_KEY = '@aura/athlete-me';
 const REFRESH_EVERY_MS = 5 * 60 * 1000;
+const ASKED_NOTIF_KEY = '@aura/asked-notifications';
+
+/**
+ * Ask for notification permission once (right after login, or on first launch after an update).
+ * Without it no reminders can be scheduled, and students rarely find the Settings toggle.
+ */
+async function askNotificationsOnce(): Promise<boolean> {
+  try {
+    if ((await getNotificationPermission()) === 'granted') return true;
+    if ((await AsyncStorage.getItem(ASKED_NOTIF_KEY)) === 'yes') return false;
+    await AsyncStorage.setItem(ASKED_NOTIF_KEY, 'yes');
+    return (await requestNotificationPermission()) === 'granted';
+  } catch {
+    return false;
+  }
+}
 
 type Status = 'loading' | 'signedOut' | 'signedIn';
 export type LoginInput = { bib: string; dob: string } | { qrToken: string };
@@ -36,6 +51,7 @@ type Ctx = {
   refreshing: boolean;
   offline: boolean;
   remindersScheduled: number | null;
+  token: string | null;
   login: (input: LoginInput) => Promise<void>;
   refresh: () => Promise<void>;
   resyncReminders: () => Promise<number>;
@@ -129,6 +145,7 @@ export function AthleteSessionProvider({ children }: { children: React.ReactNode
         // ignore bad cache
       }
       setStatus('signedIn');
+      await askNotificationsOnce();
       refresh();
     })();
   }, [refresh]);
@@ -154,8 +171,11 @@ export function AthleteSessionProvider({ children }: { children: React.ReactNode
       await SecureStore.setItemAsync(TOKEN_KEY, res.token);
       tokenRef.current = res.token;
       setToken(res.token);
-      await fetchProfile(res.token);
+      const data = await fetchProfile(res.token);
       setStatus('signedIn');
+      if (await askNotificationsOnce()) {
+        setRemindersScheduled(await syncReminders(data.schedule).catch(() => 0));
+      }
       registerPushToken(res.token);
     },
     [fetchProfile]
@@ -175,8 +195,8 @@ export function AthleteSessionProvider({ children }: { children: React.ReactNode
   }, [me]);
 
   const value = useMemo(
-    () => ({ status, me, lastSyncedAt, refreshing, offline, remindersScheduled, login, refresh, resyncReminders, logout }),
-    [status, me, lastSyncedAt, refreshing, offline, remindersScheduled, login, refresh, resyncReminders, logout]
+    () => ({ status, me, lastSyncedAt, refreshing, offline, remindersScheduled, token, login, refresh, resyncReminders, logout }),
+    [status, me, lastSyncedAt, refreshing, offline, remindersScheduled, token, login, refresh, resyncReminders, logout]
   );
   return <AthleteSessionContext.Provider value={value}>{children}</AthleteSessionContext.Provider>;
 }
