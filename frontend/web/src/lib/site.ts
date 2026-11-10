@@ -1,7 +1,7 @@
 /**
  * Public site constants used for SEO (metadata, sitemap, robots, structured data).
  *
- * SITE_URL: set NEXT_PUBLIC_SITE_URL (e.g. https://acsaura.in) once a custom domain exists.
+ * SITE_URL: set NEXT_PUBLIC_SITE_URL 
  * On Vercel, VERCEL_PROJECT_PRODUCTION_URL is provided automatically and is used otherwise.
  */
 function resolveSiteUrl(): string {

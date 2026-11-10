@@ -1,6 +1,13 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import ScheduleView from './ScheduleView';
+
+/**
+ * The day-wise event time table is hidden until the Directorate announces it, so contingents
+ * don't plan around their own event days and skip the inaugural ceremony.
+ * Set to true to show the full interactive schedule (and Order of Events PDF) again.
+ */
+const SHOW_EVENT_SCHEDULE = false;
 import GallerySection from './GallerySection';
 import CountdownTimer from './CountdownTimer';
 import TransitRoutes from './TransitRoutes';
@@ -814,9 +821,11 @@ export default function HomePage() {
           <div className="editorial-section-header">
             <div className="editorial-header-left">
               <div className="editorial-category-tag">EVENT TIME TABLE // 4-DAY CHAMPIONSHIP</div>
-              <h2 className="editorial-section-title">Interactive Discipline Schedule</h2>
+              <h2 className="editorial-section-title">{SHOW_EVENT_SCHEDULE ? 'Interactive Discipline Schedule' : 'Discipline Time Table'}</h2>
               <p className="editorial-section-desc">
-                Track heats, field qualification rounds, and valedictory finals scheduled across the 4-day athletic meet.
+                {SHOW_EVENT_SCHEDULE
+                  ? 'Track heats, field qualification rounds, and valedictory finals scheduled across the 4-day athletic meet.'
+                  : 'The day-wise event time table will be announced soon.'}
               </p>
             </div>
             <div className="editorial-header-right">
@@ -824,7 +833,21 @@ export default function HomePage() {
             </div>
           </div>
 
-          <ScheduleView />
+          {SHOW_EVENT_SCHEDULE ? (
+            <ScheduleView />
+          ) : (
+            <div className="schedule-coming-soon" id="schedule-coming-soon">
+              <div className="schedule-coming-soon-icon" aria-hidden="true">⏳</div>
+              <h3 className="schedule-coming-soon-title">Event Time Table — Will Be Announced Soon</h3>
+              <p className="schedule-coming-soon-text">
+                The day-wise order of events will be published here by the Meet Directorate closer to the championship.
+              </p>
+              <p className="schedule-coming-soon-highlight">
+                All contingents must report for the <strong>Inaugural Ceremony on 7 December 2026 at 8:00 AM</strong> at
+                Dr. ACS College of Engineering, Bengaluru.
+              </p>
+            </div>
+          )}
 
         </div>
       </section>
