@@ -790,6 +790,7 @@
   }
   .admin-navbar,
   .univ-main-nav,
+  .univ-main-banner,
   .official-banner-root,
   .admin-page-header,
   .filter-bar,
@@ -800,6 +801,14 @@
     padding: 0 !important;
     margin: 0 !important;
     max-width: 100% !important;
+  }
+  /* Print on plain white paper (no app background behind shorter pages) */
+  html,
+  body,
+  .admin-shell,
+  .admin-container {
+    background: #ffffff !important;
+    box-shadow: none !important;
   }
   .id-cards-grid {
     display: flex !important;
