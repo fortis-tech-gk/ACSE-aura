@@ -260,21 +260,11 @@ export async function generateBibNumbersAction(): Promise<{
 export async function listAllAthletesAction() {
   await requireAdmin();
 
+  // profiles.* so newer columns (date_of_birth, phone) are included when present
   const { data, error } = await supabaseAdmin
     .from('profiles')
     .select(`
-      id,
-      sslc_name,
-      usn,
-      semester,
-      blood_group,
-      college_joining_date,
-      sem_start_date,
-      aadhaar_number,
-      photo_url,
-      bid_number,
-      accreditation_status,
-      created_at,
+      *,
       squads (
         id,
         gender,
@@ -282,6 +272,7 @@ export async function listAllAthletesAction() {
         payment_status,
         ped_name,
         ped_phone,
+        ped_email,
         colleges (
           name,
           code,

@@ -835,3 +835,22 @@
     page-break-after: always;
   }
 }
+
+/* Athletes Management — download button groups (Excel / PDF) */
+.athlete-export-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.35rem 0.5rem;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  background: #f8fafc;
+}
+
+.athlete-export-label {
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: #475569;
+  margin-right: 0.15rem;
+  white-space: nowrap;
+}

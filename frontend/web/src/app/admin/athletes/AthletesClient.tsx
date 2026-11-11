@@ -3,6 +3,8 @@
 import { useState, useMemo } from 'react';
 import * as XLSX from 'xlsx';
 import { normalizePaymentStatus } from '@/lib/payment-status';
+import { buildExportRows, exportFileStamp, type ExportRow } from '@/lib/athlete-export';
+import AthletesPdfReport from './AthletesPdfReport';
 
 interface Props {
   athletes: any[];
@@ -15,6 +17,7 @@ export default function AthletesClient({ athletes }: Props) {
   const [selectedGender, setSelectedGender] = useState('ALL');
   const [selectedStatus, setSelectedStatus] = useState('ALL');
   const [selectedEvent, setSelectedEvent] = useState('ALL');
+  const [pdfReport, setPdfReport] = useState<{ title: string; filters: string; rows: ExportRow[] } | null>(null);
 
   // Derive unique college list
   const collegesList = useMemo(() => {
@@ -81,47 +84,72 @@ export default function AthletesClient({ athletes }: Props) {
     });
   }, [athletes, searchQuery, selectedCollege, selectedGender, selectedStatus, selectedEvent]);
 
-  // Helper to format rows for Excel export
-  function formatForExcel(list: any[]) {
-    return list.map((a, index) => {
-      const eventNames = a.registrations?.map((r: any) => {
-        return `${r.events?.name || 'Event'} (${r.kind === 'reserve' ? 'Reserve' : 'Primary'})`;
-      }).join('; ') || 'None';
-
-      return {
-        'Sl No': index + 1,
-        'Bib Number': a.bid_number ? `#${a.bid_number}` : 'Unassigned',
-        'Athlete Name (SSLC)': a.sslc_name || '',
-        'USN': a.usn || '',
-        'College Code': a.squads?.colleges?.code || a.squads?.squad_code || '',
-        'College Name': a.squads?.colleges?.name || '',
-        'Gender': a.squads?.gender === 'men' ? 'Men' : 'Women',
-        'Semester': a.semester || '',
-        'Blood Group': a.blood_group || '',
-        'Registered Events': eventNames,
-        'Payment Status': normalizePaymentStatus(a.squads?.payment_status),
-      };
+  // Downloads are sorted by college, then division, then name (easier to read than newest-first)
+  function sortForExport(list: any[]) {
+    return [...list].sort((a, b) => {
+      const ca = a.squads?.colleges?.code || a.squads?.squad_code || '';
+      const cb = b.squads?.colleges?.code || b.squads?.squad_code || '';
+      if (ca !== cb) return ca.localeCompare(cb);
+      const ga = a.squads?.gender || '', gb = b.squads?.gender || '';
+      if (ga !== gb) return ga.localeCompare(gb);
+      return String(a.sslc_name || '').localeCompare(String(b.sslc_name || ''));
     });
   }
 
-  // Export to Excel handler
-  function handleExport(dataset: any[], filename: string) {
+  // Human-readable summary of the active filters (shown in the Excel/PDF header)
+  function filterSummary(useFilters: boolean): string {
+    if (!useFilters) return 'None (entire roster)';
+    const parts: string[] = [];
+    if (searchQuery.trim()) parts.push(`Search "${searchQuery.trim()}"`);
+    if (selectedCollege !== 'ALL') parts.push(`College ${selectedCollege}`);
+    if (selectedGender !== 'ALL') parts.push(selectedGender === 'men' ? 'Men' : 'Women');
+    if (selectedStatus !== 'ALL') parts.push(`Payment ${selectedStatus}`);
+    if (selectedEvent !== 'ALL') parts.push(`Event ${selectedEvent}`);
+    return parts.length ? parts.join(' • ') : 'None (all athletes)';
+  }
+
+  // Excel (.xlsx): "Athletes" sheet with a filter arrow on every column + a "Report Info" sheet
+  function handleExport(dataset: any[], filename: string, useFilters: boolean) {
     if (dataset.length === 0) {
       alert('No athlete records available to export.');
       return;
     }
-    const formatted = formatForExcel(dataset);
-    const ws = XLSX.utils.json_to_sheet(formatted);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'Athletes Roster');
-
-    // Auto-fit column widths
-    const colWidths = Object.keys(formatted[0] || {}).map((key) => ({
-      wch: Math.max(key.length, 14),
+    const rows = buildExportRows(sortForExport(dataset));
+    const ws = XLSX.utils.json_to_sheet(rows);
+    const headers = Object.keys(rows[0]);
+    ws['!cols'] = headers.map((key) => ({
+      wch: Math.min(48, Math.max(key.length + 2, ...rows.map((r) => String((r as any)[key] ?? '').length + 1))),
     }));
-    ws['!cols'] = colWidths;
+    ws['!autofilter'] = { ref: XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: rows.length, c: headers.length - 1 } }) };
 
+    const info = XLSX.utils.aoa_to_sheet([
+      ['Dr. ACS-AURA 2026 — VTU’s 28th Inter-Collegiate State Level Athletic Meet 2026'],
+      ['Athletes list exported from the Admin portal'],
+      [],
+      ['Generated', new Date().toLocaleString('en-IN')],
+      ['Filters', filterSummary(useFilters)],
+      ['Athletes', rows.length],
+      ['Men', rows.filter((r) => r.Division === 'Men').length],
+      ['Women', rows.filter((r) => r.Division === 'Women').length],
+      ['Colleges', new Set(rows.map((r) => r['College Code'])).size],
+      [],
+      ['Note', 'Aadhaar numbers show only the last 4 digits.'],
+    ]);
+    info['!cols'] = [{ wch: 14 }, { wch: 80 }];
+
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Athletes');
+    XLSX.utils.book_append_sheet(wb, info, 'Report Info');
     XLSX.writeFile(wb, `${filename}.xlsx`);
+  }
+
+  // PDF: opens a printable A4-landscape report ("Save as PDF" in the print dialog)
+  function handlePdf(dataset: any[], title: string, useFilters: boolean) {
+    if (dataset.length === 0) {
+      alert('No athlete records available to export.');
+      return;
+    }
+    setPdfReport({ title, filters: filterSummary(useFilters), rows: buildExportRows(sortForExport(dataset)) });
   }
 
   return (
@@ -130,30 +158,54 @@ export default function AthletesClient({ athletes }: Props) {
       <div className="admin-page-header">
         <div className="admin-title-group">
           <h2>Athletes Delegation Management</h2>
-          <p>Complete athlete directory with multi-dimensional filters and Excel export</p>
+          <p>Complete athlete directory with filters &bull; download as Excel (.xlsx) or PDF</p>
         </div>
 
-        {/* Excel Export Buttons (Both entire and filtered) */}
-        <div className="admin-actions-group">
-          <button
-            type="button"
-            onClick={() => handleExport(athletes, `VTU_Athletics_Entire_Roster_${new Date().toISOString().split('T')[0]}`)}
-            className="btn-admin btn-admin-secondary"
-            id="btn-export-entire"
-          >
-            <span>📥</span>
-            <span>Export Entire Roster ({athletes.length}) .xlsx</span>
-          </button>
+        {/* Downloads: entire roster or the current filtered view, as Excel or PDF */}
+        <div className="admin-actions-group" style={{ flexWrap: 'wrap' }}>
+          <div className="athlete-export-group">
+            <span className="athlete-export-label">Entire roster ({athletes.length})</span>
+            <button
+              type="button"
+              onClick={() => handleExport(athletes, `ACS-AURA_Athletes_All_${exportFileStamp()}`, false)}
+              className="btn-admin btn-admin-secondary"
+              id="btn-export-entire"
+            >
+              <span>📥</span>
+              <span>Excel</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => handlePdf(athletes, 'Athletes List — Entire Roster', false)}
+              className="btn-admin btn-admin-secondary"
+              id="btn-export-entire-pdf"
+            >
+              <span>📄</span>
+              <span>PDF</span>
+            </button>
+          </div>
 
-          <button
-            type="button"
-            onClick={() => handleExport(filteredAthletes, `VTU_Athletics_Filtered_Roster_${new Date().toISOString().split('T')[0]}`)}
-            className="btn-admin btn-admin-primary"
-            id="btn-export-filtered"
-          >
-            <span>📊</span>
-            <span>Export Filtered View ({filteredAthletes.length}) .xlsx</span>
-          </button>
+          <div className="athlete-export-group">
+            <span className="athlete-export-label">Filtered view ({filteredAthletes.length})</span>
+            <button
+              type="button"
+              onClick={() => handleExport(filteredAthletes, `ACS-AURA_Athletes_Filtered_${exportFileStamp()}`, true)}
+              className="btn-admin btn-admin-primary"
+              id="btn-export-filtered"
+            >
+              <span>📊</span>
+              <span>Excel</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => handlePdf(filteredAthletes, 'Athletes List — Filtered View', true)}
+              className="btn-admin btn-admin-primary"
+              id="btn-export-filtered-pdf"
+            >
+              <span>📄</span>
+              <span>PDF</span>
+            </button>
+          </div>
         </div>
       </div>
 
@@ -437,6 +489,14 @@ export default function AthletesClient({ athletes }: Props) {
           </tbody>
         </table>
       </div>
+      {pdfReport && (
+        <AthletesPdfReport
+          title={pdfReport.title}
+          filterSummary={pdfReport.filters}
+          rows={pdfReport.rows}
+          onClose={() => setPdfReport(null)}
+        />
+      )}
     </div>
   );
 }
