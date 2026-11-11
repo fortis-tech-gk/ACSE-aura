@@ -315,12 +315,7 @@ export async function listPaymentsForAdminAction() {
       ped_email,
       roster_locked,
       payment_status,
-      colleges (
-        id,
-        name,
-        code,
-        district
-      ),
+      colleges (*),
       profiles (
         id,
         sslc_name,

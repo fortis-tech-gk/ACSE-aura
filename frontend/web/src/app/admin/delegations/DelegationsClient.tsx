@@ -3,6 +3,7 @@
 import { useState } from 'react';
 
 import { DB_CODE_TO_OFFICIAL_MAP } from '@/lib/championship-events';
+import { VTU_DIVISIONS, collegeDivision } from '@/lib/college-regions';
 
 interface Props {
   squads: any[];
@@ -19,22 +20,41 @@ function eventsText(regs: any[] | undefined): string {
 }
 
 export default function DelegationsClient({ squads }: Props) {
-  const [selectedSquadId, setSelectedSquadId] = useState<string>('ALL');
+  const [selectedDivision, setSelectedDivision] = useState<string>('ALL');
   const [skipEmpty, setSkipEmpty] = useState(true);
 
-  // College code, then Men before Women
+  const divisionOf = (sq: any) =>
+    collegeDivision(sq.colleges?.code || String(sq.squad_code || '').split('-')[0], sq.colleges?.region) || 'Unassigned';
+  const divisionOrder = [...VTU_DIVISIONS, 'Unassigned'];
+
+  // Division, then college code, then Men before Women
   const ordered = [...squads].sort((a, b) => {
+    const da = divisionOrder.indexOf(divisionOf(a)), db = divisionOrder.indexOf(divisionOf(b));
+    if (da !== db) return da - db;
     const ca = a.colleges?.code || a.squad_code || '';
     const cb = b.colleges?.code || b.squad_code || '';
     if (ca !== cb) return ca.localeCompare(cb);
     return (a.gender === 'men' ? 0 : 1) - (b.gender === 'men' ? 0 : 1);
   });
-  const withAthletes = ordered.filter((s) => (s.profiles || []).length > 0);
-  const pool = skipEmpty ? withAthletes : ordered;
+  const hasAthletes = (sq: any) => (sq.profiles || []).length > 0;
+  const inDivision = (sq: any) => selectedDivision === 'ALL' || divisionOf(sq) === selectedDivision;
 
-  const visibleSquads = selectedSquadId === 'ALL'
-    ? pool
-    : ordered.filter((s) => s.id === selectedSquadId);
+  const visibleSquads = ordered.filter((sq) => inDivision(sq) && (!skipEmpty || hasAthletes(sq)));
+  const emptyInView = ordered.filter((sq) => inDivision(sq) && !hasAthletes(sq)).length;
+
+  // Squads / athletes per division for the picker
+  const divisionStats = divisionOrder
+    .map((d) => {
+      const list = ordered.filter((sq) => divisionOf(sq) === d);
+      return {
+        division: d,
+        squads: list.filter(hasAthletes).length,
+        athletes: list.reduce((n, sq) => n + (sq.profiles || []).length, 0),
+        total: list.length,
+      };
+    })
+    .filter((d) => d.total > 0);
+  const totalAthletes = divisionStats.reduce((n, d) => n + d.athletes, 0);
 
   return (
     <div>
@@ -62,15 +82,17 @@ export default function DelegationsClient({ squads }: Props) {
       <div className="filter-bar no-print">
         <div className="filter-inputs">
           <select
-            value={selectedSquadId}
-            onChange={(e) => setSelectedSquadId(e.target.value)}
+            value={selectedDivision}
+            onChange={(e) => setSelectedDivision(e.target.value)}
             className="filter-control"
             style={{ minWidth: '320px' }}
+            id="deleg-division"
+            aria-label="VTU division"
           >
-            <option value="ALL">All College Delegations ({pool.length})</option>
-            {ordered.map((sq) => (
-              <option key={sq.id} value={sq.id}>
-                {sq.colleges?.code || sq.squad_code} — {sq.colleges?.name || 'College'} ({sq.gender === 'men' ? 'Men' : 'Women'}) • {(sq.profiles || []).length} athletes
+            <option value="ALL">All Divisions ({totalAthletes} athletes)</option>
+            {divisionStats.map((d) => (
+              <option key={d.division} value={d.division}>
+                {d.division === 'Unassigned' ? 'Unassigned (no division)' : `${d.division} Division`} — {d.squads} squads with athletes, {d.athletes} athletes
               </option>
             ))}
           </select>
@@ -81,7 +103,7 @@ export default function DelegationsClient({ squads }: Props) {
               onChange={(e) => setSkipEmpty(e.target.checked)}
               id="deleg-skip-empty"
             />
-            Skip squads with no athletes ({ordered.length - withAthletes.length})
+            Skip squads with no athletes ({emptyInView})
           </label>
         </div>
 
@@ -127,7 +149,7 @@ export default function DelegationsClient({ squads }: Props) {
                       {district ? `, ${district}` : ''}
                       <div className="deleg-info-sub">College Code: <strong>{colCode}</strong></div>
                     </td>
-                    <th>Division / Squad</th>
+                    <th>Men / Women</th>
                     <td>
                       <strong>{sq.gender === 'men' ? 'Men' : 'Women'}</strong>
                       <div className="deleg-info-sub">{sq.squad_code}</div>
@@ -139,9 +161,10 @@ export default function DelegationsClient({ squads }: Props) {
                       <strong>{sq.ped_name || '—'}</strong>
                       <div className="deleg-info-sub">{[sq.ped_phone, sq.ped_email].filter(Boolean).join(' • ')}</div>
                     </td>
-                    <th>Athletes</th>
+                    <th>VTU Division</th>
                     <td>
-                      <strong>{athletes.length}</strong>
+                      <strong>{divisionOf(sq)}</strong>
+                      <div className="deleg-info-sub">{athletes.length} athlete{athletes.length === 1 ? '' : 's'}</div>
                     </td>
                   </tr>
                 </tbody>
