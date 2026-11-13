@@ -28,22 +28,25 @@ export const Navbar: React.FC = () => {
             >
               <span>Home</span>
             </Link>
-            <a href="#host-college" className="univ-nav-link">
+            <a href="/#host-college" className="univ-nav-link">
               <span>About Us</span>
             </a>
-            <a href="#about-vtu" className="univ-nav-link">
+            <a href="/#about-vtu" className="univ-nav-link">
               <span>About VTU</span>
             </a>
-            <a href="#rules" className="univ-nav-link">
+            <a href="/#rules" className="univ-nav-link">
               <span>Regulations</span>
             </a>
-            <a href="#schedule" className="univ-nav-link">
+            <a href="/#schedule" className="univ-nav-link">
               <span>Discipline Schedule</span>
             </a>
-            <a href="#venue" className="univ-nav-link">
+            <Link href="/results" className={`univ-nav-link ${pathname === '/results' ? 'active' : ''}`}>
+              <span>Live Results</span>
+            </Link>
+            <a href="/#venue" className="univ-nav-link">
               <span>Stadium &amp; Transit</span>
             </a>
-            <a href="#gallery" className="univ-nav-link">
+            <a href="/#gallery" className="univ-nav-link">
               <span>Championship Gallery</span>
             </a>
           </div>
@@ -73,12 +76,13 @@ export const Navbar: React.FC = () => {
         {isMobileMenuOpen && (
           <div className="univ-mobile-dropdown">
             <Link href="/" className="univ-mobile-link" onClick={() => setIsMobileMenuOpen(false)}>Home</Link>
-            <a href="#host-college" className="univ-mobile-link" onClick={() => setIsMobileMenuOpen(false)}>About Us</a>
-            <a href="#about-vtu" className="univ-mobile-link" onClick={() => setIsMobileMenuOpen(false)}>About VTU</a>
-            <a href="#rules" className="univ-mobile-link" onClick={() => setIsMobileMenuOpen(false)}>Regulations &amp; Quotas</a>
-            <a href="#schedule" className="univ-mobile-link" onClick={() => setIsMobileMenuOpen(false)}>Discipline Schedule</a>
-            <a href="#venue" className="univ-mobile-link" onClick={() => setIsMobileMenuOpen(false)}>Stadium &amp; Transit</a>
-            <a href="#gallery" className="univ-mobile-link" onClick={() => setIsMobileMenuOpen(false)}>Championship Gallery</a>
+            <a href="/#host-college" className="univ-mobile-link" onClick={() => setIsMobileMenuOpen(false)}>About Us</a>
+            <a href="/#about-vtu" className="univ-mobile-link" onClick={() => setIsMobileMenuOpen(false)}>About VTU</a>
+            <a href="/#rules" className="univ-mobile-link" onClick={() => setIsMobileMenuOpen(false)}>Regulations &amp; Quotas</a>
+            <a href="/#schedule" className="univ-mobile-link" onClick={() => setIsMobileMenuOpen(false)}>Discipline Schedule</a>
+            <Link href="/results" className="univ-mobile-link" onClick={() => setIsMobileMenuOpen(false)}>Live Results</Link>
+            <a href="/#venue" className="univ-mobile-link" onClick={() => setIsMobileMenuOpen(false)}>Stadium &amp; Transit</a>
+            <a href="/#gallery" className="univ-mobile-link" onClick={() => setIsMobileMenuOpen(false)}>Championship Gallery</a>
             <div style={{ borderTop: '1px solid #1e3a8a', margin: '0.5rem 0' }} />
             <Link href="/login/squad" className="univ-mobile-link" style={{ background: '#1e3a8a', color: '#ffffff', fontWeight: 700 }} onClick={() => setIsMobileMenuOpen(false)}>
               Institutional Student Registration Portal

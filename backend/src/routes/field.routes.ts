@@ -1,7 +1,7 @@
 import { Router, Response } from 'express';
 import { supabase } from '../config/supabase';
+import { assertCanWriteEntry, finalizeHeat, ProgressionError } from '../utils/progression';
 import { authenticate, requireRole, AuthenticatedRequest } from '../middleware/auth';
-import { invalidateCache } from '../middleware/cache';
 
 export const fieldRouter = Router();
 
@@ -65,6 +65,13 @@ fieldRouter.post('/attempt', async (req: AuthenticatedRequest, res: Response) =>
       markMeters,
       windReading,
     } = req.body;
+    if (heatAthleteId) {
+      try {
+        await assertCanWriteEntry(req.user!, String(heatAthleteId));
+      } catch (e: any) {
+        return res.status(e instanceof ProgressionError ? e.status : 500).json({ error: e.message });
+      }
+    }
 
     if (!heatAthleteId || !roundNumber || !attemptType) {
       return res.status(400).json({
@@ -100,6 +107,13 @@ fieldRouter.post('/vertical-attempt', async (req: AuthenticatedRequest, res: Res
       attemptNumber,
       result, // 'O', 'X', '-'
     } = req.body;
+    if (heatAthleteId) {
+      try {
+        await assertCanWriteEntry(req.user!, String(heatAthleteId));
+      } catch (e: any) {
+        return res.status(e instanceof ProgressionError ? e.status : 500).json({ error: e.message });
+      }
+    }
 
     if (!heatAthleteId || !barHeight || !attemptNumber || !result) {
       return res.status(400).json({
@@ -147,40 +161,11 @@ fieldRouter.get('/standings/:heatId', async (req: AuthenticatedRequest, res: Res
  */
 fieldRouter.post('/finalize', async (req: AuthenticatedRequest, res: Response) => {
   try {
-    const { heatId, eventId, stage } = req.body;
-
-    if (!heatId || !eventId) {
-      return res.status(400).json({ error: 'heatId and eventId are required.' });
-    }
-
-    const { error: heatErr } = await supabase
-      .from('heats')
-      .update({ status: 'COMPLETED' })
-      .eq('id', heatId);
-
-    if (heatErr) {
-      return res.status(400).json({ error: `Failed to mark flight as completed: ${heatErr.message}` });
-    }
-
-    let pointsAwarded = null;
-    if (stage === 'FINAL') {
-      const { data: ptsData, error: ptsErr } = await supabase.rpc('allocate_event_points', {
-        p_event_id: eventId,
-        p_heat_id: heatId,
-      });
-
-      if (ptsErr) {
-        return res.status(400).json({ error: `Flight marked completed, but points allocation failed: ${ptsErr.message}` });
-      }
-      pointsAwarded = ptsData;
-    }
-
-    invalidateCache('live');
-    invalidateCache('leaderboard');
-    invalidateCache('schedule');
-
-    return res.json({ success: true, heatId, status: 'COMPLETED', pointsAwarded });
+    const heatId = String(req.body?.heatId || '');
+    if (!heatId) return res.status(400).json({ error: 'heatId is required.' });
+    // Event and stage are read from the database, not the request (audit #6)
+    return res.json(await finalizeHeat(heatId, req.user!));
   } catch (err: any) {
-    return res.status(500).json({ error: err.message });
+    return res.status(err instanceof ProgressionError ? err.status : 500).json({ error: err.message });
   }
 });

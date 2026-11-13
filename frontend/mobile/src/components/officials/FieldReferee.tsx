@@ -5,6 +5,7 @@ import { useHeat } from '@/lib/officials/useHeat';
 import { confirm, notify } from '@/lib/officials/confirm';
 import { needsWind, one, parseMetres } from '@/lib/officials/heats';
 import { HeatHeader } from './HeatHeader';
+import { afterFinalize } from './finalize';
 import { entryName, entrySub, type EntryPerson } from './entry';
 import { Cell, SheetGrid, SheetInfo, SheetNote, SheetRow, SheetSignatures, SheetTitle, type Col } from './ScoreSheet';
 import { Button, Card, Muted, OfflineBanner, colors } from '@/components/ui';
@@ -130,13 +131,12 @@ export function FieldReferee({ heatId, startAt }: { heatId: string; startAt?: st
   async function finalize() {
     if (!data) return;
     const final = data.heat.stage === 'FINAL';
-    if (!(await confirm('Finalize results?', final ? 'This is the final: championship points are awarded now.' : 'The flight will be marked done.', 'Finalize'))) return;
+    if (!(await confirm('Finish this heat?', final ? 'This is the final: championship points are awarded now.' : 'The flight will be marked done.', 'Finish & save'))) return;
     setBusy(true);
     const r = await submitOp({ path: '/field/finalize', heatId, label: 'Results finalized', body: { heatId, eventId: data.heat.events.id, stage: data.heat.stage } }, { queueable: false });
     setBusy(false);
     if (r.status === 'ok') {
-      reload();
-      notify('Results finalized', final ? 'Points have been added to the championship standings.' : 'The flight is marked done.');
+      afterFinalize(r.data, heatId);
     } else notify('Not finalized', (r as any).message || 'Try again.');
   }
 
@@ -277,7 +277,7 @@ export function FieldReferee({ heatId, startAt }: { heatId: string; startAt?: st
       {sheet}
       <SheetSignatures referee={staff?.displayName || ''} />
       {!done ? (
-        <Button title="Finalize results" onPress={finalize} loading={busy} />
+        <Button title="Finish heat & save results" onPress={finalize} loading={busy} />
       ) : (
         <Card style={{ backgroundColor: colors.greenSoft, borderColor: colors.greenSoft }}>
           <Text style={{ color: colors.green, fontWeight: '800' }}>Results are finalized.</Text>

@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useMemo, useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useOfficialSession } from '@/lib/officials/session';
 import { useHeat } from '@/lib/officials/useHeat';
@@ -6,6 +6,7 @@ import { confirm, notify } from '@/lib/officials/confirm';
 import { needsWind, one, parseTime, showTime } from '@/lib/officials/heats';
 import { ordinal } from '@/lib/format';
 import { HeatHeader } from './HeatHeader';
+import { afterFinalize } from './finalize';
 import { entryName, type EntryPerson } from './entry';
 import { Cell, POSITION_WORD, SheetGrid, SheetInfo, SheetNote, SheetRow, SheetSignatures, SheetTitle, type Col } from './ScoreSheet';
 import { Button, Card, Muted, OfflineBanner, colors } from '@/components/ui';
@@ -92,11 +93,11 @@ export function TrackReferee({ heatId, startAt }: { heatId: string; startAt?: st
   }, [entries, drafts, saved]);
 
   const save = useCallback(
-    async (e: Entry): Promise<boolean> => {
-      const d = valueOf(e.id);
+    async (e: Entry, override?: Draft, quiet = false): Promise<boolean> => {
+      const d = override ?? valueOf(e.id);
       const t = d.status === 'FINISHED' ? parseTime(d.time) : null;
       if (d.status === 'FINISHED' && t == null) {
-        notify('Check the time', `${entryName(e)}: type the time like 10.42 or 1:52.34`);
+        if (!quiet) notify('Check the time', `${entryName(e)}: type the time like 10.42 or 1:52.34`);
         return false;
       }
       const r = await submitOp({
@@ -109,7 +110,10 @@ export function TrackReferee({ heatId, startAt }: { heatId: string; startAt?: st
         notify('Not saved', r.message);
         return false;
       }
+      // Drop the draft only if nothing newer was typed while it was being sent
       setDrafts((x) => {
+        const cur = x[e.id];
+        if (cur && (cur.time !== d.time || cur.status !== d.status || cur.dq !== d.dq)) return x;
         const n = { ...x };
         delete n[e.id];
         return n;
@@ -120,6 +124,27 @@ export function TrackReferee({ heatId, startAt }: { heatId: string; startAt?: st
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [drafts, saved, prefill, submitOp, heatId, reload]
   );
+
+  /** Autosave: a typed time is sent 1.2 s after the referee stops typing (or when they leave the box) */
+  const timers = useRef(new Map<string, ReturnType<typeof setTimeout>>());
+  function edit(e: Entry, d: Draft, delayMs: number) {
+    setDrafts((x) => ({ ...x, [e.id]: d }));
+    const old = timers.current.get(e.id);
+    if (old) clearTimeout(old);
+    timers.current.set(
+      e.id,
+      setTimeout(() => {
+        timers.current.delete(e.id);
+        save(e, d, true);
+      }, delayMs)
+    );
+  }
+  function flush(e: Entry) {
+    const old = timers.current.get(e.id);
+    if (old) clearTimeout(old);
+    timers.current.delete(e.id);
+    if (isDirty(e.id)) save(e, undefined, false);
+  }
 
   async function saveAll() {
     for (const e of entries) if (isDirty(e.id)) if (!(await save(e))) return;
@@ -138,7 +163,7 @@ export function TrackReferee({ heatId, startAt }: { heatId: string; startAt?: st
     const missing = entries.filter((e) => !saved.has(e.id)).length;
     const final = data.heat.stage === 'FINAL';
     const msg = `${missing ? `${missing} lane${missing === 1 ? ' has' : 's have'} no result. ` : ''}${final ? 'This is the final: championship points are awarded now.' : 'The heat will be marked done.'}`;
-    if (!(await confirm('Finalize results?', msg, 'Finalize'))) return;
+    if (!(await confirm('Finish this heat?', msg, 'Finish & save'))) return;
     setBusy(true);
     const r = await submitOp(
       { path: '/track/finalize', heatId, label: 'Results finalized', body: { heatId, eventId: data.heat.events.id, stage: data.heat.stage } },
@@ -146,8 +171,7 @@ export function TrackReferee({ heatId, startAt }: { heatId: string; startAt?: st
     );
     setBusy(false);
     if (r.status === 'ok') {
-      reload();
-      notify('Results finalized', final ? 'Points have been added to the championship standings.' : 'The heat is marked done.');
+      afterFinalize(r.data, heatId);
     } else notify('Not finalized', (r as any).message || 'Try again.');
   }
 
@@ -181,7 +205,7 @@ export function TrackReferee({ heatId, startAt }: { heatId: string; startAt?: st
     { key: 'status', title: 'STATUS', width: W.status },
     { key: 'perf', title: 'PERFORMANCE', sub: 'Time', width: W.perf },
     { key: 'rem', title: 'REMARKS', sub: 'DQ rule', width: W.rem },
-    ...(!done ? [{ key: 'save', title: 'SAVE', width: W.save }] : []),
+    ...(!done ? [{ key: 'save', title: 'SAVED', sub: 'automatic', width: W.save }] : []),
   ];
   const resultCols: Col[] = [
     { key: 'pos', title: 'POSITION', width: 104 },
@@ -214,7 +238,7 @@ export function TrackReferee({ heatId, startAt }: { heatId: string; startAt?: st
         }
       />
 
-      <SheetNote>Type times like 10.42 or 1:52.34. Results are saved on the device first and sent when there is internet. Places and the FINAL RESULT fill in automatically.</SheetNote>
+      <SheetNote>Type times like 10.42 or 1:52.34 — each result saves itself. Places and the FINAL RESULT fill in automatically. Finalize when every lane has a result.</SheetNote>
 
       <SheetGrid cols={entryCols}>
         {entries.map((e) => {
@@ -233,7 +257,7 @@ export function TrackReferee({ heatId, startAt }: { heatId: string; startAt?: st
                     <Pressable
                       key={st.key}
                       disabled={done}
-                      onPress={() => setDrafts((x) => ({ ...x, [e.id]: { ...v, status: st.key } }))}
+                      onPress={() => edit(e, { ...v, status: st.key }, st.key === 'FINISHED' ? 1200 : 0)}
                       accessibilityRole="radio"
                       accessibilityState={{ checked: v.status === st.key }}
                       style={[s.st, v.status === st.key && s.stOn]}
@@ -248,7 +272,9 @@ export function TrackReferee({ heatId, startAt }: { heatId: string; startAt?: st
                   <TextInput
                     value={v.time}
                     editable={!done}
-                    onChangeText={(t) => setDrafts((x) => ({ ...x, [e.id]: { ...v, time: t.replace(/[^0-9.:,]/g, '') } }))}
+                    onChangeText={(t) => edit(e, { ...v, time: t.replace(/[^0-9.:,]/g, '') }, 1200)}
+                    onBlur={() => flush(e)}
+                    onSubmitEditing={() => flush(e)}
                     placeholder="time"
                     placeholderTextColor="#94a3b8"
                     keyboardType="numbers-and-punctuation"
@@ -264,7 +290,8 @@ export function TrackReferee({ heatId, startAt }: { heatId: string; startAt?: st
                   <TextInput
                     value={v.dq}
                     editable={!done}
-                    onChangeText={(t) => setDrafts((x) => ({ ...x, [e.id]: { ...v, dq: t } }))}
+                    onChangeText={(t) => edit(e, { ...v, dq: t }, 1200)}
+                    onBlur={() => flush(e)}
                     placeholder="Rule, e.g. TR 16.8"
                     placeholderTextColor="#94a3b8"
                     style={[s.cellInput, { fontSize: 13, textAlign: 'left' }]}
@@ -276,13 +303,13 @@ export function TrackReferee({ heatId, startAt }: { heatId: string; startAt?: st
               </Cell>
               {!done && (
                 <Cell width={W.save}>
-                  <Button
-                    title={dirty ? 'Save' : waiting ? 'Waiting' : saved.has(e.id) ? 'Saved ✓' : 'Save'}
-                    onPress={() => save(e)}
-                    disabled={!dirty}
-                    variant={dirty ? 'primary' : 'secondary'}
-                    style={{ minHeight: 36, paddingVertical: 4, paddingHorizontal: 6 }}
-                  />
+                  {dirty && v.status === 'FINISHED' && v.time && parseTime(v.time) == null ? (
+                    <Text style={[s.saveState, { color: colors.red }]}>Check time</Text>
+                  ) : (
+                    <Text style={[s.saveState, { color: dirty ? colors.amber : waiting ? colors.amber : saved.has(e.id) ? colors.green : colors.muted }]}>
+                      {dirty ? 'Saving…' : waiting ? 'Queued' : saved.has(e.id) ? 'Saved ✓' : '—'}
+                    </Text>
+                  )}
                 </Cell>
               )}
             </SheetRow>
@@ -313,7 +340,7 @@ export function TrackReferee({ heatId, startAt }: { heatId: string; startAt?: st
       {!done ? (
         <View style={s.footer}>
           {dirtyCount > 0 && <Button title={`Save all (${dirtyCount})`} onPress={saveAll} style={{ flexGrow: 1 }} />}
-          <Button title="Finalize results" variant={dirtyCount ? 'secondary' : 'primary'} onPress={finalize} loading={busy} style={{ flexGrow: 1 }} />
+          <Button title="Finish heat & save results" variant={dirtyCount ? 'secondary' : 'primary'} onPress={finalize} loading={busy} style={{ flexGrow: 1 }} />
         </View>
       ) : (
         <Card style={{ backgroundColor: colors.greenSoft, borderColor: colors.greenSoft }}>
@@ -339,4 +366,5 @@ const s = StyleSheet.create({
   cellRemark: { fontSize: 13, fontWeight: '800', color: colors.blue, textAlign: 'center' },
   blockTitle: { textAlign: 'center', fontSize: 15, fontWeight: '900', fontStyle: 'italic', color: '#111827' },
   footer: { flexDirection: 'row', gap: 10, flexWrap: 'wrap' },
+  saveState: { fontSize: 13, fontWeight: '800', textAlign: 'center' },
 });

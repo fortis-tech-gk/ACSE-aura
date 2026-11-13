@@ -1,15 +1,25 @@
 import React, { useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { router, type Href } from 'expo-router';
+import { router, useLocalSearchParams, type Href } from 'expo-router';
 import { useOfficialSession } from '@/lib/officials/session';
 import { useCachedFetch } from '@/lib/useCachedFetch';
 import { HEAT_STATUS, heatTitle, whenLine } from '@/lib/officials/heats';
 import { useOfficialsLayout } from '@/lib/officials/layout';
 import { dayKey, fmtDay } from '@/lib/format';
 import type { HeatSummary } from '@/lib/officials/types';
-import { Card, Muted, OfflineBanner, Pill, colors } from '@/components/ui';
+import { Button, Card, Muted, OfflineBanner, Pill, colors } from '@/components/ui';
+import { entryName, type EntryPerson } from './entry';
 
 const KIND_ICON: Record<HeatSummary['kind'], string> = { track: '🏃', relay: '🔁', field: '🥏', vertical: '🪜' };
+
+const DONE = ['COMPLETED', 'OFFICIAL'];
+
+/** Open one heat / flight screen */
+export function openHeat(h: Pick<HeatSummary, 'id' | 'kind' | 'startAt'>, mode: 'callroom' | 'referee', replace = false) {
+  const href = { pathname: '/officials/heat/[id]', params: { id: h.id, mode, kind: h.kind, startAt: h.startAt || '' } } as unknown as Href;
+  if (replace) router.replace(href);
+  else router.push(href);
+}
 
 /** Heats / flights to pick from — call room officials and referees */
 export function HeatList({ mode }: { mode: 'callroom' | 'referee' }) {
@@ -21,6 +31,11 @@ export function HeatList({ mode }: { mode: 'callroom' | 'referee' }) {
     pollMs: 30_000,
   });
   const heats = useMemo(() => data?.heats || [], [data]);
+  // The next heat to work on: earliest by start time that is drawn and not finished.
+  // `finished` = the heat just finalized (the saved list may not know yet)
+  const { finished } = useLocalSearchParams<{ finished?: string }>();
+  const next = useMemo(() => heats.find((h) => h.id !== finished && !DONE.includes(h.status) && h.entries > 0) || null, [heats, finished]);
+
   const today = dayKey(new Date().toISOString());
 
   const days = useMemo(() => {
@@ -32,7 +47,7 @@ export function HeatList({ mode }: { mode: 'callroom' | 'referee' }) {
   const [showDone, setShowDone] = useState(false);
 
   const list = heats.filter(
-    (h) => dayKey(h.startAt) === activeDay && (showDone || !['COMPLETED', 'OFFICIAL'].includes(h.status))
+    (h) => dayKey(h.startAt) === activeDay && (showDone || (!['COMPLETED', 'OFFICIAL'].includes(h.status) && h.id !== finished))
   );
   const doneCount = heats.filter((h) => dayKey(h.startAt) === activeDay && ['COMPLETED', 'OFFICIAL'].includes(h.status)).length;
 
@@ -48,6 +63,13 @@ export function HeatList({ mode }: { mode: 'callroom' | 'referee' }) {
             </Pressable>
           ))}
         </View>
+      )}
+
+      {mode === 'referee' && next && <NextHeatBrief heat={next} />}
+      {mode === 'referee' && data && !next && heats.length > 0 && (
+        <Card style={{ backgroundColor: colors.greenSoft, borderColor: colors.greenSoft }}>
+          <Text style={{ color: colors.green, fontWeight: '800' }}>All your heats are finalized. New rounds appear here as soon as they are drawn.</Text>
+        </Card>
       )}
 
       {!data && (
@@ -73,7 +95,7 @@ export function HeatList({ mode }: { mode: 'callroom' | 'referee' }) {
           return (
             <Pressable
               key={h.id}
-              onPress={() => router.push({ pathname: '/officials/heat/[id]', params: { id: h.id, mode, kind: h.kind, startAt: h.startAt || '' } } as unknown as Href)}
+              onPress={() => openHeat(h, mode)}
               accessibilityRole="button"
               style={({ pressed }) => [s.heat, wide && s.heatWide, pressed && { opacity: 0.8 }]}
             >
@@ -105,6 +127,53 @@ export function HeatList({ mode }: { mode: 'callroom' | 'referee' }) {
   );
 }
 
+type BriefEntry = EntryPerson & { id: string; lane_number: number; call_room_reported?: boolean };
+
+/**
+ * The referee's next heat at a glance — event, round, times and the start list — with one
+ * button to open its score sheet. Also saves the heat on the phone for offline use.
+ */
+function NextHeatBrief({ heat }: { heat: HeatSummary }) {
+  const { token } = useOfficialSession();
+  const path = heat.kind === 'field' || heat.kind === 'vertical' ? `/field/heats/${heat.id}` : `/track/heats/${heat.id}`;
+  const { data } = useCachedFetch<{ athletes: BriefEntry[] }>(`@aura/off-heat:${path}`, path, { token, enabled: !!token });
+  const entries = [...(data?.athletes || [])].sort((a, b) => a.lane_number - b.lane_number);
+  const st = HEAT_STATUS[heat.status] || HEAT_STATUS.SCHEDULED;
+  const order = heat.kind === 'field' || heat.kind === 'vertical' ? 'Order' : 'Lane';
+  return (
+    <View style={s.next}>
+      <View style={s.nextTop}>
+        <Text style={s.nextLabel}>NEXT HEAT</Text>
+        <Pill label={st.label} tone={st.tone} />
+      </View>
+      <Text style={s.nextTitle} numberOfLines={2}>{heatTitle(heat)}</Text>
+      <Text style={s.nextWhen}>{whenLine(heat)}</Text>
+      <Text style={s.nextWhen}>
+        {heat.entries} {heat.kind === 'relay' ? 'teams' : 'athletes'} · {heat.reported} reported to the call room
+      </Text>
+      {entries.length > 0 && (
+        <View style={s.startList}>
+          <View style={[s.slRow, s.slHead]}>
+            <Text style={[s.slLane, s.slHeadText]}>{order}</Text>
+            <Text style={[s.slBib, s.slHeadText]}>Bib</Text>
+            <Text style={[s.slName, s.slHeadText]}>Name</Text>
+            <Text style={[s.slCol, s.slHeadText]}>College</Text>
+          </View>
+          {entries.map((e) => (
+            <View key={e.id} style={s.slRow}>
+              <Text style={s.slLane}>{e.lane_number}</Text>
+              <Text style={s.slBib}>{e.profiles?.bid_number ?? ''}</Text>
+              <Text style={s.slName} numberOfLines={1}>{entryName(e)}</Text>
+              <Text style={s.slCol}>{e.profiles?.squads?.colleges?.code || e.relay_teams?.squads?.colleges?.code || ''}</Text>
+            </View>
+          ))}
+        </View>
+      )}
+      <Button title="Go to next heat ›" onPress={() => openHeat(heat, 'referee')} />
+    </View>
+  );
+}
+
 const s = StyleSheet.create({
   days: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   day: { paddingHorizontal: 12, paddingVertical: 8, borderRadius: 999, backgroundColor: '#fff', borderWidth: 2, borderColor: colors.border },
@@ -120,4 +189,17 @@ const s = StyleSheet.create({
   chev: { fontSize: 28, color: colors.muted },
   cardTitle: { fontSize: 16, fontWeight: '800', color: colors.text },
   toggle: { color: colors.blue, fontWeight: '700', textAlign: 'center' },
+  next: { backgroundColor: colors.navy, borderRadius: 18, padding: 18, gap: 6 },
+  nextTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  nextLabel: { color: colors.gold, fontWeight: '900', letterSpacing: 2, fontSize: 12 },
+  nextTitle: { color: '#fff', fontSize: 22, fontWeight: '900' },
+  nextWhen: { color: '#c7d2fe', fontSize: 14 },
+  startList: { backgroundColor: '#fff', borderRadius: 12, overflow: 'hidden', marginVertical: 6 },
+  slRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 10, paddingVertical: 7, borderBottomWidth: 1, borderBottomColor: colors.border, gap: 8 },
+  slHead: { backgroundColor: '#f1f5f9' },
+  slHeadText: { fontSize: 11, fontWeight: '900', color: colors.muted, textTransform: 'uppercase' },
+  slLane: { width: 44, fontSize: 15, fontWeight: '900', color: colors.navy, textAlign: 'center' },
+  slBib: { width: 50, fontSize: 14, fontWeight: '700', color: colors.text, textAlign: 'center' },
+  slName: { flex: 1, minWidth: 0, fontSize: 15, fontWeight: '700', color: colors.text },
+  slCol: { width: 64, fontSize: 13, fontWeight: '800', color: colors.muted, textAlign: 'center' },
 });

@@ -1,0 +1,28 @@
+.results-page { background: var(--bg-primary); min-height: 100vh; }
+.results-main { max-width: 1180px; margin: 0 auto; padding: 24px 16px 48px; }
+.results-head { text-align: center; margin-bottom: 20px; }
+.results-head h1 { font-size: 2rem; font-weight: 900; color: var(--accent-navy); margin: 4px 0; }
+.results-kicker { font-size: 0.8rem; font-weight: 700; letter-spacing: 0.04em; color: var(--accent-gold); text-transform: uppercase; }
+.results-sub { color: var(--text-secondary, #475569); font-size: 0.95rem; }
+.results-standings { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; margin-bottom: 24px; }
+.results-events { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 520px), 1fr)); gap: 16px; }
+.results-card { background: var(--bg-card); border: 1px solid #e2e8f0; border-radius: 14px; padding: 16px; overflow-x: auto; }
+.results-card h2 { font-size: 1.1rem; font-weight: 900; color: var(--accent-navy); margin: 0 0 10px; display: flex; align-items: center; gap: 8px; }
+.results-tag { font-size: 0.75rem; font-weight: 800; background: var(--accent-glow); color: var(--accent-primary); padding: 2px 8px; border-radius: 999px; }
+.results-heat + .results-heat { margin-top: 14px; }
+.results-heat h3 { font-size: 0.95rem; font-weight: 800; color: var(--text-primary); margin: 0 0 6px; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.results-wind { font-weight: 600; color: #64748b; }
+.results-live, .results-final { margin-left: auto; font-size: 0.7rem; font-weight: 900; letter-spacing: 0.06em; padding: 2px 8px; border-radius: 6px; }
+.results-live { background: var(--danger-bg); color: var(--danger); }
+.results-final { background: var(--success-bg); color: var(--success); }
+.results-table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+.results-table th { font-size: 0.72rem; text-transform: uppercase; color: #64748b; font-weight: 800; padding: 6px; border-bottom: 2px solid #e2e8f0; text-align: center; }
+.results-table td { padding: 6px; border-bottom: 1px solid #f1f5f9; text-align: center; white-space: nowrap; }
+.results-left { text-align: left !important; }
+.results-strong { font-weight: 800; font-variant-numeric: tabular-nums; }
+.results-medal-1 td { background: #fef9c3; }
+.results-medal-2 td { background: #f1f5f9; }
+.results-medal-3 td { background: #ffedd5; }
+.results-empty { color: #64748b; text-align: center; padding: 12px; }
+.results-foot { text-align: center; margin-top: 24px; }
+.results-foot a { color: var(--accent-secondary); font-weight: 700; }
