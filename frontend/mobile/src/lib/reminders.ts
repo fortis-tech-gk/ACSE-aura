@@ -22,6 +22,8 @@ export async function ensureNotificationChannel(): Promise<void> {
   await Notifications.setNotificationChannelAsync(CALL_ROOM_CHANNEL, {
     name: 'Call room reminders',
     description: 'Reminders before you must report to the call room',
+    // AndroidImportance is re-exported through a nested `export *` the import plugin can't follow
+    // eslint-disable-next-line import/namespace
     importance: Notifications.AndroidImportance.MAX,
     vibrationPattern: [0, 400, 200, 400],
     sound: 'default',

@@ -128,23 +128,32 @@ authRouter.post('/staff/login', async (req: Request, res: Response) => {
   }
 });
 
+/** Roles that sign in with a PIN (the scanner / officials apps). Admin and finance use passwords. */
+const PIN_LOGIN_ROLES = new Set(['accreditation_volunteer', 'warden', 'call_room_official', 'referee', 'food_volunteer']);
+
 /**
  * POST /api/auth/staff/pin-login
- * Body: { role: string, pin: string }
+ * Body: { role: string, pin: string } — role is required (audit #10/#11)
  */
 authRouter.post('/staff/pin-login', async (req: Request, res: Response) => {
   try {
     const role = (req.body.role || '').trim();
     const pin = (req.body.pin || '').trim();
 
+    // The role is required: a PIN is only ever compared within one role. A role-less PIN was
+    // bcrypt-checked against every staff account (slow — stalls the API) and the first match won.
+    if (!PIN_LOGIN_ROLES.has(role)) {
+      return res.status(400).json({ error: 'Choose your duty before entering the PIN.' });
+    }
+    // New PINs are 6–8 digits; older 4-digit PINs still log in until they are re-issued
     if (!/^\d{4,8}$/.test(pin)) {
-      return res.status(400).json({ error: 'Enter your 4–8 digit PIN.' });
+      return res.status(400).json({ error: 'Enter your PIN (digits only).' });
     }
 
     // Throttle per role+device network (not per role alone — that would let anyone lock out
     // every official of a role on meet day), plus an overall cap per IP.
     const ip = req.ip || 'unknown';
-    const pinKey = `${role || 'any'}|${ip}`;
+    const pinKey = `${role}|${ip}`;
     if (await isLoginThrottled('pin', pinKey, ip, 15, 30)) {
       return res.status(429).json({ error: THROTTLE_MESSAGE });
     }
@@ -153,11 +162,8 @@ authRouter.post('/staff/pin-login', async (req: Request, res: Response) => {
       .from('staff')
       .select('id, pin_hash, display_name, role, scope_event_ids, is_active')
       .eq('is_active', true)
+      .eq('role', role)
       .not('pin_hash', 'is', null);
-
-    if (role) {
-      query.eq('role', role);
-    }
 
     const { data: candidates, error } = await query;
 

@@ -1,13 +1,12 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { StyleSheet, Text, TextInput, View } from 'react-native';
 import { useOfficialSession } from '@/lib/officials/session';
 import { useHeat } from '@/lib/officials/useHeat';
-import { useOfficialsLayout } from '@/lib/officials/layout';
 import { confirm, notify } from '@/lib/officials/confirm';
 import { one, parseMetres } from '@/lib/officials/heats';
-import { ordinal } from '@/lib/format';
 import { HeatHeader } from './HeatHeader';
-import { entryName, entrySub, type EntryPerson } from './entry';
+import { entryName, type EntryPerson } from './entry';
+import { Cell, SheetGrid, SheetInfo, SheetNote, SheetRow, SheetSignatures, SheetTitle, type Col } from './ScoreSheet';
 import { Button, Card, Muted, OfflineBanner, colors } from '@/components/ui';
 
 type Vert = { bar_height_meters: number; attempt_number: number; result: 'O' | 'X' | '-' };
@@ -18,7 +17,7 @@ type Entry = EntryPerson & {
   vertical_jump_attempts: Vert[] | null;
 };
 type HeatData = {
-  heat: { id: string; heat_number: number; stage: string; status: string; events: { id: string; name: string; code: string; category: string } };
+  heat: { id: string; heat_number: number; stage: string; status: string; events: { id: string; name: string; code: string; gender: string | null; category: string } };
   athletes: Entry[];
 };
 
@@ -53,9 +52,9 @@ function summarize(list: Vert[]) {
 }
 
 /** High jump and pole vault: O cleared, X failed, – passed; three failures in a row ends the competition */
-export function VerticalReferee({ heatId }: { heatId: string }) {
-  const { submitOp } = useOfficialSession();
-  const { wide } = useOfficialsLayout();
+export function VerticalReferee({ heatId, startAt }: { heatId: string; startAt?: string | null }) {
+  const { submitOp, staff } = useOfficialSession();
+  const [selId, setSelId] = useState<string | null>(null);
   const { data, offline, savedAt, error, reload, pending } = useHeat<HeatData>(heatId, `/field/heats/${heatId}`, 20000);
   const [busy, setBusy] = useState(false);
 
@@ -84,10 +83,9 @@ export function VerticalReferee({ heatId }: { heatId: string }) {
   }, [jumps]);
 
   const step = data?.heat.events.code.startsWith('PV') ? 0.1 : 0.05;
-  const [bar, setBar] = useState('');
-  useEffect(() => {
-    if (!bar && heights.length) setBar(heights[heights.length - 1]);
-  }, [heights, bar]);
+  const [barDraft, setBar] = useState('');
+  // Until the referee sets the bar, use the highest bar recorded so far
+  const bar = barDraft || heights[heights.length - 1] || '';
   const barN = parseMetres(bar);
 
   // Rank: best height, then fewer failures at that height, then fewer failures overall
@@ -119,6 +117,7 @@ export function VerticalReferee({ heatId }: { heatId: string }) {
     });
     if (r.status === 'rejected') return notify('Not saved', r.message);
     if (r.status === 'ok') reload();
+    setSelId(null);
   }
 
   async function finalize() {
@@ -143,9 +142,34 @@ export function VerticalReferee({ heatId }: { heatId: string }) {
   }
   const done = ['COMPLETED', 'OFFICIAL'].includes(data.heat.status);
 
-  const barCard = !done && (
+  /** Heights on the card: every height used so far plus the bar now set, padded to 7 like the paper card */
+  const cardHeights = [...new Set([...heights, ...(barN != null ? [h2(barN)] : [])])].sort((x, y) => Number(x) - Number(y));
+  const columns: (string | null)[] = [...cardHeights, ...Array(Math.max(0, 7 - cardHeights.length)).fill(null)];
+
+  const W = { sn: 40, name: 190, bib: 62, col: 74, try: 30, best: 72, tr: 78, tf: 72, pos: 72 };
+  const cols: Col[] = [
+    { key: 'sn', title: 'S.N.', width: W.sn },
+    { key: 'name', title: 'NAME of the ATHLETES', width: W.name },
+    { key: 'bib', title: 'BIB No.', width: W.bib },
+    { key: 'col', title: 'COLLEGE', width: W.col },
+    ...columns.flatMap((h, i) => [1, 2, 3].map((n) => ({ key: `h${i}-${n}`, title: String(n), width: W.try }))),
+    { key: 'best', title: 'BEST', sub: 'JUMP', width: W.best },
+    { key: 'tr', title: 'TRIALS at', sub: 'HEIGHT CLEARED', width: W.tr },
+    { key: 'tf', title: 'TOTAL', sub: 'FAILURE', width: W.tf },
+    { key: 'pos', title: 'FINAL', sub: 'POSITION', width: W.pos },
+  ];
+  const groups = [
+    { title: '', span: 4 },
+    ...columns.map((h) => ({ title: h ? `${h} M.` : 'M.', span: 3 })),
+    { title: '', span: 4 },
+  ];
+
+  const sel = selId ? entries.find((e) => e.id === selId) : null;
+  const selAtBar = sel && barN != null ? summaries.get(sel.id)!.byH.get(h2(barN)) || [] : [];
+
+  const jumpCard = !done && (
     <Card style={{ gap: 10, borderColor: colors.blue, borderWidth: 2 }}>
-      <Text style={s.label}>Bar height</Text>
+      <Text style={s.label}>Bar height (m)</Text>
       <View style={s.barRow}>
         <Button title={`−${step.toFixed(2)}`} variant="secondary" onPress={() => barN && setBar(h2(Math.max(0.5, barN - step)))} />
         <TextInput
@@ -159,71 +183,77 @@ export function VerticalReferee({ heatId }: { heatId: string }) {
         />
         <Button title={`+${step.toFixed(2)}`} onPress={() => setBar(h2((barN ?? 1) + step))} />
       </View>
-      {heights.length > 0 && <Muted style={{ fontSize: 12 }}>Heights so far: {heights.join(' · ')}</Muted>}
+      {sel && barN != null ? (
+        <View style={{ gap: 8 }}>
+          <Text style={s.selTitle} numberOfLines={1}>
+            {entryName(sel)} · {h2(barN)} m · try {selAtBar.length + 1}
+          </Text>
+          <View style={s.jumpRow}>
+            <Button title="O  Cleared" onPress={() => jump(sel, 'O')} style={{ flex: 2 }} />
+            <Button title="X  Failure" variant="danger" onPress={() => jump(sel, 'X')} style={{ flex: 2 }} />
+            <Button title="–  Pass" variant="secondary" onPress={() => jump(sel, '-')} style={{ flex: 1 }} />
+          </View>
+        </View>
+      ) : (
+        <Muted style={{ fontSize: 13 }}>Tap the athlete&apos;s next box under the bar height on the card, then record O, X or –.</Muted>
+      )}
     </Card>
   );
 
-  const list = (
-    <View style={{ gap: 8 }}>
-      {entries.map((e) => {
+  const sheet = (
+    <SheetGrid groups={groups} cols={cols}>
+      {entries.map((e, i) => {
         const sm = summaries.get(e.id)!;
         const isOut = out.has(e.id);
-        const atBar = barN != null ? sm.byH.get(h2(barN)) || [] : [];
-        const clearedHere = atBar.some((a) => a.result === 'O');
-        const passedHere = atBar.some((a) => a.result === '-');
-        const canJump = !done && !isOut && !sm.eliminated && barN != null && !clearedHere && !passedHere && atBar.length < 3;
         const rank = ranks.get(e.id);
+        const trialsAtBest = sm.best != null ? (sm.byH.get(h2(sm.best)) || []).length : null;
         return (
-          <Card key={e.id} style={[{ gap: 8, padding: 12 }, (isOut || sm.eliminated) && { opacity: 0.6 }]}>
-            <View style={s.top}>
-              <Text style={s.order}>{e.lane_number}</Text>
-              <View style={{ flex: 1, minWidth: 0 }}>
-                <Text style={s.name} numberOfLines={1}>{entryName(e)}</Text>
-                <Muted style={{ fontSize: 12 }}>{isOut ? 'Did not start' : sm.eliminated ? 'Out — 3 failures in a row' : entrySub(e)}</Muted>
-              </View>
-              <View style={{ alignItems: 'flex-end' }}>
-                <Text style={s.best}>{sm.best != null ? `${h2(sm.best)} m` : '—'}</Text>
-                {rank != null && <Text style={s.rank}>{ordinal(rank)}</Text>}
-              </View>
-            </View>
-            {sm.byH.size > 0 && (
-              <Text style={s.history} numberOfLines={2}>
-                {[...sm.byH.entries()].map(([k, arr]) => `${k} ${arr.map((a) => (a.result === '-' ? '–' : a.result)).join('')}`).join('   ')}
-              </Text>
+          <SheetRow key={e.id} style={isOut ? { opacity: 0.5 } : undefined}>
+            <Cell width={W.sn} text={e.lane_number ?? i + 1} textStyle={{ fontWeight: '900' }} />
+            <Cell width={W.name} align="left" text={isOut ? `${entryName(e)} (DNS)` : sm.eliminated ? `${entryName(e)} (out)` : entryName(e)} />
+            <Cell width={W.bib} text={e.profiles?.bid_number ?? ''} />
+            <Cell width={W.col} text={e.profiles?.squads?.colleges?.code || ''} />
+            {columns.flatMap((h, ci) =>
+              [1, 2, 3].map((n) => {
+                const arr = h ? sm.byH.get(h) || [] : [];
+                const a = arr.find((x) => x.attempt_number === n);
+                const isBar = h != null && barN != null && h === h2(barN);
+                const settled = arr.some((x) => x.result === 'O' || x.result === '-');
+                const isNext = isBar && !done && !isOut && !sm.eliminated && !settled && arr.length + 1 === n;
+                return (
+                  <Cell
+                    key={`${ci}-${n}`}
+                    width={W.try}
+                    text={a ? (a.result === '-' ? '–' : a.result) : ''}
+                    shaded={!h}
+                    selected={isNext && selId === e.id}
+                    onPress={isNext ? () => setSelId(e.id) : undefined}
+                    label={isNext ? `${entryName(e)}, ${h} m try ${n}` : undefined}
+                    textStyle={a?.result === 'X' ? { color: colors.red, fontWeight: '900' } : a?.result === 'O' ? { color: colors.green, fontWeight: '900' } : undefined}
+                  />
+                );
+              })
             )}
-            {canJump && (
-              <View style={s.jumpRow}>
-                <Text style={s.attemptN}>Try {atBar.length + 1}</Text>
-                <Button title="O  Cleared" onPress={() => jump(e, 'O')} style={{ flex: 2 }} />
-                <Button title="X  Failed" variant="danger" onPress={() => jump(e, 'X')} style={{ flex: 2 }} />
-                <Button title="–  Pass" variant="secondary" onPress={() => jump(e, '-')} style={{ flex: 1 }} />
-              </View>
-            )}
-            {!canJump && !isOut && !sm.eliminated && barN != null && (clearedHere || passedHere) && (
-              <Muted style={{ fontSize: 13 }}>{clearedHere ? `Cleared ${h2(barN)} — waits for the next height` : `Passed ${h2(barN)}`}</Muted>
-            )}
-          </Card>
+            <Cell width={W.best} text={isOut ? 'DNS' : sm.best != null ? h2(sm.best) : sm.byH.size ? 'NM' : ''} textStyle={s.computed} />
+            <Cell width={W.tr} text={trialsAtBest ?? ''} textStyle={s.computed} />
+            <Cell width={W.tf} text={sm.best != null ? sm.failsUpToBest : ''} textStyle={s.computed} />
+            <Cell width={W.pos} text={rank ?? ''} textStyle={[s.computed, { color: colors.blue, fontSize: 16 }]} />
+          </SheetRow>
         );
       })}
-    </View>
+    </SheetGrid>
   );
 
   return (
     <View style={{ gap: 14 }}>
       <OfflineBanner offline={offline} lastSyncedAt={savedAt} note="Entries are saved on this device and sent when the network is back." />
       <HeatHeader data={data.heat} />
-      <Muted style={{ fontSize: 13 }}>Set the bar, then record each try: O cleared, X failed, – pass. Three failures in a row and the athlete is out. Entries are saved on the device first.</Muted>
-      {wide ? (
-        <View style={s.wideRow}>
-          <View style={{ flex: 3, minWidth: 0 }}>{list}</View>
-          <View style={{ flex: 2, minWidth: 0 }}>{barCard}</View>
-        </View>
-      ) : (
-        <>
-          {barCard}
-          {list}
-        </>
-      )}
+      <SheetTitle title={`RESULT CARD  *  ${data.heat.events.code.startsWith('PV') ? 'POLE VAULT' : 'HIGH JUMP'}`} />
+      <SheetInfo heat={data.heat} startAt={startAt} />
+      {jumpCard}
+      <SheetNote>LEGEND: O cleared · – pass · X failure. Three failures in a row and the athlete is out. Best jump, trials at the height cleared, total failures (up to the best height) and position fill in automatically.</SheetNote>
+      {sheet}
+      <SheetSignatures referee={staff?.displayName || ''} roles={['REFEREE', 'JUDGES']} />
       {!done ? (
         <Button title="Finalize results" onPress={finalize} loading={busy} />
       ) : (
@@ -236,16 +266,10 @@ export function VerticalReferee({ heatId }: { heatId: string }) {
 }
 
 const s = StyleSheet.create({
-  wideRow: { flexDirection: 'row', gap: 18, alignItems: 'flex-start' },
   label: { fontSize: 15, fontWeight: '800', color: colors.text },
   barRow: { flexDirection: 'row', gap: 8, alignItems: 'center' },
   barInput: { flex: 1, minWidth: 0, minHeight: 56, borderWidth: 1, borderColor: colors.border, borderRadius: 12, fontSize: 30, fontWeight: '900', textAlign: 'center', color: colors.navy, backgroundColor: '#fff' },
-  top: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  order: { width: 30, textAlign: 'center', fontSize: 18, fontWeight: '900', color: colors.navy },
-  name: { fontSize: 15, fontWeight: '800', color: colors.text },
-  best: { fontSize: 18, fontWeight: '900', color: colors.text },
-  rank: { fontSize: 13, fontWeight: '800', color: colors.blue },
-  history: { fontSize: 13, color: colors.text, fontWeight: '600', letterSpacing: 0.5 },
+  selTitle: { fontSize: 17, fontWeight: '900', color: colors.navy },
   jumpRow: { flexDirection: 'row', gap: 6, alignItems: 'center' },
-  attemptN: { fontSize: 12, fontWeight: '800', color: colors.muted, width: 38 },
+  computed: { fontWeight: '900', color: '#111827' },
 });

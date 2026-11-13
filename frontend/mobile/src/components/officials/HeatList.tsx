@@ -73,7 +73,7 @@ export function HeatList({ mode }: { mode: 'callroom' | 'referee' }) {
           return (
             <Pressable
               key={h.id}
-              onPress={() => router.push({ pathname: '/officials/heat/[id]', params: { id: h.id, mode, kind: h.kind } } as unknown as Href)}
+              onPress={() => router.push({ pathname: '/officials/heat/[id]', params: { id: h.id, mode, kind: h.kind, startAt: h.startAt || '' } } as unknown as Href)}
               accessibilityRole="button"
               style={({ pressed }) => [s.heat, wide && s.heatWide, pressed && { opacity: 0.8 }]}
             >

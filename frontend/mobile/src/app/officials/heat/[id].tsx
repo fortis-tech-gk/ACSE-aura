@@ -12,7 +12,7 @@ import { Screen, colors } from '@/components/ui';
 
 /** One heat / flight: the call room view or the referee's result entry, by duty and event type */
 export default function HeatScreen() {
-  const { id, kind } = useLocalSearchParams<{ id: string; kind?: HeatKind }>();
+  const { id, kind, startAt } = useLocalSearchParams<{ id: string; kind?: HeatKind; startAt?: string }>();
   const { status, staff, pendingCount, sessionExpired, syncing } = useOfficialSession();
 
   if (status === 'loading') {
@@ -33,11 +33,11 @@ export default function HeatScreen() {
       {isCallRoom ? (
         <CallRoomHeat heatId={id} />
       ) : kind === 'field' ? (
-        <FieldReferee heatId={id} />
+        <FieldReferee heatId={id} startAt={startAt || null} />
       ) : kind === 'vertical' ? (
-        <VerticalReferee heatId={id} />
+        <VerticalReferee heatId={id} startAt={startAt || null} />
       ) : (
-        <TrackReferee heatId={id} />
+        <TrackReferee heatId={id} startAt={startAt || null} />
       )}
     </Screen>
   );

@@ -5,10 +5,11 @@ import QRCode from 'react-native-qrcode-svg';
 import { useAthleteSession } from '@/lib/athlete-session';
 import { fmtDay, fmtTime, minutesUntil, stageLabel } from '@/lib/format';
 import { isRemindable } from '@/lib/reminders';
-import { Card, Muted, OfflineBanner, Pill, Screen, colors } from '@/components/ui';
+import { Card, Muted, OfflineBanner, Pill, Screen, colors, useNow } from '@/components/ui';
 
 export default function PassScreen() {
   const { me, refreshing, refresh, offline, lastSyncedAt } = useAthleteSession();
+  const now = useNow();
   if (!me) {
     return (
       <Screen>
@@ -18,7 +19,7 @@ export default function PassScreen() {
   }
   const a = me.athlete;
   const accredited = a.accreditationStatus === 'ACCREDITED';
-  const next = me.schedule.find((e) => isRemindable(e) && e.callRoomAt && new Date(e.callRoomAt).getTime() > Date.now() - 30 * 60000);
+  const next = me.schedule.find((e) => isRemindable(e) && e.callRoomAt && new Date(e.callRoomAt).getTime() > now - 30 * 60000);
   const mins = next ? minutesUntil(next.callRoomAt) : null;
 
   return (

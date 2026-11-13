@@ -92,6 +92,8 @@ function useStats<T>(path: string, token: string | null, everyMs = 30000) {
     }
   }, [path, token]);
   useEffect(() => {
+    // load() sets state only after awaiting the network / storage
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     load();
     const t = setInterval(load, everyMs);
     return () => clearInterval(t);

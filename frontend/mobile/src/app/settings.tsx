@@ -29,6 +29,8 @@ export default function SettingsScreen() {
   }, []);
 
   useEffect(() => {
+    // load() sets state only after awaiting the network / storage
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     load();
     // Permission screens open outside the app: re-check when the athlete comes back
     const sub = AppState.addEventListener('change', (s) => {

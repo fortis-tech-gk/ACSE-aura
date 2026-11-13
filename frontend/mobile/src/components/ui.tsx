@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Pressable,
@@ -12,6 +12,16 @@ import {
   type ViewStyle,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+
+/** The current time, refreshed every `everyMs` — keeps "x min ago" labels pure during render */
+export function useNow(everyMs = 30000): number {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), everyMs);
+    return () => clearInterval(t);
+  }, [everyMs]);
+  return now;
+}
 
 export const colors = {
   navy: '#0b1f4b',
@@ -139,8 +149,9 @@ export function OfflineBanner({
   lastSyncedAt: number | null;
   note?: string;
 }) {
+  const now = useNow();
   if (!offline) return null;
-  const mins = lastSyncedAt ? Math.max(0, Math.round((Date.now() - lastSyncedAt) / 60000)) : null;
+  const mins = lastSyncedAt ? Math.max(0, Math.round((now - lastSyncedAt) / 60000)) : null;
   return (
     <View style={styles.offline} accessibilityRole="alert">
       <Text style={styles.offlineText}>

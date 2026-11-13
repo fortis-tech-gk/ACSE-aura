@@ -1,13 +1,13 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useOfficialSession } from '@/lib/officials/session';
 import { useHeat } from '@/lib/officials/useHeat';
-import { useOfficialsLayout } from '@/lib/officials/layout';
 import { confirm, notify } from '@/lib/officials/confirm';
 import { needsWind, one, parseTime, showTime } from '@/lib/officials/heats';
 import { ordinal } from '@/lib/format';
 import { HeatHeader } from './HeatHeader';
-import { entryName, entrySub, type EntryPerson } from './entry';
+import { entryName, type EntryPerson } from './entry';
+import { Cell, POSITION_WORD, SheetGrid, SheetInfo, SheetNote, SheetRow, SheetSignatures, SheetTitle, type Col } from './ScoreSheet';
 import { Button, Card, Muted, OfflineBanner, colors } from '@/components/ui';
 
 type Result = { time_seconds: number | null; status: 'FINISHED' | 'DNF' | 'DQ' | 'DNS'; dq_rule: string | null };
@@ -18,7 +18,7 @@ type Entry = EntryPerson & {
   track_results: Result | Result[] | null;
 };
 type HeatData = {
-  heat: { id: string; heat_number: number; stage: string; status: string; wind_reading: number | null; events: { id: string; name: string; code: string; category: string; start_type: string } };
+  heat: { id: string; heat_number: number; stage: string; status: string; wind_reading: number | null; events: { id: string; name: string; code: string; gender: string | null; category: string; start_type: string } };
   athletes: Entry[];
 };
 
@@ -32,9 +32,9 @@ const STATUSES: { key: Status; label: string }[] = [
 ];
 
 /** Track and relay heats: one time (or DNF / DQ / DNS) per lane, then finalize */
-export function TrackReferee({ heatId }: { heatId: string }) {
-  const { submitOp } = useOfficialSession();
-  const { wide } = useOfficialsLayout();
+export function TrackReferee({ heatId, startAt }: { heatId: string; startAt?: string | null }) {
+  const { submitOp, staff } = useOfficialSession();
+  const staffName = staff?.displayName || '';
   const { data, offline, savedAt, error, reload, pending } = useHeat<HeatData>(heatId, `/track/heats/${heatId}`, 20000);
   const entries = useMemo(() => data?.athletes || [], [data]);
 
@@ -64,11 +64,10 @@ export function TrackReferee({ heatId }: { heatId: string }) {
   }, [entries]);
 
   const [drafts, setDrafts] = useState<Record<string, Draft>>({});
-  const [wind, setWind] = useState('');
+  const [windDraft, setWind] = useState('');
   const [busy, setBusy] = useState(false);
-  useEffect(() => {
-    if (data?.heat.wind_reading != null) setWind((w) => w || String(data.heat.wind_reading));
-  }, [data?.heat.wind_reading]);
+  // Show the saved wind reading until the referee types a new one
+  const wind = windDraft || (data?.heat.wind_reading != null ? String(data.heat.wind_reading) : '');
 
   const valueOf = (id: string): Draft => drafts[id] ?? saved.get(id) ?? prefill.get(id) ?? { time: '', status: 'FINISHED', dq: '' };
   const isDirty = (id: string) => {
@@ -164,95 +163,152 @@ export function TrackReferee({ heatId }: { heatId: string }) {
   const dirtyCount = entries.filter((e) => isDirty(e.id)).length;
   const lanes = data.heat.events.start_type === 'lanes';
 
+  const unitOf = (e: Entry) => e.profiles?.squads?.colleges?.code || e.relay_teams?.squads?.colleges?.code || '';
+  const bibOf = (e: Entry) => e.profiles?.bid_number ?? '';
+
+  // FINAL RESULT block: finishers by place, then DNF / DQ / DNS (no position)
+  const resultRows = entries
+    .map((e) => ({ e, v: drafts[e.id] ?? saved.get(e.id), place: places.get(e.id) }))
+    .filter((r) => r.v)
+    .sort((a, b) => (a.place ?? 99) - (b.place ?? 99) || a.e.lane_number - b.e.lane_number);
+
+  const W = { lane: 54, bib: 64, name: 210, unit: 80, status: 220, perf: 120, rem: 180, save: 112 };
+  const entryCols: Col[] = [
+    { key: 'lane', title: lanes ? 'LANE No.' : 'ORDER', width: W.lane },
+    { key: 'bib', title: 'BIB No.', width: W.bib },
+    { key: 'name', title: 'NAME of the ATHLETES', width: W.name },
+    { key: 'unit', title: 'UNIT', sub: 'College', width: W.unit },
+    { key: 'status', title: 'STATUS', width: W.status },
+    { key: 'perf', title: 'PERFORMANCE', sub: 'Time', width: W.perf },
+    { key: 'rem', title: 'REMARKS', sub: 'DQ rule', width: W.rem },
+    ...(!done ? [{ key: 'save', title: 'SAVE', width: W.save }] : []),
+  ];
+  const resultCols: Col[] = [
+    { key: 'pos', title: 'POSITION', width: 104 },
+    { key: 'bib', title: 'BIB No.', width: W.bib },
+    { key: 'name', title: 'NAME of the ATHLETES', width: W.name },
+    { key: 'unit', title: 'UNIT', width: W.unit },
+    { key: 'perf', title: 'PERFORMANCE', width: W.perf },
+    { key: 'rem', title: 'REMARKS', width: W.rem },
+  ];
+
   return (
     <View style={{ gap: 14 }}>
       <OfflineBanner offline={offline} lastSyncedAt={savedAt} note="Entries are saved on this device and sent when the network is back." />
       <HeatHeader data={data.heat} />
 
-      {needsWind(data.heat.events.code) && (
-        <Card style={s.windRow}>
-          <Text style={s.label}>Wind (m/s)</Text>
-          <TextInput value={wind} onChangeText={setWind} placeholder="+1.2" placeholderTextColor="#94a3b8" keyboardType="numbers-and-punctuation" style={[s.input, { width: 100 }]} accessibilityLabel="Wind reading" />
-          <Button title="Save wind" variant="secondary" onPress={saveWind} />
-        </Card>
-      )}
+      <SheetTitle title="REPORT of REFEREE TRACK" />
+      <SheetInfo
+        heat={data.heat}
+        startAt={startAt}
+        extra={
+          needsWind(data.heat.events.code) ? (
+            <View style={s.windBox}>
+              <Text style={s.windLabel}>WIND (m/s)</Text>
+              <View style={s.windRow}>
+                <TextInput value={wind} editable={!done} onChangeText={setWind} placeholder="+1.2" placeholderTextColor="#94a3b8" keyboardType="numbers-and-punctuation" style={s.windInput} accessibilityLabel="Wind reading" />
+                {!done && <Button title="Save" variant="secondary" onPress={saveWind} />}
+              </View>
+            </View>
+          ) : undefined
+        }
+      />
 
-      <Muted style={{ fontSize: 13 }}>Type times like 10.42 or 1:52.34. Results are saved on the device first and sent when there is internet.</Muted>
+      <SheetNote>Type times like 10.42 or 1:52.34. Results are saved on the device first and sent when there is internet. Places and the FINAL RESULT fill in automatically.</SheetNote>
 
-      <View style={wide ? s.grid : { gap: 10 }}>
+      <SheetGrid cols={entryCols}>
         {entries.map((e) => {
           const v = valueOf(e.id);
-          const place = places.get(e.id);
           const dirty = isDirty(e.id);
           const waiting = pending.some((p) => (p.body as any).heatAthleteId === e.id);
           return (
-            <Card key={e.id} style={[{ gap: 10, padding: 12 }, wide && s.cell, dirty && { borderColor: colors.amber }]}>
-              <View style={s.top}>
-                <View style={s.lane}>
-                  <Text style={s.laneN}>{e.lane_number}</Text>
-                  <Text style={s.laneL}>{lanes ? 'Lane' : 'No.'}</Text>
+            <SheetRow key={e.id} style={dirty ? { backgroundColor: colors.amberSoft } : undefined}>
+              <Cell width={W.lane} text={e.lane_number} textStyle={{ fontWeight: '900' }} />
+              <Cell width={W.bib} text={bibOf(e)} />
+              <Cell width={W.name} text={entryName(e)} align="left" />
+              <Cell width={W.unit} text={unitOf(e)} />
+              <Cell width={W.status}>
+                <View style={s.statuses}>
+                  {STATUSES.map((st) => (
+                    <Pressable
+                      key={st.key}
+                      disabled={done}
+                      onPress={() => setDrafts((x) => ({ ...x, [e.id]: { ...v, status: st.key } }))}
+                      accessibilityRole="radio"
+                      accessibilityState={{ checked: v.status === st.key }}
+                      style={[s.st, v.status === st.key && s.stOn]}
+                    >
+                      <Text style={[s.stText, v.status === st.key && s.stTextOn]}>{st.key === 'FINISHED' ? 'FIN' : st.label}</Text>
+                    </Pressable>
+                  ))}
                 </View>
-                <View style={{ flex: 1, minWidth: 0 }}>
-                  <Text style={s.name} numberOfLines={1}>{entryName(e)}</Text>
-                  <Muted style={{ fontSize: 13 }}>{entrySub(e)}</Muted>
-                </View>
-                {place != null && <Text style={s.place}>{ordinal(place)}</Text>}
-              </View>
-
-              <View style={s.statuses}>
-                {STATUSES.map((st) => (
-                  <Pressable
-                    key={st.key}
-                    disabled={done}
-                    onPress={() => setDrafts((x) => ({ ...x, [e.id]: { ...v, status: st.key } }))}
-                    accessibilityRole="radio"
-                    accessibilityState={{ checked: v.status === st.key }}
-                    style={[s.st, v.status === st.key && s.stOn]}
-                  >
-                    <Text style={[s.stText, v.status === st.key && s.stTextOn]}>{st.label}</Text>
-                  </Pressable>
-                ))}
-              </View>
-
-              <View style={s.entryRow}>
+              </Cell>
+              <Cell width={W.perf}>
                 {v.status === 'FINISHED' ? (
                   <TextInput
                     value={v.time}
                     editable={!done}
                     onChangeText={(t) => setDrafts((x) => ({ ...x, [e.id]: { ...v, time: t.replace(/[^0-9.:,]/g, '') } }))}
-                    placeholder="Time"
+                    placeholder="time"
                     placeholderTextColor="#94a3b8"
                     keyboardType="numbers-and-punctuation"
-                    style={[s.input, s.timeInput]}
+                    style={s.cellInput}
                     accessibilityLabel={`Time for ${entryName(e)}`}
                   />
-                ) : v.status === 'DQ' ? (
+                ) : (
+                  <Text style={s.cellStatus}>{v.status}</Text>
+                )}
+              </Cell>
+              <Cell width={W.rem}>
+                {v.status === 'DQ' ? (
                   <TextInput
                     value={v.dq}
                     editable={!done}
                     onChangeText={(t) => setDrafts((x) => ({ ...x, [e.id]: { ...v, dq: t } }))}
-                    placeholder="Rule (e.g. TR 16.8 false start)"
+                    placeholder="Rule, e.g. TR 16.8"
                     placeholderTextColor="#94a3b8"
-                    style={[s.input, { flex: 1, minWidth: 0 }]}
+                    style={[s.cellInput, { fontSize: 13, textAlign: 'left' }]}
                     accessibilityLabel={`Disqualification rule for ${entryName(e)}`}
                   />
                 ) : (
-                  <View style={{ flex: 1 }} />
+                  <Text style={s.cellRemark}>{places.get(e.id) ? ordinal(places.get(e.id)!) : ''}</Text>
                 )}
-                {!done && (
+              </Cell>
+              {!done && (
+                <Cell width={W.save}>
                   <Button
                     title={dirty ? 'Save' : waiting ? 'Waiting' : saved.has(e.id) ? 'Saved ✓' : 'Save'}
                     onPress={() => save(e)}
                     disabled={!dirty}
                     variant={dirty ? 'primary' : 'secondary'}
-                    style={{ minWidth: 92 }}
+                    style={{ minHeight: 36, paddingVertical: 4, paddingHorizontal: 6 }}
                   />
-                )}
-              </View>
-            </Card>
+                </Cell>
+              )}
+            </SheetRow>
           );
         })}
-      </View>
+      </SheetGrid>
+
+      <Text style={s.blockTitle}>FINAL RESULT</Text>
+      <SheetGrid cols={resultCols}>
+        {Array.from({ length: Math.max(8, resultRows.length) }, (_, i) => {
+          const r = resultRows[i];
+          const pos = r?.place;
+          return (
+            <SheetRow key={i}>
+              <Cell width={104} align="left" text={r ? (pos ? POSITION_WORD[pos - 1] || ordinal(pos) : '—') : resultRows.length ? '' : POSITION_WORD[i] || ''} textStyle={{ fontWeight: '900' }} />
+              <Cell width={W.bib} text={r ? bibOf(r.e) : ''} />
+              <Cell width={W.name} align="left" text={r ? entryName(r.e) : ''} />
+              <Cell width={W.unit} text={r ? unitOf(r.e) : ''} />
+              <Cell width={W.perf} text={r ? (r.v!.status === 'FINISHED' ? r.v!.time : r.v!.status) : ''} textStyle={{ fontWeight: '900' }} />
+              <Cell width={W.rem} text={r ? (r.v!.status === 'DQ' ? r.v!.dq : drafts[r.e.id] && isDirty(r.e.id) ? 'not saved' : '') : ''} textStyle={{ fontSize: 12 }} />
+            </SheetRow>
+          );
+        })}
+      </SheetGrid>
+
+      <SheetSignatures referee={staffName} roles={['REFEREE TRACK', 'CHIEF JUDGE - TRACK', 'CHIEF TIME-KEEPER']} />
 
       {!done ? (
         <View style={s.footer}>
@@ -269,23 +325,18 @@ export function TrackReferee({ heatId }: { heatId: string }) {
 }
 
 const s = StyleSheet.create({
-  windRow: { flexDirection: 'row', alignItems: 'center', gap: 10, flexWrap: 'wrap' },
-  label: { fontSize: 15, fontWeight: '800', color: colors.text },
-  grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
-  cell: { flexBasis: '48%', flexGrow: 1 },
-  top: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  lane: { width: 46, alignItems: 'center', backgroundColor: colors.navy, borderRadius: 10, paddingVertical: 4 },
-  laneN: { color: '#fff', fontSize: 20, fontWeight: '900' },
-  laneL: { color: '#c7d2fe', fontSize: 9, fontWeight: '800', textTransform: 'uppercase' },
-  name: { fontSize: 16, fontWeight: '800', color: colors.text },
-  place: { fontSize: 20, fontWeight: '900', color: colors.blue },
-  statuses: { flexDirection: 'row', gap: 6 },
-  st: { flex: 1, alignItems: 'center', paddingVertical: 8, borderRadius: 10, borderWidth: 2, borderColor: colors.border, backgroundColor: '#fff' },
+  windBox: { flexBasis: 200, flexGrow: 1, borderRightWidth: 1, borderBottomWidth: 1, borderColor: '#374151', paddingHorizontal: 8, paddingVertical: 5 },
+  windLabel: { fontSize: 10, fontWeight: '800', color: colors.muted },
+  windRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  windInput: { width: 90, minHeight: 38, borderWidth: 1, borderColor: colors.border, borderRadius: 8, paddingHorizontal: 8, fontSize: 16, fontWeight: '800', color: colors.text, backgroundColor: '#fff' },
+  statuses: { flexDirection: 'row', gap: 4 },
+  st: { flex: 1, alignItems: 'center', paddingVertical: 7, borderRadius: 6, borderWidth: 1.5, borderColor: colors.border, backgroundColor: '#fff' },
   stOn: { borderColor: colors.blue, backgroundColor: colors.blueSoft },
-  stText: { fontSize: 13, fontWeight: '800', color: colors.muted },
+  stText: { fontSize: 11, fontWeight: '800', color: colors.muted },
   stTextOn: { color: colors.blue },
-  entryRow: { flexDirection: 'row', gap: 10, alignItems: 'center' },
-  input: { minHeight: 50, borderWidth: 1, borderColor: colors.border, borderRadius: 12, paddingHorizontal: 14, fontSize: 18, fontWeight: '700', color: colors.text, backgroundColor: '#fff' },
-  timeInput: { flex: 1, minWidth: 0, fontSize: 24, letterSpacing: 1 },
+  cellInput: { minHeight: 36, fontSize: 18, fontWeight: '800', color: colors.text, textAlign: 'center', paddingVertical: 2, backgroundColor: '#fffbea' },
+  cellStatus: { fontSize: 15, fontWeight: '900', color: colors.red, textAlign: 'center' },
+  cellRemark: { fontSize: 13, fontWeight: '800', color: colors.blue, textAlign: 'center' },
+  blockTitle: { textAlign: 'center', fontSize: 15, fontWeight: '900', fontStyle: 'italic', color: '#111827' },
   footer: { flexDirection: 'row', gap: 10, flexWrap: 'wrap' },
 });

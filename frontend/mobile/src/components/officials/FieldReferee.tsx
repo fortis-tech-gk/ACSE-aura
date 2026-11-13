@@ -1,13 +1,12 @@
 import React, { useMemo, useState } from 'react';
-import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { StyleSheet, Text, TextInput, View } from 'react-native';
 import { useOfficialSession } from '@/lib/officials/session';
 import { useHeat } from '@/lib/officials/useHeat';
-import { useOfficialsLayout } from '@/lib/officials/layout';
 import { confirm, notify } from '@/lib/officials/confirm';
 import { needsWind, one, parseMetres } from '@/lib/officials/heats';
-import { ordinal } from '@/lib/format';
 import { HeatHeader } from './HeatHeader';
 import { entryName, entrySub, type EntryPerson } from './entry';
+import { Cell, SheetGrid, SheetInfo, SheetNote, SheetRow, SheetSignatures, SheetTitle, type Col } from './ScoreSheet';
 import { Button, Card, Muted, OfflineBanner, colors } from '@/components/ui';
 
 type Attempt = { round_number: number; attempt_type: 'VALID' | 'FOUL' | 'PASS'; mark_meters: number | null; wind_reading: number | null };
@@ -18,16 +17,15 @@ type Entry = EntryPerson & {
   field_attempts: Attempt[] | null;
 };
 type HeatData = {
-  heat: { id: string; heat_number: number; stage: string; status: string; events: { id: string; name: string; code: string; category: string } };
+  heat: { id: string; heat_number: number; stage: string; status: string; events: { id: string; name: string; code: string; gender: string | null; category: string } };
   athletes: Entry[];
 };
 
 const ROUNDS = [1, 2, 3, 4, 5, 6];
 
 /** Long jump, triple jump and throws: up to 6 rounds, best valid mark counts */
-export function FieldReferee({ heatId }: { heatId: string }) {
-  const { submitOp } = useOfficialSession();
-  const { wide } = useOfficialsLayout();
+export function FieldReferee({ heatId, startAt }: { heatId: string; startAt?: string | null }) {
+  const { submitOp, staff } = useOfficialSession();
   const { data, offline, savedAt, error, reload, pending } = useHeat<HeatData>(heatId, `/field/heats/${heatId}`, 20000);
   const [sel, setSel] = useState<{ id: string; round: number } | null>(null);
   const [mark, setMark] = useState('');
@@ -55,31 +53,40 @@ export function FieldReferee({ heatId }: { heatId: string }) {
     return m;
   }, [entries, pending]);
 
-  const best = (id: string) => {
-    const marks = [...(attempts.get(id)?.values() || [])].filter((a) => a.attempt_type === 'VALID' && a.mark_meters != null).map((a) => Number(a.mark_meters)).sort((a, b) => b - a);
-    return marks;
-  };
+  /** Valid marks from rounds 1..upTo, best first (the tie-break compares the next best mark) */
+  const marksUpTo = (id: string, upTo: number) =>
+    [...(attempts.get(id)?.values() || [])]
+      .filter((a) => a.round_number <= upTo && a.attempt_type === 'VALID' && a.mark_meters != null)
+      .map((a) => Number(a.mark_meters))
+      .sort((x, y) => y - x);
 
-  // Rank: best mark, then second best, and so on
-  const ranks = useMemo(() => {
-    const rows = active.map((e) => ({ id: e.id, marks: best(e.id) })).filter((r) => r.marks.length);
-    rows.sort((a, b) => {
-      for (let i = 0; i < Math.max(a.marks.length, b.marks.length); i++) {
-        const d = (b.marks[i] ?? 0) - (a.marks[i] ?? 0);
-        if (d) return d;
-      }
-      return 0;
-    });
-    const m = new Map<string, number>();
-    rows.forEach((r, i) => {
-      const prev = rows[i - 1];
-      m.set(r.id, prev && prev.marks.join() === r.marks.join() ? m.get(prev.id)! : i + 1);
-    });
-    return m;
+  /** Positions after 3, 5 and all 6 trials, as on the Distance Score Card (ties share a place) */
+  const positions = useMemo(() => {
+    const after = (upTo: number) => {
+      const rows = active.map((e) => ({ id: e.id, marks: marksUpTo(e.id, upTo) })).filter((r) => r.marks.length);
+      rows.sort((x, y) => {
+        for (let i = 0; i < Math.max(x.marks.length, y.marks.length); i++) {
+          const d = (y.marks[i] ?? 0) - (x.marks[i] ?? 0);
+          if (d) return d;
+        }
+        return 0;
+      });
+      const m = new Map<string, number>();
+      rows.forEach((r, i) => {
+        const prev = rows[i - 1];
+        m.set(r.id, prev && prev.marks.join() === r.marks.join() ? m.get(prev.id)! : i + 1);
+      });
+      return m;
+    };
+    return { 3: after(3), 5: after(5), 6: after(6) };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [active, attempts]);
 
-  const currentRound = ROUNDS.find((r) => active.some((e) => !attempts.get(e.id)?.has(r))) ?? 6;
+  // Trials 4–6: only the best 8 after three trials (everyone when 8 or fewer compete)
+  const threeDone = active.every((e) => [1, 2, 3].every((r) => attempts.get(e.id)?.has(r)));
+  const eligible = (id: string, round: number) => round <= 3 || active.length <= 8 || !threeDone || (positions[3].get(id) ?? 99) <= 8;
+
+  const currentRound = ROUNDS.find((r) => active.some((e) => eligible(e.id, r) && !attempts.get(e.id)?.has(r))) ?? 6;
 
   function select(id: string, round: number) {
     setSel({ id, round });
@@ -90,10 +97,10 @@ export function FieldReferee({ heatId }: { heatId: string }) {
   /** After saving, jump to the next athlete in the order for the same round */
   function next(afterId: string, round: number) {
     const i = active.findIndex((e) => e.id === afterId);
-    const nxt = active.slice(i + 1).find((e) => !attempts.get(e.id)?.has(round));
+    const nxt = active.slice(i + 1).find((e) => eligible(e.id, round) && !attempts.get(e.id)?.has(round));
     if (nxt) select(nxt.id, round);
     else {
-      const first = active.find((e) => !attempts.get(e.id)?.has(round + 1));
+      const first = active.find((e) => eligible(e.id, round + 1) && !attempts.get(e.id)?.has(round + 1));
       if (round < 6 && first) select(first.id, round + 1);
       else setSel(null);
     }
@@ -150,7 +157,7 @@ export function FieldReferee({ heatId }: { heatId: string }) {
       {selEntry ? (
         <>
           <Text style={s.edTitle} numberOfLines={1}>
-            Round {sel!.round} · {entryName(selEntry)}
+            Trial {sel!.round} · {entryName(selEntry)}
           </Text>
           <Muted style={{ fontSize: 13 }}>{entrySub(selEntry)}</Muted>
           <View style={s.edRow}>
@@ -170,79 +177,105 @@ export function FieldReferee({ heatId }: { heatId: string }) {
           </View>
           <View style={s.edRow}>
             <Button title="✓ Save mark" onPress={() => record('VALID')} style={{ flex: 2 }} />
-            <Button title="✕ Foul" variant="danger" onPress={() => record('FOUL')} style={{ flex: 1 }} />
+            <Button title="X Foul" variant="danger" onPress={() => record('FOUL')} style={{ flex: 1 }} />
             <Button title="– Pass" variant="secondary" onPress={() => record('PASS')} style={{ flex: 1 }} />
           </View>
         </>
       ) : (
-        <Muted>Tap a round box next to an athlete to enter their attempt. Round {currentRound} is next.</Muted>
+        <Muted>Tap a trial box on the score card to enter an attempt. Trial {currentRound} is next.</Muted>
       )}
     </Card>
   );
 
-  const table = (
-    <View style={{ gap: 8 }}>
-      {entries.map((e) => {
+  const show = (a: Attempt | undefined) => (!a ? '' : a.attempt_type === 'VALID' ? Number(a.mark_meters).toFixed(2) : a.attempt_type === 'FOUL' ? 'X' : '–');
+  const bestText = (id: string, upTo: number) => {
+    const m = marksUpTo(id, upTo)[0];
+    if (m != null) return m.toFixed(2);
+    const tried = [...(attempts.get(id)?.values() || [])].some((a) => a.round_number <= upTo);
+    return tried ? 'NM' : '';
+  };
+
+  const W = { sn: 40, name: 190, bib: 62, col: 74, trial: 74, best: 78, pos: 74 };
+  const cols: Col[] = [
+    { key: 'sn', title: 'S.N.', width: W.sn },
+    { key: 'name', title: 'NAME of the ATHLETES', width: W.name },
+    { key: 'bib', title: 'BIB NUMBER', width: W.bib },
+    { key: 'col', title: 'COLLEGE', width: W.col },
+    { key: 't1', title: 'FIRST', width: W.trial },
+    { key: 't2', title: 'SECOND', width: W.trial },
+    { key: 't3', title: 'THIRD', width: W.trial },
+    { key: 'b3', title: 'BEST OF THREE', sub: 'TRIALS', width: W.best },
+    { key: 'p3', title: 'POSITION', sub: 'After Three Trials', width: W.pos },
+    { key: 't4', title: 'FOURTH', width: W.trial },
+    { key: 't5', title: 'FIFTH', width: W.trial },
+    { key: 'b5', title: 'BEST OF Five', sub: 'TRIALS', width: W.best },
+    { key: 'p5', title: 'POSITION', sub: 'After Five Trials', width: W.pos },
+    { key: 't6', title: 'SIXTH', width: W.trial },
+    { key: 'ba', title: 'BEST OF ALL', sub: 'TRIALS', width: W.best },
+    { key: 'pf', title: 'FINAL', sub: 'POSITION', width: W.pos },
+  ];
+  const groups = [
+    { title: '', span: 4 },
+    { title: 'TRIALS', span: 3 },
+    { title: '', span: 2 },
+    { title: 'TRIALS', span: 2 },
+    { title: '', span: 2 },
+    { title: '', span: 3 },
+  ];
+
+  const trialCell = (e: Entry, r: number, isOut: boolean) => {
+    const a = attempts.get(e.id)?.get(r);
+    const can = !done && !isOut && eligible(e.id, r);
+    return (
+      <Cell
+        key={r}
+        width={W.trial}
+        text={show(a)}
+        shaded={!isOut && !eligible(e.id, r)}
+        selected={sel?.id === e.id && sel.round === r}
+        onPress={can ? () => select(e.id, r) : undefined}
+        label={`${entryName(e)}, trial ${r}${a ? `: ${show(a)}` : ''}`}
+        textStyle={a?.attempt_type === 'FOUL' ? { color: colors.red, fontWeight: '900' } : undefined}
+      />
+    );
+  };
+
+  const sheet = (
+    <SheetGrid groups={groups} cols={cols}>
+      {entries.map((e, i) => {
         const isOut = out.has(e.id);
-        const b = best(e.id)[0];
-        const rank = ranks.get(e.id);
+        const p = (n: 3 | 5 | 6) => (isOut ? '' : positions[n].get(e.id) ?? '');
         return (
-          <Card key={e.id} style={[{ gap: 8, padding: 12 }, isOut && { opacity: 0.5 }]}>
-            <View style={s.top}>
-              <Text style={s.order}>{e.lane_number}</Text>
-              <View style={{ flex: 1, minWidth: 0 }}>
-                <Text style={s.name} numberOfLines={1}>{entryName(e)}</Text>
-                <Muted style={{ fontSize: 12 }}>{isOut ? 'Did not start' : entrySub(e)}</Muted>
-              </View>
-              <View style={{ alignItems: 'flex-end' }}>
-                <Text style={s.best}>{b != null ? `${b.toFixed(2)} m` : '—'}</Text>
-                {rank != null && <Text style={s.rank}>{ordinal(rank)}</Text>}
-              </View>
-            </View>
-            {!isOut && (
-              <View style={s.rounds}>
-                {ROUNDS.map((r) => {
-                  const a = attempts.get(e.id)?.get(r);
-                  const on = sel?.id === e.id && sel.round === r;
-                  const txt = !a ? '' : a.attempt_type === 'VALID' ? Number(a.mark_meters).toFixed(2) : a.attempt_type === 'FOUL' ? '✕' : '–';
-                  return (
-                    <Pressable
-                      key={r}
-                      disabled={done}
-                      onPress={() => select(e.id, r)}
-                      accessibilityRole="button"
-                      accessibilityLabel={`Round ${r}${txt ? `: ${txt}` : ''}`}
-                      style={[s.cellBox, on && s.cellOn, a?.attempt_type === 'FOUL' && { backgroundColor: colors.redSoft }]}
-                    >
-                      <Text style={s.cellR}>R{r}</Text>
-                      <Text style={[s.cellV, a?.attempt_type === 'FOUL' && { color: colors.red }]}>{txt || ' '}</Text>
-                    </Pressable>
-                  );
-                })}
-              </View>
-            )}
-          </Card>
+          <SheetRow key={e.id} style={isOut ? { opacity: 0.5 } : undefined}>
+            <Cell width={W.sn} text={e.lane_number ?? i + 1} textStyle={{ fontWeight: '900' }} />
+            <Cell width={W.name} align="left" text={isOut ? `${entryName(e)} (DNS)` : entryName(e)} />
+            <Cell width={W.bib} text={e.profiles?.bid_number ?? ''} />
+            <Cell width={W.col} text={e.profiles?.squads?.colleges?.code || ''} />
+            {[1, 2, 3].map((r) => trialCell(e, r, isOut))}
+            <Cell width={W.best} text={isOut ? '' : bestText(e.id, 3)} textStyle={s.computed} />
+            <Cell width={W.pos} text={p(3)} textStyle={s.computed} />
+            {[4, 5].map((r) => trialCell(e, r, isOut))}
+            <Cell width={W.best} text={isOut ? '' : bestText(e.id, 5)} textStyle={s.computed} />
+            <Cell width={W.pos} text={p(5)} textStyle={s.computed} />
+            {trialCell(e, 6, isOut)}
+            <Cell width={W.best} text={isOut ? 'DNS' : bestText(e.id, 6)} textStyle={s.computed} />
+            <Cell width={W.pos} text={p(6)} textStyle={[s.computed, { color: colors.blue, fontSize: 16 }]} />
+          </SheetRow>
         );
       })}
-    </View>
+    </SheetGrid>
   );
 
   return (
     <View style={{ gap: 14 }}>
       <OfflineBanner offline={offline} lastSyncedAt={savedAt} note="Entries are saved on this device and sent when the network is back." />
       <HeatHeader data={data.heat} />
-      <Muted style={{ fontSize: 13 }}>Rounds 4–6 are for the best 8 after round 3. Fouls are ✕, passes are –. Entries are saved on the device first.</Muted>
-      {wide ? (
-        <View style={s.wideRow}>
-          <View style={{ flex: 3, minWidth: 0 }}>{table}</View>
-          <View style={{ flex: 2, minWidth: 0, gap: 12 }}>{editor}</View>
-        </View>
-      ) : (
-        <>
-          {editor}
-          {table}
-        </>
-      )}
+      <SheetTitle title="* DISTANCE SCORE CARD *" />
+      <SheetInfo heat={data.heat} startAt={startAt} />
+      {editor}
+      <SheetNote>Tap a trial box to enter it: the mark in metres, X for a foul, – for a pass. Best marks and positions fill in automatically. Trials 4–6 are for the best 8 after three trials (grey boxes are not used).</SheetNote>
+      {sheet}
+      <SheetSignatures referee={staff?.displayName || ''} />
       {!done ? (
         <Button title="Finalize results" onPress={finalize} loading={busy} />
       ) : (
@@ -255,19 +288,9 @@ export function FieldReferee({ heatId }: { heatId: string }) {
 }
 
 const s = StyleSheet.create({
-  wideRow: { flexDirection: 'row', gap: 18, alignItems: 'flex-start' },
   editor: { gap: 10, borderColor: colors.blue, borderWidth: 2 },
   edTitle: { fontSize: 18, fontWeight: '900', color: colors.navy },
   edRow: { flexDirection: 'row', gap: 8, alignItems: 'center' },
   input: { minHeight: 52, borderWidth: 1, borderColor: colors.border, borderRadius: 12, paddingHorizontal: 14, fontSize: 18, fontWeight: '700', color: colors.text, backgroundColor: '#fff' },
-  top: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  order: { width: 30, textAlign: 'center', fontSize: 18, fontWeight: '900', color: colors.navy },
-  name: { fontSize: 15, fontWeight: '800', color: colors.text },
-  best: { fontSize: 18, fontWeight: '900', color: colors.text },
-  rank: { fontSize: 13, fontWeight: '800', color: colors.blue },
-  rounds: { flexDirection: 'row', gap: 4 },
-  cellBox: { flex: 1, minWidth: 0, alignItems: 'center', paddingVertical: 6, borderRadius: 8, borderWidth: 1, borderColor: colors.border, backgroundColor: '#fff' },
-  cellOn: { borderColor: colors.blue, borderWidth: 2, backgroundColor: colors.blueSoft },
-  cellR: { fontSize: 10, fontWeight: '800', color: colors.muted },
-  cellV: { fontSize: 14, fontWeight: '800', color: colors.text },
+  computed: { fontWeight: '900', color: '#111827' },
 });

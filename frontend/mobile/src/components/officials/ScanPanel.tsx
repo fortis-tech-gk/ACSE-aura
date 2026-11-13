@@ -3,7 +3,7 @@ import { Image, Platform, Pressable, StyleSheet, Text, TextInput, Vibration, Vie
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import type { Outcome } from '@/lib/officials/session';
 import type { AthleteRef } from '@/lib/officials/types';
-import { Button, Muted, colors } from '@/components/ui';
+import { Button, Muted, colors, useNow } from '@/components/ui';
 
 const TONE = {
   green: { bg: '#047857', icon: '✓' },
@@ -178,7 +178,8 @@ export function SyncPill({ pending, expired, syncing, onPress }: { pending: numb
 }
 
 export function RosterNote({ count, at }: { count: number; at: number | null }) {
-  const mins = at ? Math.max(0, Math.round((Date.now() - at) / 60000)) : null;
+  const now = useNow();
+  const mins = at ? Math.max(0, Math.round((now - at) / 60000)) : null;
   return (
     <Muted style={{ fontSize: 12, textAlign: 'center' }}>
       {count ? `${count.toLocaleString('en-IN')} athlete${count === 1 ? '' : 's'} saved on this device` : 'Athlete list not downloaded yet — connect to the internet'}
