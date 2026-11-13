@@ -177,7 +177,7 @@ export default function StaffManager({ initialStaff }: Props) {
               Create Staff Account
             </h2>
             <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', marginBottom: '1.5rem' }}>
-              Assign an operational role with a quick 4-digit PIN for mobile scanners or credentials for desktop portals.
+              Assign an operational role with a 6–8 digit PIN for mobile scanners or credentials for desktop portals.
             </p>
 
             {error && (
@@ -222,21 +222,22 @@ export default function StaffManager({ initialStaff }: Props) {
 
               {authType === 'pin' ? (
                 <div className="form-group">
-                  <label className="form-label" htmlFor="pin">4–6 Digit Access PIN</label>
+                  <label className="form-label" htmlFor="pin">6–8 Digit Access PIN</label>
                   <input
                     id="pin"
                     name="pin"
                     type="password"
                     inputMode="numeric"
-                    pattern="[0-9]*"
-                    maxLength={6}
+                    pattern="[0-9]{6,8}"
+                    minLength={6}
+                    maxLength={8}
                     required
-                    placeholder="e.g. 1234"
+                    placeholder="e.g. 482913"
                     className="input-field"
                     style={{ fontSize: '1.2rem', letterSpacing: '0.2em' }}
                   />
                   <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                    Field volunteers and marshals will use this PIN to log in.
+                    Field volunteers and marshals will use this PIN to log in. 6–8 digits, different for every staff member.
                   </span>
                 </div>
               ) : (

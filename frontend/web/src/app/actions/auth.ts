@@ -200,6 +200,8 @@ export async function loginAdmin(formData: FormData): Promise<AuthResponse> {
 /**
  * Staff PIN Login: For accreditation volunteers, wardens, call room marshals, and referees.
  */
+const PIN_LOGIN_ROLES = new Set(['accreditation_volunteer', 'warden', 'call_room_official', 'referee', 'food_volunteer']);
+
 export async function loginStaffPin(formData: FormData): Promise<AuthResponse> {
   const role = (formData.get('role') as string || '').trim();
   const pin = (formData.get('pin') as string || '').trim();
@@ -207,9 +209,14 @@ export async function loginStaffPin(formData: FormData): Promise<AuthResponse> {
   if (!pin) {
     return { success: false, error: 'Please enter your access PIN.' };
   }
+  // The role is required: a PIN is only ever compared within one role (audit #10/#11 —
+  // a role-less PIN was checked against every staff account and the first match won).
+  if (!PIN_LOGIN_ROLES.has(role)) {
+    return { success: false, error: 'Please choose your role before entering the PIN.' };
+  }
 
   const ip = await getClientIp();
-  const throttleKey = role || 'any';
+  const throttleKey = role;
   const throttled = await checkLoginThrottle('pin', throttleKey, ip);
   if (throttled) {
     return { success: false, error: throttled };
@@ -222,9 +229,7 @@ export async function loginStaffPin(formData: FormData): Promise<AuthResponse> {
     .eq('is_active', true)
     .not('pin_hash', 'is', null);
 
-  if (role) {
-    query.eq('role', role);
-  }
+  query.eq('role', role);
 
   const { data: candidates, error } = await query;
 

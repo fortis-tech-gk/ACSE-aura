@@ -48,4 +48,10 @@ supabase/migrations/college_credentials_*.sql
 docs/*Credentials*.xlsx
 
 # Work Trees
-.claude/
+.claude/# SQL that contains password / passphrase hashes — never commit (audit #8)
+docs/admin_password_reset.sql
+docs/vtu_sports_admin_login.sql
+docs/*_password*.sql
+docs/*_login*.sql
+# Audit write-ups describe unfixed weaknesses — keep out of the public repo
+docs/audit/

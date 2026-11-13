@@ -141,7 +141,7 @@ export async function addAthleteAction(formData: FormData): Promise<AddAthleteRe
   if (existingAadhaar) {
     return {
       success: false,
-      error: `An athlete with Aadhaar '${aadhaarNumber}' is already registered (${existingAadhaar.sslc_name}).`,
+      error: 'This Aadhaar number is already registered for another athlete in the championship. Check the number, or contact the Meet Directorate if this is a mistake.',
     };
   }
 
@@ -155,7 +155,7 @@ export async function addAthleteAction(formData: FormData): Promise<AddAthleteRe
   if (existingUsn) {
     return {
       success: false,
-      error: `An athlete with USN '${usn}' is already registered (${existingUsn.sslc_name}).`,
+      error: 'This USN is already registered for another athlete in the championship. Check the USN, or contact the Meet Directorate if this is a mistake.',
     };
   }
 
@@ -719,10 +719,10 @@ export async function updateAthleteAction(formData: FormData): Promise<UpdateAth
       supabaseAdmin.from('profiles').select('id, sslc_name').eq('usn', usn).neq('id', profileId).maybeSingle(),
     ]);
     if (aadhaarClash) {
-      return { success: false, error: `An athlete with Aadhaar '${aadhaarNumber}' is already registered (${aadhaarClash.sslc_name}).` };
+      return { success: false, error: 'This Aadhaar number is already registered for another athlete in the championship. Check the number, or contact the Meet Directorate if this is a mistake.' };
     }
     if (usnClash) {
-      return { success: false, error: `An athlete with USN '${usn}' is already registered (${usnClash.sslc_name}).` };
+      return { success: false, error: 'This USN is already registered for another athlete in the championship. Check the USN, or contact the Meet Directorate if this is a mistake.' };
     }
 
     // Optional photo replacement

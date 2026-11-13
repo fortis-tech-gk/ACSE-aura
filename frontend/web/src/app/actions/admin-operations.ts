@@ -4,6 +4,7 @@ import { supabaseAdmin } from '@/lib/supabase';
 import { requireAdmin } from '@/lib/auth-guard';
 import { revalidatePath } from 'next/cache';
 import { calculateSquadFees, reviewPayment } from '@/lib/payments';
+import { signPaymentProofLinks } from '@/lib/payment-proofs';
 import { normalizePaymentStatus, totalCredited } from '@/lib/payment-status';
 import { tryMakeAthleteQrToken } from '@/lib/athlete-qr';
 import { OFFICIAL_UPI_ID, OFFICIAL_ACCOUNT_NAME } from '@/lib/payment-config';
@@ -297,6 +298,33 @@ export async function listAllAthletesAction() {
   return (data || []).map((a: any) => ({ ...a, qr_token: tryMakeAthleteQrToken(a.id) }));
 }
 
+const EMPTY_FEES: Awaited<ReturnType<typeof calculateSquadFees>> = {
+  regularEventsCount: 0,
+  regularFeeRate: 100,
+  reserveEventsCount: 0,
+  hmCount: 0,
+  hmFeeRate: 100,
+  relayTeamsCount: 0,
+  relayFeeRate: 100,
+  relayMembersBilled: 0,
+  relayFeeTotal: 0,
+  relayTeams: [],
+  totalAmount: 0,
+};
+
+async function mapWithConcurrency<T, R>(items: T[], limit: number, fn: (item: T) => Promise<R>): Promise<R[]> {
+  const results = new Array<R>(items.length);
+  let next = 0;
+  const worker = async () => {
+    while (next < items.length) {
+      const i = next++;
+      results[i] = await fn(items[i]);
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
+  return results;
+}
+
 /**
  * 5. Lists all college squads and their payment submissions for Payment Verification.
  */
@@ -339,11 +367,21 @@ export async function listPaymentsForAdminAction() {
   if (sqErr) throw new Error(sqErr.message);
 
   // Compute expected fee for each squad
-  const enrichedSquads = await Promise.all(
-    (squads || []).map(async (sq: any) => {
+  // A few squads at a time: firing every squad's fee queries at once (~500 squads) floods the
+  // database connection pool and makes the page take a minute to load.
+  // Colleges with at least one athlete (in either squad). A college with no athletes owes nothing:
+  // every fee — events and relay members alike — comes from an athlete, so skip the fee engine.
+  const collegesWithAthletes = new Set(
+    (squads || []).filter((sq: any) => (sq.profiles || []).length > 0).map((sq: any) => sq.colleges?.id)
+  );
+
+  const enrichedSquads = await mapWithConcurrency(
+    squads || [],
+    12,
+    async (sq: any) => {
       // Same fee engine as the squad's Fee Settlement page (₹100 per relay member, first 4 per team,
       // reserves free, mixed relay billed once per college) so Finance and PED see one number.
-      const fees = await calculateSquadFees(sq.id);
+      const fees = collegesWithAthletes.has(sq.colleges?.id) ? await calculateSquadFees(sq.id) : EMPTY_FEES;
       const expectedFee = fees.totalAmount;
 
       // Latest payment submission (embedded rows are unordered, so sort explicitly)
@@ -364,8 +402,11 @@ export async function listPaymentsForAdminAction() {
         latestPayment,
         pendingPayment,
       };
-    })
+    }
   );
+
+  // Payment proofs are in a private bucket: hand the admin page 1-hour signed links
+  await signPaymentProofLinks(enrichedSquads.flatMap((sq: any) => sq.payments || []));
 
   return enrichedSquads;
 }

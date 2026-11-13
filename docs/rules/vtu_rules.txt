@@ -7,3 +7,8 @@ indiviual - 5,3,1
 only final 4 members from team of relay gets points.
 best male atlhete, best female athlete, best mens clg, best female team, overall championship,  
 results and attenndance to clg peds,
+
+AMENDMENTS (decided by the Organising Committee, applied to the website):
+- 07-11-2026: Reserve rule changed — an athlete may nominate 1 reserve event (free) even when registered for both Event 1 and Event 2. The reserve must be a different event and needs at least one regular event (Rule 36). This replaces "after 2 registered reserved cant be used".
+- 07-11-2026: Relay substitutes can be changed by the call room official up to 24 hours before the race start.
+- 07-11-2026: Relay points (10-6-2) count only for the Overall College Championship; 4x400m Mixed Relay earns no championship points.

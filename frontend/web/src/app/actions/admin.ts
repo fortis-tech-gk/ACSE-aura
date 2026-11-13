@@ -268,11 +268,26 @@ export async function createStaffAction(formData: FormData): Promise<{ success: 
   }
 
   if (pin) {
+    // 6–8 digit PINs (audit #10): 4-digit PINs are too easy to guess
+    if (!/^\d{6,8}$/.test(pin)) {
+      return { success: false, error: 'The access PIN must be 6 to 8 digits.' };
+    }
+    // No two active staff may share a PIN — a shared PIN can log in as the wrong person
+    const { data: pinStaff } = await supabaseAdmin
+      .from('staff')
+      .select('id, pin_hash')
+      .eq('is_active', true)
+      .not('pin_hash', 'is', null);
+    for (const s of pinStaff || []) {
+      if (s.pin_hash && (await bcrypt.compare(pin, s.pin_hash))) {
+        return { success: false, error: 'This PIN is already used by another staff member. Please choose a different PIN.' };
+      }
+    }
     pinHash = await hashPin(pin);
   }
 
   if (!passwordHash && !pinHash) {
-    return { success: false, error: 'Either a username/password or a 4-digit PIN is required.' };
+    return { success: false, error: 'Either a username/password or a 6–8 digit PIN is required.' };
   }
 
   const { error } = await supabaseAdmin.from('staff').insert({

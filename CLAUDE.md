@@ -59,7 +59,7 @@ frontend/web/
 ## VTU Official Registration Rules & Business Logic
 
 ### 1. Athlete Identification & Eligibility
-- **Fields Required**: Full Name (SSLC/10th Certificate match), USN (University Seat Number), Semester (1–8 for UG, 1–4 for PG), Blood Group, College Joining Date, Semester Start Date, 12-digit Aadhaar Number.
+- **Fields Required**: Full Name (SSLC/10th Certificate match), USN (University Seat Number), Semester (1–10), Blood Group, College Joining Date, Present Year Start Date (`sem_start_date`), Date of Birth, 10-digit student phone, 12-digit Aadhaar Number.
 - **Validations**:
   - Aadhaar: Exactly 12 digits, globally unique across entire championship (`profiles.aadhaar_number`).
   - USN: Valid VTU format (e.g. `1AH21CS001`), uppercase, globally unique across championship (`profiles.usn`).
@@ -72,7 +72,7 @@ frontend/web/
   - Event 1 is mandatory unless athlete is registered **only** for a standalone Relay or Half Marathon.
   - Event 1 and Event 2 must be different.
   - **Reserve Event**: Maximum 1 reserve event (`reserveEventId`).
-    - **Rule**: If an athlete registers for both Event 1 and Event 2, they **CANNOT** nominate a reserve event.
+    - **Rule (amended 07-11-2026)**: 1 reserve event is allowed **even when the athlete has both Event 1 and Event 2** (see `docs/rules/vtu_rules.txt` → AMENDMENTS). Do not re-add the old "no reserve with two events" block.
     - **Rule 36**: A reserve event can **only** be nominated if the athlete is registered for at least one individual regular event.
     - Reserve event must be distinct from Event 1 and Event 2.
 - **Squad Quota (College-wide limit per event)**:

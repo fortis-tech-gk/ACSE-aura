@@ -271,7 +271,8 @@ export async function submitPaymentAction(formData: FormData): Promise<{ success
     };
 
     try {
-      await supabaseAdmin.storage.createBucket('payment-proofs', { public: true }).catch(() => { });
+      // Private bucket: proofs are only viewable through signed links on the admin payments page
+      await supabaseAdmin.storage.createBucket('payment-proofs', { public: false }).catch(() => { });
 
       if (screenshotFile && screenshotFile.size > 0 && typeof screenshotFile.arrayBuffer === 'function') {
         if (screenshotFile.size > MAX_FILE_SIZE) {
