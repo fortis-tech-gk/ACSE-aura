@@ -1,7 +1,7 @@
 'use server';
 
 import { supabaseAdmin } from '@/lib/supabase';
-import { requireAdmin } from '@/lib/auth-guard';
+import { requireAdmin, forgetSquadStamp } from '@/lib/auth-guard';
 import { generateSquadPassphrase, hashPassphrase, hashPin } from '@/lib/passphrase';
 import bcrypt from 'bcryptjs';
 import { revalidatePath } from 'next/cache';
@@ -111,6 +111,8 @@ export async function resetSquadPassphraseAction(squadId: string): Promise<{ suc
   if (error) {
     return { success: false, error: error.message };
   }
+  // Anyone still logged in with the old password is signed out on their next click
+  forgetSquadStamp(squadId);
 
   revalidatePath('/admin/colleges');
   return { success: true, newPassphrase: newPassphrasePlain };

@@ -7,6 +7,7 @@ import { rosterEditBlockReason } from '@/lib/roster-window';
 import { validateDateOfBirth } from '@/lib/eligibility';
 import { tryMakeAthleteQrToken } from '@/lib/athlete-qr';
 import { getEventsCatalogue, getEventsByCodes } from '@/lib/events-catalogue';
+import { validateAadhaar } from '@/lib/aadhaar';
 
 export interface AddAthleteResult {
   success: boolean;
@@ -37,6 +38,20 @@ async function ensureBucket(name: string, isPublic: boolean): Promise<void> {
   if (ensuredBuckets.has(name)) return;
   await supabaseAdmin.storage.createBucket(name, { public: isPublic }).catch(() => {});
   ensuredBuckets.add(name);
+}
+
+/** Best-effort removal of a photo uploaded for a save that then failed (no orphan files). */
+async function removeUploadedPhoto(path: string | null) {
+  if (!path) return;
+  await supabaseAdmin.storage.from('athlete-photos').remove([path]).then(
+    () => {},
+    () => {}
+  );
+}
+
+/** "YYYY-MM-DD" that is a real calendar date */
+function isRealDate(v: string): boolean {
+  return /^\d{4}-\d{2}-\d{2}$/.test(v) && !isNaN(new Date(v + 'T00:00:00Z').getTime());
 }
 
 /**
@@ -103,8 +118,9 @@ export async function addAthleteAction(formData: FormData): Promise<AddAthleteRe
     return { success: false, error: 'All student identification fields (including 12-digit Aadhaar Number) are mandatory.' };
   }
 
-  if (!/^\d{12}$/.test(aadhaarNumber)) {
-    return { success: false, error: 'Aadhaar Number must be exactly 12 numeric digits.' };
+  const aadhaarError = validateAadhaar(aadhaarNumber);
+  if (aadhaarError) {
+    return { success: false, error: aadhaarError };
   }
 
   if (!VTU_USN_REGEX.test(usn)) {
@@ -113,6 +129,10 @@ export async function addAthleteAction(formData: FormData): Promise<AddAthleteRe
 
   if (!Number.isInteger(semester) || semester < 1 || semester > 10) {
     return { success: false, error: 'Semester must be between 1 and 10.' };
+  }
+
+  if (!isRealDate(collegeJoiningDate) || !isRealDate(semStartDate)) {
+    return { success: false, error: 'Please enter valid dates for the college joining date and the present year start date.' };
   }
 
   if (!PHONE_REGEX.test(phone)) {
@@ -296,6 +316,7 @@ export async function addAthleteAction(formData: FormData): Promise<AddAthleteRe
 
   // Upload Student Photo to Supabase Storage Bucket ('athlete-photos') with strict validation
   let photoUrl: string | null = null;
+  let photoPath: string | null = null;
   const photoFile = formData.get('photo') as File | null;
   const photoData = formData.get('photoData') as string | null;
 
@@ -338,6 +359,7 @@ export async function addAthleteAction(formData: FormData): Promise<AddAthleteRe
           .from('athlete-photos')
           .getPublicUrl(uploadResult.path);
         photoUrl = pubData.publicUrl;
+        photoPath = uploadResult.path;
       }
     } else if (photoData && photoData.startsWith('data:image')) {
       const match = photoData.match(/^data:([^;]+);base64,(.+)$/);
@@ -368,6 +390,7 @@ export async function addAthleteAction(formData: FormData): Promise<AddAthleteRe
             .from('athlete-photos')
             .getPublicUrl(uploadResult.path);
           photoUrl = pubData.publicUrl;
+          photoPath = uploadResult.path;
         }
       }
     }
@@ -385,6 +408,14 @@ export async function addAthleteAction(formData: FormData): Promise<AddAthleteRe
         ? 'The athlete photo could not be uploaded. Please try again.'
         : 'A passport-size photo (JPG, PNG or WebP, max 5MB) is mandatory for every athlete.',
     };
+  }
+
+  // Re-check the lock right before saving: the photo upload takes a few seconds, and a payment
+  // submitted meanwhile (another tab / device) freezes the roster.
+  const lateLockError = await getRosterMutationBlock(session.squadId);
+  if (lateLockError) {
+    await removeUploadedPhoto(photoPath);
+    return { success: false, error: lateLockError };
   }
 
   // Insert athlete profile
@@ -423,6 +454,7 @@ export async function addAthleteAction(formData: FormData): Promise<AddAthleteRe
   }
 
   if (profileErr || !profile) {
+    await removeUploadedPhoto(photoPath);
     if (profileErr?.code === '23505') {
       return { success: false, error: `An athlete with USN '${usn}' is already registered in this squad.` };
     }
@@ -463,6 +495,7 @@ export async function addAthleteAction(formData: FormData): Promise<AddAthleteRe
 
     if (!hmEvent) {
       await supabaseAdmin.from('profiles').delete().eq('id', profile.id);
+      await removeUploadedPhoto(photoPath);
       return { success: false, error: 'The Half Marathon event is not configured in the championship catalogue. Please contact the VTU Directorate.' };
     }
     if (!registrationInserts.some(r => r.event_id === hmEvent.id)) {
@@ -472,6 +505,7 @@ export async function addAthleteAction(formData: FormData): Promise<AddAthleteRe
 
   if (registrationInserts.length === 0) {
     await supabaseAdmin.from('profiles').delete().eq('id', profile.id);
+    await removeUploadedPhoto(photoPath);
     return { success: false, error: 'No valid events were selected for this athlete registration.' };
   }
 
@@ -482,6 +516,8 @@ export async function addAthleteAction(formData: FormData): Promise<AddAthleteRe
 
   if (regErr) {
     await supabaseAdmin.from('profiles').delete().eq('id', profile.id);
+    await removeUploadedPhoto(photoPath);
+    // A quota trigger (migration 0031) caught a simultaneous save: its message is already readable
     return { success: false, error: regErr.message };
   }
 
@@ -527,6 +563,28 @@ export async function deleteAthleteAction(profileId: string): Promise<{ success:
     return {
       success: false,
       error: `This athlete already has bib number ${owned.bid_number}. Contact the VTU Directorate to withdraw or substitute them.`,
+    };
+  }
+
+  // The 4x400m Mixed Relay team is shared with the other squad of the college. If that squad's
+  // roster is frozen (payment submitted / verified), removing this athlete would silently break
+  // its paid lineup, which it can no longer repair — so refuse.
+  const { data: memberships } = await supabaseAdmin
+    .from('relay_members')
+    .select('relay_teams(squad_id, events(name), squads(roster_locked, gender))')
+    .eq('profile_id', profileId);
+  const lockedTeam = (memberships || [])
+    .map((m: any) => (Array.isArray(m.relay_teams) ? m.relay_teams[0] : m.relay_teams))
+    .find((t: any) => {
+      const sq = Array.isArray(t?.squads) ? t.squads[0] : t?.squads;
+      return t && t.squad_id !== session.squadId && sq?.roster_locked === true;
+    });
+  if (lockedTeam) {
+    const ev = Array.isArray(lockedTeam.events) ? lockedTeam.events[0] : lockedTeam.events;
+    const sq = Array.isArray(lockedTeam.squads) ? lockedTeam.squads[0] : lockedTeam.squads;
+    return {
+      success: false,
+      error: `This athlete runs in your college's ${ev?.name || 'Mixed Relay'} team, which the ${sq?.gender === 'women' ? "Women's" : "Men's"} squad has already paid for and locked. Removing them would break that team — contact the VTU Directorate.`,
     };
   }
 
@@ -615,8 +673,9 @@ export async function updateAthleteAction(formData: FormData): Promise<UpdateAth
     if (!sslcName || !usn || !semester || !bloodGroup || !collegeJoiningDate || !semStartDate || !aadhaarNumber) {
       return { success: false, error: 'All student identification fields (including 12-digit Aadhaar Number) are mandatory.' };
     }
-    if (!/^\d{12}$/.test(aadhaarNumber)) {
-      return { success: false, error: 'Aadhaar Number must be exactly 12 numeric digits.' };
+    const aadhaarError = validateAadhaar(aadhaarNumber);
+    if (aadhaarError) {
+      return { success: false, error: aadhaarError };
     }
     if (!VTU_USN_REGEX.test(usn)) {
       return { success: false, error: `Invalid USN '${usn}'. Enter a valid VTU USN (e.g. 1RV21CS001).` };
@@ -636,7 +695,7 @@ export async function updateAthleteAction(formData: FormData): Promise<UpdateAth
     }
     const joiningDateObj = new Date(collegeJoiningDate);
     const semStartDateObj = new Date(semStartDate);
-    if (isNaN(joiningDateObj.getTime()) || isNaN(semStartDateObj.getTime())) {
+    if (!isRealDate(collegeJoiningDate) || !isRealDate(semStartDate)) {
       return { success: false, error: 'Please enter valid dates.' };
     }
     if (joiningDateObj > new Date()) {
@@ -660,6 +719,7 @@ export async function updateAthleteAction(formData: FormData): Promise<UpdateAth
 
     // Optional photo replacement
     let photoUrl: string | undefined;
+    let newPhotoPath: string | null = null;
     if (photoData) {
       const match = photoData.match(/^data:([^;]+);base64,(.+)$/);
       const ALLOWED: Record<string, string> = { 'image/jpeg': 'jpg', 'image/jpg': 'jpg', 'image/png': 'png', 'image/webp': 'webp' };
@@ -681,6 +741,7 @@ export async function updateAthleteAction(formData: FormData): Promise<UpdateAth
         return { success: false, error: 'The athlete photo could not be uploaded. Please try again.' };
       }
       photoUrl = supabaseAdmin.storage.from('athlete-photos').getPublicUrl(uploadResult.path).data.publicUrl;
+      newPhotoPath = uploadResult.path;
     }
 
     const updatePayload: Record<string, any> = {
@@ -704,6 +765,7 @@ export async function updateAthleteAction(formData: FormData): Promise<UpdateAth
       .eq('squad_id', session.squadId);
 
     if (updErr) {
+      await removeUploadedPhoto(newPhotoPath);
       if (updErr.code === '23505') {
         return { success: false, error: 'Another athlete is already registered with this USN or Aadhaar number.' };
       }

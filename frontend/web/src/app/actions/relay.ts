@@ -137,6 +137,18 @@ export async function getSquadRelayTeamsAction(): Promise<RelayTeamDTO[]> {
         .select(memberSelect)
         .single();
       team = newTeam;
+      // The college's other squad may have created the shared Mixed team at the same moment
+      // (migration 0031 allows only one per college): use that team instead.
+      if (!team && isMixed) {
+        const { data: existing } = await supabaseAdmin
+          .from('relay_teams')
+          .select(memberSelect)
+          .in('squad_id', collegeSquadIds)
+          .eq('event_id', ev.id)
+          .limit(1)
+          .maybeSingle();
+        team = existing;
+      }
     }
 
     if (!team) continue;

@@ -178,9 +178,28 @@ export async function toggleRegistrationStatusAction(): Promise<{
     }
   }
 
+  // Re-opening: closing locked EVERY roster, including colleges that never paid. Give those
+  // (payment still DRAFT — nothing submitted, verified or rejected) their editing back.
+  // Squads that submitted a payment stay locked, exactly as they were before the close.
+  let reopenedSquads = 0;
+  if (newStatus) {
+    const { data: unlocked, error: unlockErr } = await supabaseAdmin
+      .from('squads')
+      .update({ roster_locked: false, updated_at: new Date().toISOString() })
+      .in('payment_status', ['DRAFT', 'DrAFT'])
+      .eq('roster_locked', true)
+      .select('id');
+    if (unlockErr) console.error('Re-open: unlocking unpaid squads failed:', unlockErr.message);
+    reopenedSquads = unlocked?.length || 0;
+  }
+
   await logAudit(
     newStatus ? 'OPENED_REGISTRATION' : 'CLOSED_REGISTRATION',
-    { previousStatus: currentOpen ? 'OPEN' : 'CLOSED', newStatus: newStatus ? 'OPEN' : 'CLOSED' }
+    {
+      previousStatus: currentOpen ? 'OPEN' : 'CLOSED',
+      newStatus: newStatus ? 'OPEN' : 'CLOSED',
+      ...(newStatus ? { unpaidSquadsUnlocked: reopenedSquads } : {}),
+    }
   );
 
   revalidatePath('/admin');

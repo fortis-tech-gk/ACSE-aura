@@ -2,6 +2,7 @@
 
 import { supabaseAdmin } from '@/lib/supabase';
 import { getSession } from '@/lib/session';
+import { squadAuthStamp } from '@/lib/auth-guard';
 import { verifyPassphrase, verifyPin } from '@/lib/passphrase';
 import bcrypt from 'bcryptjs';
 import { checkLoginThrottle, recordLoginFailure, clearLoginFailures, getClientIp } from '@/lib/login-throttle';
@@ -128,6 +129,7 @@ export async function loginSquad(formData: FormData): Promise<AuthResponse> {
   session.collegeCode = colCode;
   session.gender = squad.gender as 'men' | 'women';
   session.squadCode = squad.squad_code;
+  session.authStamp = squadAuthStamp(squad.passphrase_hash);
   session.displayName = `${collegeName} (${squad.gender === 'men' ? 'Men' : 'Women'})`;
 
   await session.save();

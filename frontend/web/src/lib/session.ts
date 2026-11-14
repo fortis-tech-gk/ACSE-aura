@@ -24,6 +24,8 @@ export interface SessionData {
   squadId?: string;
   squadCode?: string;
   gender?: 'men' | 'women';
+  /** Fingerprint of the squad's password hash at login: a password reset invalidates the session */
+  authStamp?: string;
   // Specific to referee
   scopeEventIds?: string[];
 }
