@@ -2,6 +2,7 @@ import React from 'react';
 import { Redirect, Tabs } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAthleteSession } from '@/lib/athlete-session';
+import { APP_VARIANT } from '@/lib/config';
 import { Icon, colors, type IconName } from '@/components/ui';
 
 const icon = (name: IconName) => {
@@ -12,6 +13,8 @@ const icon = (name: IconName) => {
 export default function TabsLayout() {
   const { status } = useAthleteSession();
   const insets = useSafeAreaInsets();
+  // The athlete screens exist only in the AURA Athletes app
+  if (APP_VARIANT === 'officials') return <Redirect href="/officials" />;
   if (status === 'signedOut') return <Redirect href="/login" />;
 
   return (
