@@ -447,6 +447,14 @@ export async function saveRelayTeamAction(
       }
     }
 
+    // Reserves: 1 woman + 1 man (Reserve 1 = woman, Reserve 2 = man, as on the Relay page)
+    if (reserve1 && athleteMap.get(reserve1)?.gender !== 'women') {
+      return { success: false, error: `Mixed Relay reserves are 1 woman and 1 man: Reserve 1 must be a female athlete ("${athleteMap.get(reserve1)?.sslc_name}" is in the Men's squad).` };
+    }
+    if (reserve2 && athleteMap.get(reserve2)?.gender !== 'men') {
+      return { success: false, error: `Mixed Relay reserves are 1 woman and 1 man: Reserve 2 must be a male athlete ("${athleteMap.get(reserve2)?.sslc_name}" is in the Women's squad).` };
+    }
+
     // Verify 2 distinct women and 2 distinct men when all 4 legs are filled
     const activeWomen = [leg1, leg3].filter(Boolean);
     const activeMen = [leg2, leg4].filter(Boolean);
