@@ -3,11 +3,11 @@ import { StyleSheet, Text, TextInput, View } from 'react-native';
 import { useOfficialSession } from '@/lib/officials/session';
 import { useHeat } from '@/lib/officials/useHeat';
 import { confirm, notify } from '@/lib/officials/confirm';
-import { needsWind, one, parseMetres } from '@/lib/officials/heats';
+import { one, parseMetres } from '@/lib/officials/heats';
 import { HeatHeader } from './HeatHeader';
 import { afterFinalize } from './finalize';
 import { entryName, entrySub, type EntryPerson } from './entry';
-import { Cell, SheetGrid, SheetInfo, SheetNote, SheetRow, SheetSignatures, SheetTitle, type Col } from './ScoreSheet';
+import { Cell, PrintSheetButton, SheetGrid, SheetInfo, SheetNote, SheetRow, SheetTitle, type Col } from './ScoreSheet';
 import { Button, Card, Muted, OfflineBanner, colors } from '@/components/ui';
 
 type Attempt = { round_number: number; attempt_type: 'VALID' | 'FOUL' | 'PASS'; mark_meters: number | null; wind_reading: number | null };
@@ -30,7 +30,6 @@ export function FieldReferee({ heatId, startAt }: { heatId: string; startAt?: st
   const { data, offline, savedAt, error, reload, pending } = useHeat<HeatData>(heatId, `/field/heats/${heatId}`, 20000);
   const [sel, setSel] = useState<{ id: string; round: number } | null>(null);
   const [mark, setMark] = useState('');
-  const [wind, setWind] = useState('');
   const [busy, setBusy] = useState(false);
 
   // Out of the competition before it starts (DNS / scratched in the call room)
@@ -115,12 +114,11 @@ export function FieldReferee({ heatId, startAt }: { heatId: string; startAt?: st
       m = parseMetres(mark);
       if (m == null) return notify('Check the mark', 'Type the distance in metres, like 7.42');
     }
-    const w = wind.trim() ? Number(wind.replace(',', '.')) : null;
     const r = await submitOp({
       path: '/field/attempt',
       heatId,
       label: `${entryName(e)} R${sel.round}: ${type === 'VALID' ? `${m!.toFixed(2)} m` : type === 'FOUL' ? 'foul' : 'pass'}`,
-      body: { heatAthleteId: e.id, roundNumber: sel.round, attemptType: type, markMeters: m, windReading: Number.isFinite(w as number) ? w : null },
+      body: { heatAthleteId: e.id, roundNumber: sel.round, attemptType: type, markMeters: m },
     });
     if (r.status === 'rejected') return notify('Not saved', r.message);
     if (r.status === 'ok') reload();
@@ -149,7 +147,6 @@ export function FieldReferee({ heatId, startAt }: { heatId: string; startAt?: st
   }
 
   const done = ['COMPLETED', 'OFFICIAL'].includes(data.heat.status);
-  const windy = needsWind(data.heat.events.code);
   const selEntry = sel ? entries.find((e) => e.id === sel.id) : null;
 
   const editor = !done && (
@@ -171,9 +168,6 @@ export function FieldReferee({ heatId, startAt }: { heatId: string; startAt?: st
               accessibilityLabel="Mark in metres"
               onSubmitEditing={() => record('VALID')}
             />
-            {windy && (
-              <TextInput value={wind} onChangeText={setWind} placeholder="Wind" placeholderTextColor="#94a3b8" keyboardType="numbers-and-punctuation" style={[s.input, { width: 90 }]} accessibilityLabel="Wind" />
-            )}
           </View>
           <View style={s.edRow}>
             <Button title="✓ Save mark" onPress={() => record('VALID')} style={{ flex: 2 }} />
@@ -275,7 +269,34 @@ export function FieldReferee({ heatId, startAt }: { heatId: string; startAt?: st
       {editor}
       <SheetNote>Tap a trial box to enter it: the mark in metres, X for a foul, – for a pass. Best marks and positions fill in automatically. Trials 4–6 are for the best 8 after three trials (grey boxes are not used).</SheetNote>
       {sheet}
-      <SheetSignatures referee={staff?.displayName || ''} />
+      <PrintSheetButton
+        build={() => ({
+          title: '* DISTANCE SCORE CARD *',
+          heat: data.heat,
+          startAt,
+          referee: staff?.displayName || '',
+          signatures: ['REFEREE', 'CHIEF JUDGE'],
+          note: 'X foul · – pass · NM no valid mark. Trials 4–6 for the best 8 after three trials (grey boxes not used).',
+          tables: [
+            {
+              groups,
+              cols: cols.map((c) => ({ title: c.title, sub: c.sub })),
+              rows: entries.map((e, i) => {
+                const isOut = out.has(e.id);
+                const p = (n: 3 | 5 | 6) => (isOut ? '' : positions[n].get(e.id) ?? '');
+                const t = (r: number) => (isOut ? '' : show(attempts.get(e.id)?.get(r)));
+                const sh = (r: number) => !isOut && !eligible(e.id, r);
+                return {
+                  dim: isOut,
+                  cells: [e.lane_number ?? i + 1, isOut ? `${entryName(e)} (DNS)` : entryName(e), e.profiles?.bid_number ?? '', e.profiles?.squads?.colleges?.code || '',
+                    t(1), t(2), t(3), isOut ? '' : bestText(e.id, 3), p(3), t(4), t(5), isOut ? '' : bestText(e.id, 5), p(5), t(6), isOut ? 'DNS' : bestText(e.id, 6), p(6)],
+                  shaded: [false, false, false, false, sh(1), sh(2), sh(3), false, false, sh(4), sh(5), false, false, sh(6), false, false],
+                };
+              }),
+            },
+          ],
+        })}
+      />
       {!done ? (
         <Button title="Finish heat & save results" onPress={finalize} loading={busy} />
       ) : (

@@ -71,8 +71,3 @@ export function parseMetres(input: string): number | null {
   return Number.isFinite(v) && v > 0 && v < 120 ? Math.round(v * 100) / 100 : null;
 }
 
-/** Events whose results need a wind reading (World Athletics: up to 200 m sprints/hurdles, LJ, TJ) */
-export function needsWind(eventCode: string): boolean {
-  const c = eventCode.toUpperCase();
-  return /^(100M|200M|100H|110H|LJ|TJ)-/.test(c);
-}

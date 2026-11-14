@@ -160,7 +160,6 @@ export default async function ResultsPage() {
                     <h3>
                       {STAGE[h.stage] || h.stage}
                       {!(h.stage === 'FINAL' && h.heat_number === 1 && hs.filter((x) => x.stage === 'FINAL').length === 1) ? ` ${h.heat_number}` : ''}
-                      {h.wind_reading != null ? <span className="results-wind"> · wind {Number(h.wind_reading) > 0 ? '+' : ''}{Number(h.wind_reading).toFixed(1)}</span> : null}
                       <span className={live ? 'results-live' : 'results-final'}>{live ? 'LIVE' : 'FINAL RESULT'}</span>
                     </h3>
                     <table className="results-table">

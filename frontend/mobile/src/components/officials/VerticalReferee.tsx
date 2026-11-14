@@ -7,7 +7,7 @@ import { one, parseMetres } from '@/lib/officials/heats';
 import { HeatHeader } from './HeatHeader';
 import { afterFinalize } from './finalize';
 import { entryName, type EntryPerson } from './entry';
-import { Cell, SheetGrid, SheetInfo, SheetNote, SheetRow, SheetSignatures, SheetTitle, type Col } from './ScoreSheet';
+import { Cell, PrintSheetButton, SheetGrid, SheetInfo, SheetNote, SheetRow, SheetTitle, type Col } from './ScoreSheet';
 import { Button, Card, Muted, OfflineBanner, colors } from '@/components/ui';
 
 type Vert = { bar_height_meters: number; attempt_number: number; result: 'O' | 'X' | '-' };
@@ -253,7 +253,39 @@ export function VerticalReferee({ heatId, startAt }: { heatId: string; startAt?:
       {jumpCard}
       <SheetNote>LEGEND: O cleared · – pass · X failure. Three failures in a row and the athlete is out. Best jump, trials at the height cleared, total failures (up to the best height) and position fill in automatically.</SheetNote>
       {sheet}
-      <SheetSignatures referee={staff?.displayName || ''} roles={['REFEREE', 'JUDGES']} />
+      <PrintSheetButton
+        build={() => ({
+          title: `RESULT CARD  *  ${data.heat.events.code.startsWith('PV') ? 'POLE VAULT' : 'HIGH JUMP'}`,
+          heat: data.heat,
+          startAt,
+          referee: staff?.displayName || '',
+          signatures: ['REFEREE', 'JUDGES'],
+          note: 'LEGEND: O cleared · – pass · X failure. Three failures in a row and the athlete is out.',
+          tables: [
+            {
+              groups,
+              cols: cols.map((c) => ({ title: c.title, sub: c.sub })),
+              rows: entries.map((e, i) => {
+                const sm = summaries.get(e.id)!;
+                const isOut = out.has(e.id);
+                const trialsAtBest = sm.best != null ? (sm.byH.get(h2(sm.best)) || []).length : '';
+                const tries = columns.flatMap((h) =>
+                  [1, 2, 3].map((n) => {
+                    const a = h ? (sm.byH.get(h) || []).find((x) => x.attempt_number === n) : undefined;
+                    return a ? (a.result === '-' ? '–' : a.result) : '';
+                  })
+                );
+                return {
+                  dim: isOut,
+                  cells: [e.lane_number ?? i + 1, isOut ? `${entryName(e)} (DNS)` : sm.eliminated ? `${entryName(e)} (out)` : entryName(e), e.profiles?.bid_number ?? '', e.profiles?.squads?.colleges?.code || '',
+                    ...tries, isOut ? 'DNS' : sm.best != null ? h2(sm.best) : sm.byH.size ? 'NM' : '', trialsAtBest, sm.best != null ? sm.failsUpToBest : '', ranks.get(e.id) ?? ''],
+                  // Unused height columns stay white on paper so judges can write heights in by hand
+                };
+              }),
+            },
+          ],
+        })}
+      />
       {!done ? (
         <Button title="Finish heat & save results" onPress={finalize} loading={busy} />
       ) : (

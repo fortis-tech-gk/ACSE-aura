@@ -11,6 +11,7 @@
     "expo-device": "~58.0.5",
     "expo-linking": "~58.0.17",
     "expo-notifications": "~58.1.9",
+    "expo-print": "~58.0.9",
     "expo-router": "~58.0.31",
     "expo-secure-store": "~58.0.3",
     "expo-status-bar": "~58.0.5",
@@ -41,7 +42,9 @@
     "eas:athletes:test-apk": "EAS_NO_VCS=1 npx eas-cli@latest build -p android --profile athletes-preview",
     "eas:athletes:play": "EAS_NO_VCS=1 npx eas-cli@latest build -p android --profile athletes-production",
     "eas:athletes:ios": "EAS_NO_VCS=1 npx eas-cli@latest build -p ios --profile athletes-production",
-    "eas:officials:test-apk": "EAS_NO_VCS=1 npx eas-cli@latest build -p android --profile officials-preview"
+    "eas:officials:test-apk": "EAS_NO_VCS=1 npx eas-cli@latest build -p android --profile officials-preview",
+    "eas:athletes:demo-apk": "EAS_NO_VCS=1 npx eas-cli@latest build -p android --profile athletes-demo",
+    "eas:officials:demo-apk": "EAS_NO_VCS=1 npx eas-cli@latest build -p android --profile officials-demo"
   },
   "private": true
 }

@@ -406,11 +406,6 @@ export function ScheduleManagerView({
                       >
                         {heat.status}
                       </span>
-                      {heat.wind_reading !== null && (
-                        <div style={{ fontSize: '0.75rem', color: '#94a3b8', marginTop: '3px' }}>
-                          Wind: {heat.wind_reading > 0 ? `+${heat.wind_reading}` : heat.wind_reading} m/s
-                        </div>
-                      )}
                     </div>
                   </div>
 

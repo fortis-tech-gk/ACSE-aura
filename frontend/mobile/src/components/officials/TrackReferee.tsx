@@ -3,12 +3,12 @@ import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useOfficialSession } from '@/lib/officials/session';
 import { useHeat } from '@/lib/officials/useHeat';
 import { confirm, notify } from '@/lib/officials/confirm';
-import { needsWind, one, parseTime, showTime } from '@/lib/officials/heats';
+import { one, parseTime, showTime } from '@/lib/officials/heats';
 import { ordinal } from '@/lib/format';
 import { HeatHeader } from './HeatHeader';
 import { afterFinalize } from './finalize';
 import { entryName, type EntryPerson } from './entry';
-import { Cell, POSITION_WORD, SheetGrid, SheetInfo, SheetNote, SheetRow, SheetSignatures, SheetTitle, type Col } from './ScoreSheet';
+import { Cell, POSITION_WORD, PrintSheetButton, SheetGrid, SheetInfo, SheetNote, SheetRow, SheetTitle, type Col } from './ScoreSheet';
 import { Button, Card, Muted, OfflineBanner, colors } from '@/components/ui';
 
 type Result = { time_seconds: number | null; status: 'FINISHED' | 'DNF' | 'DQ' | 'DNS'; dq_rule: string | null };
@@ -65,10 +65,7 @@ export function TrackReferee({ heatId, startAt }: { heatId: string; startAt?: st
   }, [entries]);
 
   const [drafts, setDrafts] = useState<Record<string, Draft>>({});
-  const [windDraft, setWind] = useState('');
   const [busy, setBusy] = useState(false);
-  // Show the saved wind reading until the referee types a new one
-  const wind = windDraft || (data?.heat.wind_reading != null ? String(data.heat.wind_reading) : '');
 
   const valueOf = (id: string): Draft => drafts[id] ?? saved.get(id) ?? prefill.get(id) ?? { time: '', status: 'FINISHED', dq: '' };
   const isDirty = (id: string) => {
@@ -150,12 +147,6 @@ export function TrackReferee({ heatId, startAt }: { heatId: string; startAt?: st
     for (const e of entries) if (isDirty(e.id)) if (!(await save(e))) return;
   }
 
-  async function saveWind() {
-    const w = Number(wind.replace(',', '.'));
-    if (!Number.isFinite(w) || Math.abs(w) > 9.9) return notify('Check the wind', 'Type the wind like +1.2 or -0.4 (m/s).');
-    await submitOp({ path: `/schedule/heats/${heatId}/status`, method: 'PATCH', body: { windReading: w }, label: `Wind ${w > 0 ? '+' : ''}${w.toFixed(1)} m/s`, heatId });
-  }
-
   async function finalize() {
     if (!data) return;
     const dirty = entries.filter((e) => isDirty(e.id)).length;
@@ -216,27 +207,50 @@ export function TrackReferee({ heatId, startAt }: { heatId: string; startAt?: st
     { key: 'rem', title: 'REMARKS', width: W.rem },
   ];
 
+  const perfText = (v: Draft | undefined) => (!v ? '' : v.status === 'FINISHED' ? v.time : v.status);
+  const printable = () => ({
+    title: 'REPORT of REFEREE TRACK',
+    heat: data.heat,
+    startAt,
+    referee: staffName,
+    signatures: ['REFEREE TRACK', 'CHIEF JUDGE - TRACK', 'CHIEF TIME-KEEPER'],
+    tables: [
+      {
+        cols: [
+          { title: lanes ? 'LANE No.' : 'ORDER' },
+          { title: 'BIB No.' },
+          { title: 'NAME of the ATHLETES' },
+          { title: 'UNIT', sub: 'College' },
+          { title: 'PERFORMANCE', sub: 'Time' },
+          { title: 'PLACE' },
+          { title: 'REMARKS', sub: 'DQ rule' },
+        ],
+        rows: entries.map((e) => {
+          const v = drafts[e.id] ?? saved.get(e.id);
+          const pl = places.get(e.id);
+          return { cells: [e.lane_number, bibOf(e), entryName(e), unitOf(e), perfText(v), pl ? ordinal(pl) : '', v?.status === 'DQ' ? v.dq : ''] };
+        }),
+      },
+      {
+        heading: 'FINAL RESULT',
+        cols: [{ title: 'POSITION' }, { title: 'BIB No.' }, { title: 'NAME of the ATHLETES' }, { title: 'UNIT' }, { title: 'PERFORMANCE' }, { title: 'REMARKS' }],
+        // At least 8 rows like the paper card, so a sheet printed early can be filled in by hand
+        rows: Array.from({ length: Math.max(8, resultRows.length) }, (_, i) => {
+          const r = resultRows[i];
+          if (!r) return { cells: [resultRows.length ? '' : POSITION_WORD[i] || '', '', '', '', '', ''] };
+          return { cells: [r.place ? POSITION_WORD[r.place - 1] || ordinal(r.place) : '—', bibOf(r.e), entryName(r.e), unitOf(r.e), perfText(r.v), r.v?.status === 'DQ' ? r.v.dq : ''] };
+        }),
+      },
+    ],
+  });
+
   return (
     <View style={{ gap: 14 }}>
       <OfflineBanner offline={offline} lastSyncedAt={savedAt} note="Entries are saved on this device and sent when the network is back." />
       <HeatHeader data={data.heat} />
 
       <SheetTitle title="REPORT of REFEREE TRACK" />
-      <SheetInfo
-        heat={data.heat}
-        startAt={startAt}
-        extra={
-          needsWind(data.heat.events.code) ? (
-            <View style={s.windBox}>
-              <Text style={s.windLabel}>WIND (m/s)</Text>
-              <View style={s.windRow}>
-                <TextInput value={wind} editable={!done} onChangeText={setWind} placeholder="+1.2" placeholderTextColor="#94a3b8" keyboardType="numbers-and-punctuation" style={s.windInput} accessibilityLabel="Wind reading" />
-                {!done && <Button title="Save" variant="secondary" onPress={saveWind} />}
-              </View>
-            </View>
-          ) : undefined
-        }
-      />
+      <SheetInfo heat={data.heat} startAt={startAt} />
 
       <SheetNote>Type times like 10.42 or 1:52.34 — each result saves itself. Places and the FINAL RESULT fill in automatically. Finalize when every lane has a result.</SheetNote>
 
@@ -335,7 +349,7 @@ export function TrackReferee({ heatId, startAt }: { heatId: string; startAt?: st
         })}
       </SheetGrid>
 
-      <SheetSignatures referee={staffName} roles={['REFEREE TRACK', 'CHIEF JUDGE - TRACK', 'CHIEF TIME-KEEPER']} />
+      <PrintSheetButton build={printable} />
 
       {!done ? (
         <View style={s.footer}>
@@ -352,10 +366,6 @@ export function TrackReferee({ heatId, startAt }: { heatId: string; startAt?: st
 }
 
 const s = StyleSheet.create({
-  windBox: { flexBasis: 200, flexGrow: 1, borderRightWidth: 1, borderBottomWidth: 1, borderColor: '#374151', paddingHorizontal: 8, paddingVertical: 5 },
-  windLabel: { fontSize: 10, fontWeight: '800', color: colors.muted },
-  windRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  windInput: { width: 90, minHeight: 38, borderWidth: 1, borderColor: colors.border, borderRadius: 8, paddingHorizontal: 8, fontSize: 16, fontWeight: '800', color: colors.text, backgroundColor: '#fff' },
   statuses: { flexDirection: 'row', gap: 4 },
   st: { flex: 1, alignItems: 'center', paddingVertical: 7, borderRadius: 6, borderWidth: 1.5, borderColor: colors.border, backgroundColor: '#fff' },
   stOn: { borderColor: colors.blue, backgroundColor: colors.blueSoft },

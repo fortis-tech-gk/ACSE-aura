@@ -1,13 +1,16 @@
 /**
  * Digital copies of the Athletics Federation of India score sheets (docs/score-sheet.pdf):
- * the same header block, title banner, ruled grid and signature footer, so a referee fills
- * the screen exactly like the paper card. Wide sheets scroll sideways on phones.
+ * the same header block, title banner and ruled grid, so a referee fills the screen exactly like
+ * the paper card. Wide sheets scroll sideways on phones. Signature boxes appear only on the
+ * printed / PDF copy (PrintSheetButton).
  */
 import React from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View, type StyleProp, type TextStyle, type ViewStyle } from 'react-native';
 import { MEET } from '@/lib/config';
 import { fmtDay, fmtTime } from '@/lib/format';
-import { colors } from '@/components/ui';
+import { Button, colors } from '@/components/ui';
+import { notify } from '@/lib/officials/confirm';
+import { printSheet, type PrintSheet } from './printSheet';
 
 const INK = '#111827';
 const RULE = '#374151';
@@ -165,24 +168,28 @@ export function Cell({
   return <View style={style}>{body}</View>;
 }
 
-/** REFEREE / CHIEF JUDGE signature boxes — the logged-in official signs digitally */
-export function SheetSignatures({ referee, roles = ['REFEREE', 'CHIEF JUDGE'] }: { referee: string; roles?: string[] }) {
+/**
+ * Print / save-as-PDF button. The printed copy is the paper card with the signature boxes
+ * (REFEREE, CHIEF JUDGE, …) at the bottom — they are not shown on screen.
+ */
+export function PrintSheetButton({ build }: { build: () => PrintSheet }) {
+  const [busy, setBusy] = React.useState(false);
   return (
-    <View style={s.sigs}>
-      {roles.map((r, i) => (
-        <View key={r} style={s.sigBox}>
-          <Text style={s.sigTitle}>{r}</Text>
-          <Text style={s.sigLine}>
-            <Text style={s.metaKey}>NAME: </Text>
-            {i === 0 ? referee : ''}
-          </Text>
-          <Text style={s.sigLine}>
-            <Text style={s.metaKey}>SIGNATURE: </Text>
-            {i === 0 ? 'Recorded digitally (AURA Officials PIN login)' : ''}
-          </Text>
-        </View>
-      ))}
-    </View>
+    <Button
+      title="🖨  Print / Save PDF"
+      variant="secondary"
+      loading={busy}
+      onPress={async () => {
+        setBusy(true);
+        try {
+          await printSheet(build());
+        } catch (e: any) {
+          notify('Could not print', e?.message || 'Try again.');
+        } finally {
+          setBusy(false);
+        }
+      }}
+    />
   );
 }
 
@@ -216,9 +223,5 @@ const s = StyleSheet.create({
   cell: { borderRightWidth: 1, borderBottomWidth: 1, borderColor: RULE, minHeight: 40, paddingHorizontal: 4, justifyContent: 'center' },
   cellSel: { borderWidth: 3, borderColor: colors.blue, backgroundColor: colors.blueSoft },
   cellText: { fontSize: 14, fontWeight: '700', color: INK, textAlign: 'center' },
-  sigs: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
-  sigBox: { flexGrow: 1, flexBasis: 240, borderWidth: 1.5, borderStyle: 'dashed', borderColor: INK, padding: 8, gap: 4, backgroundColor: '#fff' },
-  sigTitle: { fontSize: 12, fontWeight: '900', color: INK, textAlign: 'center' },
-  sigLine: { fontSize: 12, color: INK },
   note: { fontSize: 12, color: colors.muted },
 });

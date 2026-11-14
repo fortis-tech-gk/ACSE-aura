@@ -140,7 +140,6 @@ export default function PerformanceScreen() {
                 </View>
                 <View style={s.metaRow}>
                   {r.reactionMs != null && <Pill label={`Reaction ${(r.reactionMs / 1000).toFixed(3)} s`} tone="grey" />}
-                  {r.wind != null && <Pill label={`Wind ${r.wind > 0 ? '+' : ''}${r.wind.toFixed(1)} m/s`} tone="grey" />}
                   {r.placeInHeat != null && <Pill label={`${r.finishers} with a result`} tone="grey" />}
                 </View>
                 <Attempts r={r} />
