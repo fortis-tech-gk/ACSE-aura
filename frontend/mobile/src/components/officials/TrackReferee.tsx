@@ -10,11 +10,13 @@ import { afterFinalize } from './finalize';
 import { entryName, type EntryPerson } from './entry';
 import { Cell, POSITION_WORD, PrintSheetButton, SheetGrid, SheetInfo, SheetNote, SheetRow, SheetTitle, type Col } from './ScoreSheet';
 import { Button, Card, Muted, OfflineBanner, colors } from '@/components/ui';
+import { CallRoomGate, callRoomClosed, canEnterResults, notifyCallRoomOpen } from './CallRoomGate';
 
 type Result = { time_seconds: number | null; status: 'FINISHED' | 'DNF' | 'DQ' | 'DNS'; dq_rule: string | null };
 type Entry = EntryPerson & {
   id: string;
   lane_number: number;
+  call_room_reported: boolean;
   call_room_inspections: { reported_status: string } | { reported_status: string }[] | null;
   track_results: Result | Result[] | null;
 };
@@ -54,22 +56,32 @@ export function TrackReferee({ heatId, startAt }: { heatId: string; startAt?: st
     return m;
   }, [entries, pending]);
 
-  /** Did not start / scratched in the call room: pre-filled as DNS, still needs saving */
-  const prefill = useMemo(() => {
-    const m = new Map<string, Draft>();
+  /**
+   * Strict call room: once it has closed, an entry that did not report is DNS and locked — no
+   * result can be entered for it (the server refuses too). Corrections are made by the call room.
+   */
+  const status = data?.heat.status;
+  const closed = callRoomClosed(status);
+  const allowed = canEnterResults(status, offline);
+  const notReported = useMemo(() => {
+    const m = new Map<string, string>();
     for (const e of entries) {
+      if (e.call_room_reported) continue;
       const cr = one(e.call_room_inspections)?.reported_status;
-      if (cr === 'DNS' || cr === 'SCRATCH') m.set(e.id, { time: '', status: 'DNS', dq: '' });
+      m.set(e.id, cr === 'SCRATCH' ? 'Scratched' : cr === 'DISQUALIFIED' ? 'Disqualified' : 'DNS');
     }
     return m;
   }, [entries]);
+  const locked = (id: string) => closed && notReported.has(id);
 
   const [drafts, setDrafts] = useState<Record<string, Draft>>({});
   const [busy, setBusy] = useState(false);
 
-  const valueOf = (id: string): Draft => drafts[id] ?? saved.get(id) ?? prefill.get(id) ?? { time: '', status: 'FINISHED', dq: '' };
+  const valueOf = (id: string): Draft =>
+    locked(id) ? { time: '', status: 'DNS', dq: '' } : drafts[id] ?? saved.get(id) ?? { time: '', status: 'FINISHED', dq: '' };
   const isDirty = (id: string) => {
-    const d = drafts[id] ?? (!saved.has(id) ? prefill.get(id) : undefined);
+    if (locked(id)) return false;
+    const d = drafts[id];
     if (!d) return false;
     const sv = saved.get(id);
     return !sv || sv.time !== d.time || sv.status !== d.status || sv.dq !== d.dq;
@@ -119,12 +131,14 @@ export function TrackReferee({ heatId, startAt }: { heatId: string; startAt?: st
       return true;
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [drafts, saved, prefill, submitOp, heatId, reload]
+    [drafts, saved, submitOp, heatId, reload, closed, notReported]
   );
 
   /** Autosave: a typed time is sent 1.2 s after the referee stops typing (or when they leave the box) */
   const timers = useRef(new Map<string, ReturnType<typeof setTimeout>>());
   function edit(e: Entry, d: Draft, delayMs: number) {
+    if (!allowed) return notifyCallRoomOpen();
+    if (locked(e.id)) return notify('Did not report', `${entryName(e)} did not report to the call room, so no result can be entered. The call room official can correct it if that is a mistake.`);
     setDrafts((x) => ({ ...x, [e.id]: d }));
     const old = timers.current.get(e.id);
     if (old) clearTimeout(old);
@@ -151,7 +165,8 @@ export function TrackReferee({ heatId, startAt }: { heatId: string; startAt?: st
     if (!data) return;
     const dirty = entries.filter((e) => isDirty(e.id)).length;
     if (dirty) return notify('Save first', `${dirty} result${dirty === 1 ? ' is' : 's are'} typed but not saved.`);
-    const missing = entries.filter((e) => !saved.has(e.id)).length;
+    if (!allowed) return notifyCallRoomOpen();
+    const missing = entries.filter((e) => !saved.has(e.id) && !locked(e.id)).length;
     const final = data.heat.stage === 'FINAL';
     const msg = `${missing ? `${missing} lane${missing === 1 ? ' has' : 's have'} no result. ` : ''}${final ? 'This is the final: championship points are awarded now.' : 'The heat will be marked done.'}`;
     if (!(await confirm('Finish this heat?', msg, 'Finish & save'))) return;
@@ -183,7 +198,7 @@ export function TrackReferee({ heatId, startAt }: { heatId: string; startAt?: st
 
   // FINAL RESULT block: finishers by place, then DNF / DQ / DNS (no position)
   const resultRows = entries
-    .map((e) => ({ e, v: drafts[e.id] ?? saved.get(e.id), place: places.get(e.id) }))
+    .map((e) => ({ e, v: locked(e.id) ? ({ time: '', status: 'DNS', dq: '' } as Draft) : drafts[e.id] ?? saved.get(e.id), place: places.get(e.id) }))
     .filter((r) => r.v)
     .sort((a, b) => (a.place ?? 99) - (b.place ?? 99) || a.e.lane_number - b.e.lane_number);
 
@@ -248,6 +263,7 @@ export function TrackReferee({ heatId, startAt }: { heatId: string; startAt?: st
     <View style={{ gap: 14 }}>
       <OfflineBanner offline={offline} lastSyncedAt={savedAt} note="Entries are saved on this device and sent when the network is back." />
       <HeatHeader data={data.heat} />
+      <CallRoomGate heatId={heatId} status={data.heat.status} offline={offline} onClosed={reload} />
 
       <SheetTitle title="REPORT of REFEREE TRACK" />
       <SheetInfo heat={data.heat} startAt={startAt} />
@@ -260,7 +276,7 @@ export function TrackReferee({ heatId, startAt }: { heatId: string; startAt?: st
           const dirty = isDirty(e.id);
           const waiting = pending.some((p) => (p.body as any).heatAthleteId === e.id);
           return (
-            <SheetRow key={e.id} style={dirty ? { backgroundColor: colors.amberSoft } : undefined}>
+            <SheetRow key={e.id} style={dirty ? { backgroundColor: colors.amberSoft } : locked(e.id) ? { opacity: 0.55 } : undefined}>
               <Cell width={W.lane} text={e.lane_number} textStyle={{ fontWeight: '900' }} />
               <Cell width={W.bib} text={bibOf(e)} />
               <Cell width={W.name} text={entryName(e)} align="left" />
@@ -270,7 +286,7 @@ export function TrackReferee({ heatId, startAt }: { heatId: string; startAt?: st
                   {STATUSES.map((st) => (
                     <Pressable
                       key={st.key}
-                      disabled={done}
+                      disabled={done || locked(e.id)}
                       onPress={() => edit(e, { ...v, status: st.key }, st.key === 'FINISHED' ? 1200 : 0)}
                       accessibilityRole="radio"
                       accessibilityState={{ checked: v.status === st.key }}
@@ -296,7 +312,7 @@ export function TrackReferee({ heatId, startAt }: { heatId: string; startAt?: st
                     accessibilityLabel={`Time for ${entryName(e)}`}
                   />
                 ) : (
-                  <Text style={s.cellStatus}>{v.status}</Text>
+                  <Text style={s.cellStatus}>{locked(e.id) ? notReported.get(e.id) : v.status}</Text>
                 )}
               </Cell>
               <Cell width={W.rem}>
@@ -321,7 +337,7 @@ export function TrackReferee({ heatId, startAt }: { heatId: string; startAt?: st
                     <Text style={[s.saveState, { color: colors.red }]}>Check time</Text>
                   ) : (
                     <Text style={[s.saveState, { color: dirty ? colors.amber : waiting ? colors.amber : saved.has(e.id) ? colors.green : colors.muted }]}>
-                      {dirty ? 'Saving…' : waiting ? 'Queued' : saved.has(e.id) ? 'Saved ✓' : '—'}
+                      {locked(e.id) ? 'Not reported' : dirty ? 'Saving…' : waiting ? 'Queued' : saved.has(e.id) ? 'Saved ✓' : '—'}
                     </Text>
                   )}
                 </Cell>

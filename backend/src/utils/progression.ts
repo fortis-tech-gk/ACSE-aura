@@ -65,10 +65,25 @@ export async function assertCanWriteEntry(user: TokenPayload, heatAthleteId: str
   const heat = await heatOfEntry(heatAthleteId);
   if (!heat) throw new ProgressionError('Entry not found in any heat.', 404);
   assertEventScope(user, heat.event_id);
-  if (DONE.includes(heat.status) && user.role !== 'meet_admin') {
+  if (user.role === 'meet_admin') return heat.event_id;
+  if (DONE.includes(heat.status)) {
     throw new ProgressionError('This heat is already finalized. Ask the meet office to reopen it.', 409);
   }
+  // Strict call room: no results until the call room has closed, and only for entries that
+  // reported (a relay team counts as one entry). Mistakes are corrected by the call room.
+  assertCallRoomClosed(heat.status);
+  const { data: entry } = await supabase.from('heat_athletes').select('call_room_reported').eq('id', heatAthleteId).maybeSingle();
+  if (!entry?.call_room_reported) {
+    throw new ProgressionError('This athlete did not report to the call room, so no result can be entered. If that is a mistake, the call room official must correct it first.', 409);
+  }
   return heat.event_id;
+}
+
+/** Results can be entered only after the call room closed (heat sent to the track) */
+export function assertCallRoomClosed(status: string) {
+  if (['SCHEDULED', 'DELAYED', 'CALL_ROOM'].includes(status)) {
+    throw new ProgressionError("The call room for this heat isn't closed yet. Results can be entered after it closes.", 409);
+  }
 }
 
 const isTrack = (category: string) => !category.startsWith('field');
@@ -265,6 +280,7 @@ export async function finalizeHeat(heatId: string, user: TokenPayload) {
   if (!heat) throw new ProgressionError('Heat not found.', 404);
   const h = { ...(heat as any), events: Array.isArray((heat as any).events) ? (heat as any).events[0] : (heat as any).events } as HeatRow;
   assertEventScope(user, h.event_id);
+  if (user.role !== 'meet_admin') assertCallRoomClosed(h.status);
 
   if (!DONE.includes(h.status)) {
     const { error: upErr } = await supabase.from('heats').update({ status: 'COMPLETED' }).eq('id', heatId);

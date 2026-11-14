@@ -3,17 +3,19 @@ import { StyleSheet, Text, TextInput, View } from 'react-native';
 import { useOfficialSession } from '@/lib/officials/session';
 import { useHeat } from '@/lib/officials/useHeat';
 import { confirm, notify } from '@/lib/officials/confirm';
-import { one, parseMetres } from '@/lib/officials/heats';
+import { parseMetres } from '@/lib/officials/heats';
 import { HeatHeader } from './HeatHeader';
 import { afterFinalize } from './finalize';
 import { entryName, entrySub, type EntryPerson } from './entry';
 import { Cell, PrintSheetButton, SheetGrid, SheetInfo, SheetNote, SheetRow, SheetTitle, type Col } from './ScoreSheet';
 import { Button, Card, Muted, OfflineBanner, colors } from '@/components/ui';
+import { CallRoomGate, callRoomClosed, canEnterResults, notifyCallRoomOpen } from './CallRoomGate';
 
 type Attempt = { round_number: number; attempt_type: 'VALID' | 'FOUL' | 'PASS'; mark_meters: number | null; wind_reading: number | null };
 type Entry = EntryPerson & {
   id: string;
   lane_number: number;
+  call_room_reported: boolean;
   call_room_inspections: { reported_status: string } | { reported_status: string }[] | null;
   field_attempts: Attempt[] | null;
 };
@@ -32,9 +34,12 @@ export function FieldReferee({ heatId, startAt }: { heatId: string; startAt?: st
   const [mark, setMark] = useState('');
   const [busy, setBusy] = useState(false);
 
-  // Out of the competition before it starts (DNS / scratched in the call room)
+  // Strict call room: once it has closed, anyone who did not report is out (DNS) and locked
   const entries = useMemo(() => data?.athletes || [], [data]);
-  const out = useMemo(() => new Set(entries.filter((e) => ['DNS', 'SCRATCH'].includes(one(e.call_room_inspections)?.reported_status || '')).map((e) => e.id)), [entries]);
+  const status = data?.heat.status;
+  const closed = callRoomClosed(status);
+  const allowed = canEnterResults(status, offline);
+  const out = useMemo(() => new Set(closed ? entries.filter((e) => !e.call_room_reported).map((e) => e.id) : []), [entries, closed]);
   const active = entries.filter((e) => !out.has(e.id));
 
   /** attempts[entryId][round] — server, then attempts waiting on the device */
@@ -89,6 +94,7 @@ export function FieldReferee({ heatId, startAt }: { heatId: string; startAt?: st
   const currentRound = ROUNDS.find((r) => active.some((e) => eligible(e.id, r) && !attempts.get(e.id)?.has(r))) ?? 6;
 
   function select(id: string, round: number) {
+    if (!allowed) return notifyCallRoomOpen();
     setSel({ id, round });
     const a = attempts.get(id)?.get(round);
     setMark(a?.attempt_type === 'VALID' && a.mark_meters != null ? Number(a.mark_meters).toFixed(2) : '');
@@ -108,6 +114,7 @@ export function FieldReferee({ heatId, startAt }: { heatId: string; startAt?: st
 
   async function record(type: 'VALID' | 'FOUL' | 'PASS') {
     if (!sel || !data) return;
+    if (!allowed) return notifyCallRoomOpen();
     const e = entries.find((x) => x.id === sel.id)!;
     let m: number | null = null;
     if (type === 'VALID') {
@@ -128,6 +135,7 @@ export function FieldReferee({ heatId, startAt }: { heatId: string; startAt?: st
 
   async function finalize() {
     if (!data) return;
+    if (!allowed) return notifyCallRoomOpen();
     const final = data.heat.stage === 'FINAL';
     if (!(await confirm('Finish this heat?', final ? 'This is the final: championship points are awarded now.' : 'The flight will be marked done.', 'Finish & save'))) return;
     setBusy(true);
@@ -264,6 +272,7 @@ export function FieldReferee({ heatId, startAt }: { heatId: string; startAt?: st
     <View style={{ gap: 14 }}>
       <OfflineBanner offline={offline} lastSyncedAt={savedAt} note="Entries are saved on this device and sent when the network is back." />
       <HeatHeader data={data.heat} />
+      <CallRoomGate heatId={heatId} status={data.heat.status} offline={offline} onClosed={reload} />
       <SheetTitle title="* DISTANCE SCORE CARD *" />
       <SheetInfo heat={data.heat} startAt={startAt} />
       {editor}

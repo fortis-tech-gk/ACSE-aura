@@ -9,6 +9,7 @@ import { one } from '@/lib/officials/heats';
 import type { AthleteRef, OpPayload } from '@/lib/officials/types';
 import { ScanPanel } from './ScanPanel';
 import { HeatHeader } from './HeatHeader';
+import { callRoomClosed } from './CallRoomGate';
 import { Button, Card, Muted, OfflineBanner, Pill, colors, shadow } from '@/components/ui';
 
 type Member = { id: string; leg_order: number | null; is_reserve: boolean; profiles: { id: string; sslc_name: string; bid_number: number | null; squads: { gender: string } | null } | null };
@@ -84,15 +85,31 @@ export function CallRoomHeat({ heatId }: { heatId: string }) {
     [submitOp, reload]
   );
 
+  /**
+   * Strict call room: nothing before "Open call room", nothing after "Close & send to track".
+   * Opening can be done offline — it counts as open here as soon as it is saved on the tablet.
+   */
+  const serverStatus = data?.heat.status || 'SCHEDULED';
+  const openPending = pending.some((op) => op.path === `/schedule/heats/${heatId}/status` && (op.body as any).status === 'CALL_ROOM');
+  const st = openPending && ['SCHEDULED', 'DELAYED'].includes(serverStatus) ? 'CALL_ROOM' : serverStatus;
+  const isOpen = st === 'CALL_ROOM';
+  const isClosed = callRoomClosed(st);
+
   const onScan = useCallback(
     async (ref: AthleteRef): Promise<Outcome> => {
+      if (!isOpen) {
+        return isClosed
+          ? { tone: 'red', title: 'Call room is closed', detail: 'Athletes who did not report are DNS. Corrections are made in the list below.', athlete: null, offline: false }
+          : { tone: 'red', title: 'Open the call room first', detail: 'Tap "Open call room" above. Scanning starts when the call room is open.', athlete: null, offline: false };
+      }
       const local = findEntry(entries, ref as any, rosterIndex.byBib);
       const known = 'qrToken' in ref ? rosterIndex.byId.get(athleteIdFromQr(ref.qrToken) || '') : rosterIndex.byBib.get(Number(ref.bib));
       const fallbackAthlete = known ? { name: known.name, bib: known.bib, college: known.collegeCode, photoUrl: known.photoUrl } : null;
       if ('qrToken' in ref && !athleteIdFromQr(ref.qrToken)) {
         return { tone: 'red', title: 'Not an AURA ID card', athlete: null, offline: false };
       }
-      const r = await submitOp({ path: '/callroom/scan', body: { heatId, ...ref }, label: 'Call room check-in', heatId });
+      // actedAt: when it was scanned — a scan saved offline still counts if it was made before the close
+      const r = await submitOp({ path: '/callroom/scan', body: { heatId, ...ref, actedAt: new Date().toISOString() }, label: 'Call room check-in', heatId });
       if (r.status === 'ok') {
         reload();
         const d = r.data;
@@ -110,12 +127,12 @@ export function CallRoomHeat({ heatId }: { heatId: string }) {
       if (local) return { tone: 'green', title: 'Reported', detail: `${data && isField(data) ? 'Order' : 'Lane'} ${local.lane_number}`, athlete: fallbackAthlete, offline: true };
       return { tone: 'amber', title: 'Saved — will check when online', detail: 'Not found in this heat on the saved list.', athlete: fallbackAthlete, offline: true };
     },
-    [entries, rosterIndex, submitOp, heatId, reload, data]
+    [entries, rosterIndex, submitOp, heatId, reload, data, isOpen, isClosed]
   );
 
   async function openCallRoom() {
     setBusy(true);
-    await run({ path: `/schedule/heats/${heatId}/status`, method: 'PATCH', body: { status: 'CALL_ROOM' }, label: 'Call room opened', heatId }, false);
+    await run({ path: `/schedule/heats/${heatId}/status`, method: 'PATCH', body: { status: 'CALL_ROOM' }, label: 'Call room opened', heatId });
     setBusy(false);
   }
 
@@ -132,7 +149,7 @@ export function CallRoomHeat({ heatId }: { heatId: string }) {
 
   function setStatus(e: Entry, st: CrStatus | 'NOT_REPORTED') {
     setOpen(null);
-    run({ path: '/callroom/inspect', body: { heatAthleteId: e.id, reportedStatus: st }, label: `${entryName(e)}: ${st === 'NOT_REPORTED' ? 'not reported' : STATUS_UI[st || 'NONE'].label}`, heatId });
+    run({ path: '/callroom/inspect', body: { heatAthleteId: e.id, reportedStatus: st, actedAt: new Date().toISOString() }, label: `${entryName(e)}: ${st === 'NOT_REPORTED' ? 'not reported' : STATUS_UI[st || 'NONE'].label}`, heatId });
   }
 
   async function swap(team: NonNullable<Entry['relay_teams']>, leg: number, reserve: Member) {
@@ -149,7 +166,6 @@ export function CallRoomHeat({ heatId }: { heatId: string }) {
     );
   }
 
-  const st = data.heat.status;
   const scanner = <ScanPanel onScan={onScan} hint="Scan ID card to check in" cameraHeight={wide ? cameraHeight : Math.min(cameraHeight, 320)} large={large} />;
 
   const list = (
@@ -202,7 +218,7 @@ export function CallRoomHeat({ heatId }: { heatId: string }) {
               <View style={{ gap: 8 }}>
                 <View style={s.actions}>
                   <Chip label="Reported" onPress={() => setStatus(e, 'REPORTED')} />
-                  <Chip label="Not yet" onPress={() => setStatus(e, 'NOT_REPORTED')} />
+                  {!isClosed && <Chip label="Not yet" onPress={() => setStatus(e, 'NOT_REPORTED')} />}
                   <Chip label="Scratch" onPress={() => setStatus(e, 'SCRATCH')} />
                   <Chip label="DNS" onPress={() => setStatus(e, 'DNS')} />
                 </View>
@@ -238,16 +254,18 @@ export function CallRoomHeat({ heatId }: { heatId: string }) {
       <HeatHeader data={data.heat} />
 
       <View style={s.buttons}>
-        {(st === 'SCHEDULED') && <Button title="Open call room" icon="door" variant="gold" onPress={openCallRoom} loading={busy} style={{ flexGrow: 1 }} />}
-        {(st === 'SCHEDULED' || st === 'CALL_ROOM') && (
-          <Button title="Close & send to track" variant={st === 'CALL_ROOM' ? 'primary' : 'secondary'} onPress={sendToTrack} loading={busy} style={{ flexGrow: 1 }} />
-        )}
+        {!isOpen && !isClosed && <Button title="Open call room" icon="door" variant="gold" onPress={openCallRoom} loading={busy} style={{ flexGrow: 1 }} />}
+        {isOpen && <Button title="Close & send to track" variant="primary" onPress={sendToTrack} loading={busy} style={{ flexGrow: 1 }} />}
       </View>
-      {st === 'SCHEDULED' && <Muted style={{ fontSize: 13 }}>Opening the call room sends a notification to every athlete in this heat.</Muted>}
+      {!isOpen && !isClosed && (
+        <Muted style={{ fontSize: 13 }}>Scanning starts when the call room is open. Opening it sends a notification to every athlete in this heat.</Muted>
+      )}
 
-      {st !== 'SCHEDULED' && st !== 'CALL_ROOM' ? (
+      {isClosed ? (
         <>
-          <Muted style={{ fontSize: 13 }}>The call room for this heat is closed. You can still correct a status in the list.</Muted>
+          <Muted style={{ fontSize: 13 }}>
+            The call room for this heat is closed: athletes who did not report are DNS. If a scan was missed by mistake, correct that athlete in the list (it is recorded with your name).
+          </Muted>
           {list}
         </>
       ) : wide ? (

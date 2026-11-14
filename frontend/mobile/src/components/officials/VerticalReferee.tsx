@@ -3,17 +3,19 @@ import { StyleSheet, Text, TextInput, View } from 'react-native';
 import { useOfficialSession } from '@/lib/officials/session';
 import { useHeat } from '@/lib/officials/useHeat';
 import { confirm, notify } from '@/lib/officials/confirm';
-import { one, parseMetres } from '@/lib/officials/heats';
+import { parseMetres } from '@/lib/officials/heats';
 import { HeatHeader } from './HeatHeader';
 import { afterFinalize } from './finalize';
 import { entryName, type EntryPerson } from './entry';
 import { Cell, PrintSheetButton, SheetGrid, SheetInfo, SheetNote, SheetRow, SheetTitle, type Col } from './ScoreSheet';
 import { Button, Card, Muted, OfflineBanner, colors } from '@/components/ui';
+import { CallRoomGate, callRoomClosed, canEnterResults, notifyCallRoomOpen } from './CallRoomGate';
 
 type Vert = { bar_height_meters: number; attempt_number: number; result: 'O' | 'X' | '-' };
 type Entry = EntryPerson & {
   id: string;
   lane_number: number;
+  call_room_reported: boolean;
   call_room_inspections: { reported_status: string } | { reported_status: string }[] | null;
   vertical_jump_attempts: Vert[] | null;
 };
@@ -59,8 +61,12 @@ export function VerticalReferee({ heatId, startAt }: { heatId: string; startAt?:
   const { data, offline, savedAt, error, reload, pending } = useHeat<HeatData>(heatId, `/field/heats/${heatId}`, 20000);
   const [busy, setBusy] = useState(false);
 
+  // Strict call room: once it has closed, anyone who did not report is out (DNS) and locked
   const entries = useMemo(() => data?.athletes || [], [data]);
-  const out = useMemo(() => new Set(entries.filter((e) => ['DNS', 'SCRATCH'].includes(one(e.call_room_inspections)?.reported_status || '')).map((e) => e.id)), [entries]);
+  const status = data?.heat.status;
+  const closed = callRoomClosed(status);
+  const allowed = canEnterResults(status, offline);
+  const out = useMemo(() => new Set(closed ? entries.filter((e) => !e.call_room_reported).map((e) => e.id) : []), [entries, closed]);
 
   const jumps = useMemo(() => {
     const m = new Map<string, Vert[]>();
@@ -106,6 +112,7 @@ export function VerticalReferee({ heatId, startAt }: { heatId: string; startAt?:
   }, [entries, out, summaries]);
 
   async function jump(e: Entry, result: 'O' | 'X' | '-') {
+    if (!allowed) return notifyCallRoomOpen();
     if (barN == null) return notify('Set the bar', 'Type the bar height in metres first, like 1.65');
     const atBar = (jumps.get(e.id) || []).filter((a) => h2(a.bar_height_meters) === h2(barN));
     const attemptNumber = atBar.length + 1;
@@ -123,6 +130,7 @@ export function VerticalReferee({ heatId, startAt }: { heatId: string; startAt?:
 
   async function finalize() {
     if (!data) return;
+    if (!allowed) return notifyCallRoomOpen();
     const final = data.heat.stage === 'FINAL';
     if (!(await confirm('Finish this heat?', final ? 'This is the final: championship points are awarded now.' : 'The flight will be marked done.', 'Finish & save'))) return;
     setBusy(true);
@@ -227,7 +235,7 @@ export function VerticalReferee({ heatId, startAt }: { heatId: string; startAt?:
                     text={a ? (a.result === '-' ? '–' : a.result) : ''}
                     shaded={!h}
                     selected={isNext && selId === e.id}
-                    onPress={isNext ? () => setSelId(e.id) : undefined}
+                    onPress={isNext ? () => (allowed ? setSelId(e.id) : notifyCallRoomOpen()) : undefined}
                     label={isNext ? `${entryName(e)}, ${h} m try ${n}` : undefined}
                     textStyle={a?.result === 'X' ? { color: colors.red, fontWeight: '900' } : a?.result === 'O' ? { color: colors.green, fontWeight: '900' } : undefined}
                   />
@@ -248,6 +256,7 @@ export function VerticalReferee({ heatId, startAt }: { heatId: string; startAt?:
     <View style={{ gap: 14 }}>
       <OfflineBanner offline={offline} lastSyncedAt={savedAt} note="Entries are saved on this device and sent when the network is back." />
       <HeatHeader data={data.heat} />
+      <CallRoomGate heatId={heatId} status={data.heat.status} offline={offline} onClosed={reload} />
       <SheetTitle title={`RESULT CARD  *  ${data.heat.events.code.startsWith('PV') ? 'POLE VAULT' : 'HIGH JUMP'}`} />
       <SheetInfo heat={data.heat} startAt={startAt} />
       {jumpCard}

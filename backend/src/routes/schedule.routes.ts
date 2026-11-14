@@ -125,10 +125,28 @@ scheduleRouter.patch('/heats/:heatId/status', requireRole(['meet_admin', 'call_r
   try {
     const { heatId } = req.params;
     const { status, windReading } = req.body;
+    const role = req.user!.role;
+
+    // Strict call room: officials can't move a heat through its steps by hand.
+    //  - Referees never set a status here (results go through /finalize).
+    //  - The call room can only OPEN a heat that has not started; closing is /callroom/advance.
+    //  - The meet admin can set anything.
+    if (role !== 'meet_admin') {
+      if (role !== 'call_room_official' || status !== 'CALL_ROOM') {
+        return res.status(403).json({ error: 'Only the call room can open a heat here; it closes with "Close & send to track".' });
+      }
+      const { data: cur } = await supabase.from('heats').select('status').eq('id', heatId).maybeSingle();
+      if (!cur) return res.status(404).json({ error: 'Heat not found.' });
+      if (cur.status === 'CALL_ROOM') return res.json({ success: true, heat: cur });
+      if (!['SCHEDULED', 'DELAYED'].includes(cur.status)) {
+        return res.status(409).json({ error: 'The call room for this heat has already been closed.' });
+      }
+    }
 
     const updates: any = {};
     if (status) updates.status = status;
-    if (windReading !== undefined) updates.wind_reading = windReading;
+    if (status === 'CALL_ROOM') updates.call_room_opened_at = new Date().toISOString();
+    if (windReading !== undefined && role === 'meet_admin') updates.wind_reading = windReading;
 
     const { data, error } = await supabase
       .from('heats')
