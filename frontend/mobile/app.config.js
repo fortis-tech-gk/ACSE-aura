@@ -56,6 +56,9 @@ module.exports = ({ config }) => {
     ios: {
       supportsTablet: variant === 'officials',
       bundleIdentifier: v.id,
+      // Only standard HTTPS — exempt from US export rules, so App Store Connect skips the
+      // encryption questions on every upload
+      config: { usesNonExemptEncryption: false },
       infoPlist: {
         NSCameraUsageDescription:
           variant === 'officials'

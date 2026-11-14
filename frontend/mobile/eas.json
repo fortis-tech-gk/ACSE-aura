@@ -77,10 +77,18 @@
       "env": {
         "APP_VARIANT": "officials"
       }
+    },
+    "athletes-store-staging": {
+      "extends": "staging",
+      "autoIncrement": true,
+      "env": {
+        "APP_VARIANT": "athletes"
+      }
     }
   },
   "submit": {
     "athletes-production": {},
-    "officials-production": {}
+    "officials-production": {},
+    "athletes-store-staging": {}
   }
 }
