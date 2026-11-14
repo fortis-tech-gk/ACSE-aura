@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { Alert, AppState, Linking, Platform, StyleSheet, Switch, Text, View } from 'react-native';
+import { AppState, Linking, Platform, StyleSheet, Switch, Text, View } from 'react-native';
 import { Redirect, router } from 'expo-router';
 import Constants from 'expo-constants';
 import { useAthleteSession } from '@/lib/athlete-session';
@@ -13,6 +13,7 @@ import {
   type PermissionState,
 } from '@/lib/reminders';
 import { REMINDER_OFFSETS_MIN } from '@/lib/config';
+import { confirm } from '@/lib/confirm';
 import { AppHeader, Button, Card, Muted, Pill, Screen, SectionLabel, colors } from '@/components/ui';
 
 export default function SettingsScreen() {
@@ -52,10 +53,9 @@ export default function SettingsScreen() {
     const p = await requestNotificationPermission();
     setPerm(p);
     if (p === 'denied') {
-      Alert.alert('Notifications are blocked', 'Open Settings and allow notifications for AURA Athletes to get call room reminders.', [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'Open Settings', onPress: () => Linking.openSettings() },
-      ]);
+      if (await confirm('Notifications are blocked', 'Open Settings and allow notifications for AURA Athletes to get call room reminders.', 'Open Settings')) {
+        Linking.openSettings();
+      }
     }
     await resyncReminders();
   }
@@ -66,18 +66,11 @@ export default function SettingsScreen() {
     await resyncReminders();
   }
 
-  function confirmLogout() {
-    Alert.alert('Log out?', 'Your reminders on this phone will be cancelled.', [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Log out',
-        style: 'destructive',
-        onPress: async () => {
-          await logout();
-          router.replace('/login');
-        },
-      },
-    ]);
+  async function confirmLogout() {
+    // Shared confirm: a native alert on phones, the browser's dialog in the web preview
+    if (!(await confirm('Log out?', 'Your reminders on this phone will be cancelled.', 'Log out'))) return;
+    await logout();
+    router.replace('/login');
   }
 
   if (status === 'signedOut') return <Redirect href="/login" />;

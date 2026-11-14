@@ -1,10 +1,11 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Alert, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { Redirect, router } from 'expo-router';
 import { useOfficialSession } from '@/lib/officials/session';
 import { MEALS, currentMeal, istDate } from '@/lib/officials/scan-logic';
 import type { AthleteRef, MealType } from '@/lib/officials/types';
 import { api } from '@/lib/api';
+import { confirm } from '@/lib/confirm';
 import { useOfficialsLayout } from '@/lib/officials/layout';
 import { RosterNote, ScanPanel, SyncPill } from '@/components/officials/ScanPanel';
 import { HeatList } from '@/components/officials/HeatList';
@@ -32,17 +33,17 @@ export default function OfficialsHome() {
   }
   if (status === 'signedOut' || !staff) return <Redirect href="/officials/login" />;
 
-  function confirmLogout() {
-    Alert.alert(
+  async function confirmLogout() {
+    const ok = await confirm(
       'Log out?',
       pendingCount
         ? `${pendingCount} scan${pendingCount === 1 ? ' is' : 's are'} not sent yet. They stay on this device and are sent after the next login.`
         : 'You can log in again with your PIN.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'Log out', style: 'destructive', onPress: () => logout().then(() => router.replace('/officials/login')) },
-      ]
+      'Log out'
     );
+    if (!ok) return;
+    await logout();
+    router.replace('/officials/login');
   }
 
   return (
