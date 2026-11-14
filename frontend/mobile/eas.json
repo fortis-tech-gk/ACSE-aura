@@ -52,6 +52,31 @@
         "APP_VARIANT": "athletes",
         "EXPO_PUBLIC_API_URL": "http://localhost:5000/api"
       }
+    },
+    "staging": {
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://aura-api-staging-wgebilkjsa-el.a.run.app/api"
+      }
+    },
+    "athletes-demo": {
+      "extends": "staging",
+      "distribution": "internal",
+      "android": {
+        "buildType": "apk"
+      },
+      "env": {
+        "APP_VARIANT": "athletes"
+      }
+    },
+    "officials-demo": {
+      "extends": "staging",
+      "distribution": "internal",
+      "android": {
+        "buildType": "apk"
+      },
+      "env": {
+        "APP_VARIANT": "officials"
+      }
     }
   },
   "submit": {

@@ -8,6 +8,11 @@
 #
 # First run only — store the secrets (values are read from your terminal, never from git):
 #   ./deploy-cloudrun.sh <gcp-project-id> --init-secrets
+#
+# Staging (demo) copy: same commands with AURA_ENV=staging → service "aura-api-staging" and
+# secrets named JWT_SECRET_STAGING etc., pointing at the staging Supabase project.
+#   AURA_ENV=staging ./deploy-cloudrun.sh <gcp-project-id> --init-secrets
+#   AURA_ENV=staging ./deploy-cloudrun.sh <gcp-project-id>
 # =============================================================================
 set -euo pipefail
 
@@ -15,13 +20,19 @@ PROJECT="${1:?usage: ./deploy-cloudrun.sh <gcp-project-id> [--meet|--init-secret
 MODE="${2:-}"
 REGION="asia-south1"          # Mumbai — same region as Supabase
 SERVICE="aura-api"
+SUFFIX=""
+if [[ "${AURA_ENV:-production}" == "staging" ]]; then
+  SERVICE="aura-api-staging"
+  SUFFIX="_STAGING"
+fi
 SECRETS=(JWT_SECRET ATHLETE_QR_SECRET SUPABASE_URL SUPABASE_SERVICE_ROLE_KEY)
 
 gcloud config set project "$PROJECT" >/dev/null
 
 if [[ "$MODE" == "--init-secrets" ]]; then
   gcloud services enable run.googleapis.com cloudbuild.googleapis.com artifactregistry.googleapis.com secretmanager.googleapis.com
-  for name in "${SECRETS[@]}"; do
+  for base in "${SECRETS[@]}"; do
+    name="$base$SUFFIX"
     if gcloud secrets describe "$name" >/dev/null 2>&1; then
       echo "✓ $name already exists (add a new version with: gcloud secrets versions add $name --data-file=-)"
       continue
@@ -31,10 +42,11 @@ if [[ "$MODE" == "--init-secrets" ]]; then
   done
   # Let Cloud Run's runtime service account read them
   SA="$(gcloud projects describe "$PROJECT" --format='value(projectNumber)')-compute@developer.gserviceaccount.com"
-  for name in "${SECRETS[@]}"; do
+  for base in "${SECRETS[@]}"; do
+    name="$base$SUFFIX"
     gcloud secrets add-iam-policy-binding "$name" --member="serviceAccount:$SA" --role=roles/secretmanager.secretAccessor >/dev/null
   done
-  echo "Secrets ready. Now run: ./deploy-cloudrun.sh $PROJECT"
+  echo "Secrets ready. Now run: ${AURA_ENV:+AURA_ENV=$AURA_ENV }./deploy-cloudrun.sh $PROJECT"
   exit 0
 fi
 
@@ -56,7 +68,7 @@ gcloud run deploy "$SERVICE" \
   --cpu-boost \
   --timeout 60s \
   --set-env-vars "NODE_ENV=production,TRUST_PROXY=1" \
-  --set-secrets "JWT_SECRET=JWT_SECRET:latest,ATHLETE_QR_SECRET=ATHLETE_QR_SECRET:latest,SUPABASE_URL=SUPABASE_URL:latest,SUPABASE_SERVICE_ROLE_KEY=SUPABASE_SERVICE_ROLE_KEY:latest"
+  --set-secrets "JWT_SECRET=JWT_SECRET$SUFFIX:latest,ATHLETE_QR_SECRET=ATHLETE_QR_SECRET$SUFFIX:latest,SUPABASE_URL=SUPABASE_URL$SUFFIX:latest,SUPABASE_SERVICE_ROLE_KEY=SUPABASE_SERVICE_ROLE_KEY$SUFFIX:latest"
 
 URL="$(gcloud run services describe "$SERVICE" --region "$REGION" --format='value(status.url)')"
 echo

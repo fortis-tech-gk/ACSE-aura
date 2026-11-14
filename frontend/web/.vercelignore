@@ -1,0 +1,6 @@
+# Never upload local env files (production or staging keys) with a CLI deploy;
+# Vercel injects the project's own environment variables at build time.
+.env
+.env.*
+.next
+node_modules
