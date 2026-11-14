@@ -3,6 +3,7 @@
 import { supabaseAdmin } from '@/lib/supabase';
 import { requireSquad } from '@/lib/auth-guard';
 import { revalidatePath } from 'next/cache';
+import { getEventsByCodes, getEventsCatalogue } from '@/lib/events-catalogue';
 import { canEditRoster } from '@/lib/roster-window';
 
 export interface RelayMemberDTO {
@@ -61,126 +62,104 @@ async function getRelayMutationBlock(squadIds: string[]): Promise<string | null>
 export async function getSquadRelayTeamsAction(): Promise<RelayTeamDTO[]> {
   const session = await requireSquad();
 
-  // Get current squad and college_id
-  const { data: currentSquad } = await supabaseAdmin
-    .from('squads')
-    .select('id, college_id, gender')
-    .eq('id', session.squadId)
-    .single();
+  // Relay events for this squad's gender + mixed (cached catalogue), and the current squad with
+  // every squad of its college (Men and Women) — fetched together.
+  const [catalogue, { data: currentSquad }] = await Promise.all([
+    getEventsCatalogue(),
+    supabaseAdmin
+      .from('squads')
+      .select('id, college_id, gender, colleges(squads(id, gender))')
+      .eq('id', session.squadId)
+      .single(),
+  ]);
 
   if (!currentSquad) return [];
 
-  // Find all squads belonging to this college (both Men and Women squads)
-  const { data: collegeSquads } = await supabaseAdmin
-    .from('squads')
-    .select('id, gender')
-    .eq('college_id', currentSquad.college_id);
+  const college: any = Array.isArray((currentSquad as any).colleges) ? (currentSquad as any).colleges[0] : (currentSquad as any).colleges;
+  const collegeSquadIds: string[] = ((college?.squads || []) as any[]).map((s: any) => s.id);
+  if (!collegeSquadIds.includes(session.squadId)) collegeSquadIds.push(session.squadId);
 
-  const collegeSquadIds = (collegeSquads || []).map((s: any) => s.id);
+  const relayEvents = catalogue
+    .filter((e) => e.category === 'relay' && (e.gender === session.gender || e.gender === 'mixed'))
+    .sort((a, b) => String(a.code).localeCompare(String(b.code)));
+  if (relayEvents.length === 0) return [];
+  const relayEventIds = relayEvents.map((e) => e.id);
 
-  // Find relay events for this squad's gender + mixed
-  const { data: relayEvents } = await supabaseAdmin
-    .from('events')
-    .select('id, name, code, gender')
-    .in('gender', [session.gender, 'mixed'])
-    .eq('category', 'relay')
-    .order('code');
-
-  if (!relayEvents || relayEvents.length === 0) return [];
+  // All relay teams of the college for these events (with members) and every relay nomination
+  // of the college, in two queries instead of four per event.
+  const memberSelect = `
+        id,
+        squad_id,
+        event_id,
+        relay_members (
+          profile_id,
+          leg_order,
+          is_reserve,
+          profiles (
+            sslc_name,
+            usn,
+            squads (
+              gender
+            )
+          )
+        )`;
+  const [{ data: collegeTeams }, { data: nominationRows }] = await Promise.all([
+    supabaseAdmin
+      .from('relay_teams')
+      .select(memberSelect)
+      .in('squad_id', collegeSquadIds)
+      .in('event_id', relayEventIds),
+    supabaseAdmin
+      .from('registrations')
+      .select('profile_id, event_id, profiles!inner(squad_id)')
+      .eq('kind', 'relay')
+      .in('event_id', relayEventIds)
+      .in('profiles.squad_id', collegeSquadIds),
+  ]);
 
   const teams: RelayTeamDTO[] = [];
 
   for (const ev of relayEvents) {
     const isMixed = ev.code === '4X400M-MIX' || ev.gender === 'mixed';
-    let team: any = null;
+    // 4x400m Mixed Relay is shared by the entire college: reuse the team created by either the
+    // Men's or Women's squad. Divisional relays belong to this specific squad.
+    let team: any = (collegeTeams || []).find(
+      (t: any) => t.event_id === ev.id && (isMixed || t.squad_id === session.squadId)
+    );
 
-    if (isMixed) {
-      // 4x400m Mixed Relay is shared by the entire college.
-      // Reuse existing team if already created by either Men's or Women's squad.
-      const { data: existingMixedTeam } = await supabaseAdmin
+    if (!team) {
+      const { data: newTeam } = await supabaseAdmin
         .from('relay_teams')
-        .select('id, squad_id')
-        .in('squad_id', collegeSquadIds)
-        .eq('event_id', ev.id)
-        .maybeSingle();
-
-      if (existingMixedTeam) {
-        team = existingMixedTeam;
-      } else {
-        const { data: newMixedTeam } = await supabaseAdmin
-          .from('relay_teams')
-          .insert({
-            squad_id: session.squadId,
-            event_id: ev.id,
-          })
-          .select('id, squad_id')
-          .single();
-        team = newMixedTeam;
-      }
-    } else {
-      // Divisional relay (4x100m or 4x400m for this specific gender squad)
-      const { data: existingDivisionalTeam } = await supabaseAdmin
-        .from('relay_teams')
-        .select('id, squad_id')
-        .eq('squad_id', session.squadId)
-        .eq('event_id', ev.id)
-        .maybeSingle();
-
-      if (existingDivisionalTeam) {
-        team = existingDivisionalTeam;
-      } else {
-        const { data: newDivisionalTeam } = await supabaseAdmin
-          .from('relay_teams')
-          .insert({
-            squad_id: session.squadId,
-            event_id: ev.id,
-          })
-          .select('id, squad_id')
-          .single();
-        team = newDivisionalTeam;
-      }
+        .insert({
+          squad_id: session.squadId,
+          event_id: ev.id,
+        })
+        .select(memberSelect)
+        .single();
+      team = newTeam;
     }
 
     if (!team) continue;
 
     // Nomination pool: athletes who chose this relay event on the athlete registration form.
     // Divisional relay → own squad only; mixed relay → both squads of the college.
-    const poolSquadIds = isMixed ? collegeSquadIds : [session.squadId];
-    const { data: poolProfiles } = await supabaseAdmin
-      .from('profiles')
-      .select('id')
-      .in('squad_id', poolSquadIds);
-    const poolProfileIds = (poolProfiles || []).map((p: any) => p.id);
-    let eligibleIds: string[] = [];
-    if (poolProfileIds.length > 0) {
-      const { data: nominations } = await supabaseAdmin
-        .from('registrations')
-        .select('profile_id')
-        .eq('event_id', ev.id)
-        .eq('kind', 'relay')
-        .in('profile_id', poolProfileIds);
-      eligibleIds = (nominations || []).map((n: any) => n.profile_id);
-    }
+    const eligibleIds: string[] = (nominationRows || [])
+      .filter((n: any) => {
+        if (n.event_id !== ev.id) return false;
+        if (isMixed) return true;
+        const prof: any = Array.isArray(n.profiles) ? n.profiles[0] : n.profiles;
+        return prof?.squad_id === session.squadId;
+      })
+      .map((n: any) => n.profile_id);
 
-    // Fetch members with profiles and their squad's gender
-    const { data: members } = await supabaseAdmin
-      .from('relay_members')
-      .select(`
-        profile_id,
-        leg_order,
-        is_reserve,
-        profiles (
-          sslc_name,
-          usn,
-          squads (
-            gender
-          )
-        )
-      `)
-      .eq('relay_team_id', team.id)
-      .order('leg_order', { ascending: true });
+    // Members with profiles and their squad's gender, ordered by leg (reserves last)
+    const members = [...(team.relay_members || [])].sort((a: any, b: any) => {
+      if (a.leg_order == null) return b.leg_order == null ? 0 : 1;
+      if (b.leg_order == null) return -1;
+      return a.leg_order - b.leg_order;
+    });
 
-    const formattedMembers: RelayMemberDTO[] = (members || []).map((m: any) => {
+    const formattedMembers: RelayMemberDTO[] = members.map((m: any) => {
       const p = Array.isArray(m.profiles) ? m.profiles[0] : m.profiles;
       const s = p?.squads ? (Array.isArray(p.squads) ? p.squads[0] : p.squads) : null;
       return {
@@ -224,43 +203,44 @@ export async function saveRelayTeamAction(
 ): Promise<{ success: boolean; error?: string }> {
   const session = await requireSquad();
 
+  // Independent reads, fetched together: the squad's own lock / closed registration, the
+  // squad with every squad of its college, and the relay team being updated with its event.
+  const [ownLockError, { data: currentSquad }, { data: verifiedTeam }] = await Promise.all([
+    getRelayMutationBlock([session.squadId]),
+    supabaseAdmin
+      .from('squads')
+      .select('id, college_id, gender, colleges(squads(id))')
+      .eq('id', session.squadId)
+      .single(),
+    supabaseAdmin
+      .from('relay_teams')
+      .select(`
+        id,
+        squad_id,
+        event_id,
+        events (
+          id,
+          code,
+          name,
+          gender
+        ),
+        squads (
+          college_id,
+          gender
+        )
+      `)
+      .eq('id', relayTeamId)
+      .maybeSingle(),
+  ]);
+
   // Fast-fail on the session squad's own lock / closed registration
-  const ownLockError = await getRelayMutationBlock([session.squadId]);
   if (ownLockError) {
     return { success: false, error: ownLockError };
   }
 
-  // Fetch current squad details
-  const { data: currentSquad } = await supabaseAdmin
-    .from('squads')
-    .select('id, college_id, gender')
-    .eq('id', session.squadId)
-    .single();
-
   if (!currentSquad) {
     return { success: false, error: 'Unauthorized: Session squad not found.' };
   }
-
-  // Fetch the relay team being updated with event details
-  const { data: verifiedTeam } = await supabaseAdmin
-    .from('relay_teams')
-    .select(`
-      id,
-      squad_id,
-      event_id,
-      events (
-        id,
-        code,
-        name,
-        gender
-      ),
-      squads (
-        college_id,
-        gender
-      )
-    `)
-    .eq('id', relayTeamId)
-    .maybeSingle();
 
   if (!verifiedTeam) {
     return { success: false, error: 'Relay team not found.' };
@@ -293,13 +273,60 @@ export async function saveRelayTeamAction(
   // The team-owning squad must also be unlocked.
   let involvedSquadIds = [session.squadId, verifiedTeam.squad_id];
   if (isMixed) {
-    const { data: collegeSquads } = await supabaseAdmin
-      .from('squads')
-      .select('id')
-      .eq('college_id', currentSquad.college_id);
-    involvedSquadIds = involvedSquadIds.concat((collegeSquads || []).map((s: any) => s.id));
+    const college: any = Array.isArray((currentSquad as any).colleges) ? (currentSquad as any).colleges[0] : (currentSquad as any).colleges;
+    involvedSquadIds = involvedSquadIds.concat(((college?.squads || []) as any[]).map((s: any) => s.id));
   }
-  const lockError = await getRelayMutationBlock(involvedSquadIds);
+
+  // Divisional relays: the squad's other divisional relay (Rule 24 mutual exclusivity)
+  const is100 = teamEvent?.code?.includes('4X100');
+  const otherCode = is100
+    ? (session.gender === 'men' ? '4X400M-M' : '4X400M-W')
+    : (session.gender === 'men' ? '4X100M-M' : '4X100M-W');
+  const otherEvent = isMixed ? undefined : (await getEventsByCodes([otherCode]))[0];
+
+  // Everything the checks below read, fetched together; the checks then run in order.
+  const [lockError, { data: selectedAthletes }, { data: nominations }, { data: otherRegs }, { data: otherTeam }] =
+    await Promise.all([
+      getRelayMutationBlock(involvedSquadIds),
+      allSelected.length > 0
+        ? supabaseAdmin
+            .from('profiles')
+            .select(`
+              id,
+              sslc_name,
+              usn,
+              squad_id,
+              squads (
+                college_id,
+                gender
+              )
+            `)
+            .in('id', allSelected)
+        : Promise.resolve({ data: [] as any[] }),
+      allSelected.length > 0
+        ? supabaseAdmin
+            .from('registrations')
+            .select('profile_id')
+            .eq('event_id', verifiedTeam.event_id)
+            .eq('kind', 'relay')
+            .in('profile_id', allSelected)
+        : Promise.resolve({ data: [] as any[] }),
+      otherEvent && allSelected.length > 0
+        ? supabaseAdmin
+            .from('registrations')
+            .select('profile_id')
+            .eq('event_id', otherEvent.id)
+            .in('profile_id', allSelected)
+        : Promise.resolve({ data: [] as any[] }),
+      !isMixed && allSelected.length > 0
+        ? supabaseAdmin
+            .from('relay_teams')
+            .select('id, events!inner(code), relay_members(profile_id, profiles(sslc_name))')
+            .eq('squad_id', session.squadId)
+            .eq('events.code', otherCode)
+            .maybeSingle()
+        : Promise.resolve({ data: null as any }),
+    ]);
   if (lockError) {
     return { success: false, error: lockError };
   }
@@ -328,21 +355,7 @@ export async function saveRelayTeamAction(
     return { success: true };
   }
 
-  // Fetch all selected profiles with their squad's college and gender
-  const { data: selectedAthletes } = await supabaseAdmin
-    .from('profiles')
-    .select(`
-      id,
-      sslc_name,
-      usn,
-      squad_id,
-      squads (
-        college_id,
-        gender
-      )
-    `)
-    .in('id', allSelected);
-
+  // Selected profiles with their squad's college and gender (fetched above)
   if (!selectedAthletes || selectedAthletes.length !== allSelected.length) {
     return { success: false, error: 'One or more selected athletes could not be found.' };
   }
@@ -367,13 +380,6 @@ export async function saveRelayTeamAction(
   // registration form may be placed in the team (e.g. 6 nominated for 4x100m →
   // 4 run + up to 2 reserves; no one else can be added).
   // -------------------------------------------------------------
-  const { data: nominations } = await supabaseAdmin
-    .from('registrations')
-    .select('profile_id')
-    .eq('event_id', verifiedTeam.event_id)
-    .eq('kind', 'relay')
-    .in('profile_id', allSelected);
-
   const nominatedIds = new Set((nominations || []).map((n: any) => n.profile_id));
   const notNominated = allSelected.filter((id) => !nominatedIds.has(id));
   if (notNominated.length > 0) {
@@ -455,34 +461,10 @@ export async function saveRelayTeamAction(
     }
 
     // 2. Mutual exclusivity check with the other divisional relay of this squad
-    const is100 = teamEvent?.code?.includes('4X100');
-    const otherCode = is100
-      ? (session.gender === 'men' ? '4X400M-M' : '4X400M-W')
-      : (session.gender === 'men' ? '4X100M-M' : '4X100M-W');
     const otherRelayTitle = is100 ? '4x400m Relay' : '4x100m Relay';
 
-    // Find other divisional relay team for this squad
-    const { data: otherTeam } = await supabaseAdmin
-      .from('relay_teams')
-      .select('id, events!inner(code)')
-      .eq('squad_id', session.squadId)
-      .eq('events.code', otherCode)
-      .maybeSingle();
-
     // 2a. Exclusivity against relay nominations recorded at athlete registration time
-    const { data: otherEvent } = await supabaseAdmin
-      .from('events')
-      .select('id')
-      .eq('code', otherCode)
-      .maybeSingle();
-
     if (otherEvent) {
-      const { data: otherRegs } = await supabaseAdmin
-        .from('registrations')
-        .select('profile_id')
-        .eq('event_id', otherEvent.id)
-        .in('profile_id', allSelected);
-
       if (otherRegs && otherRegs.length > 0) {
         const name = athleteMap.get(otherRegs[0].profile_id)?.sslc_name || 'Athlete';
         return {
@@ -493,15 +475,7 @@ export async function saveRelayTeamAction(
     }
 
     if (otherTeam) {
-      const { data: otherMembers } = await supabaseAdmin
-        .from('relay_members')
-        .select(`
-          profile_id,
-          profiles (
-            sslc_name
-          )
-        `)
-        .eq('relay_team_id', otherTeam.id);
+      const otherMembers: any[] = (otherTeam as any).relay_members || [];
 
       if (otherMembers && otherMembers.length > 0) {
         const otherMemberNames = new Map<string, string>();

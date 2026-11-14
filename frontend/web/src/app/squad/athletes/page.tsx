@@ -5,59 +5,47 @@ import { listSquadAthletesAction, getAvailableEventsAction, getSquadRelayCountAc
 import AthletesManager from './AthletesManager';
 import { canEditRoster, isLateEntryWindow } from '@/lib/roster-window';
 import { calculateSquadFees, MIXED_RELAY_CODE } from '@/lib/payments';
+import { getEventsByCodes } from '@/lib/events-catalogue';
 
 export const metadata = {
   title: 'Athlete Roster — VTU SportsOS Squad',
 };
 
+/**
+ * The 4x400m Mixed Relay team is shared with the other division of this college: count their
+ * nominations too, so the "₹100 / free reserve" hint on the form is right.
+ */
+async function countSiblingMixedNominations(squadId: string, collegeId: string): Promise<number> {
+  const [mixedEvent] = await getEventsByCodes([MIXED_RELAY_CODE]);
+  if (!mixedEvent || !collegeId) return 0;
+  const { count } = await supabaseAdmin
+    .from('registrations')
+    .select('id, profiles!inner(squad_id, squads!inner(college_id))', { count: 'exact', head: true })
+    .eq('kind', 'relay')
+    .eq('event_id', mixedEvent.id)
+    .eq('profiles.squads.college_id', collegeId)
+    .neq('profiles.squad_id', squadId);
+  return count || 0;
+}
+
 export default async function SquadAthletesPage() {
   const session = await requireSquad();
 
-  // Fetch squad status
-  const { data: squad } = await supabaseAdmin
-    .from('squads')
-    .select('*')
-    .eq('id', session.squadId)
-    .single();
-
-  const { data: meetSettings } = await supabaseAdmin
-    .from('meet_settings')
-    .select('registration_open')
-    .limit(1)
-    .maybeSingle();
+  // Every read on this page is independent: fetch them together (one round trip, not nine).
+  const [{ data: squad }, { data: meetSettings }, athletes, events, relayCount, fees, siblingMixedCount] =
+    await Promise.all([
+      supabaseAdmin.from('squads').select('*').eq('id', session.squadId).single(),
+      supabaseAdmin.from('meet_settings').select('registration_open').limit(1).maybeSingle(),
+      listSquadAthletesAction(),
+      getAvailableEventsAction(),
+      getSquadRelayCountAction(),
+      // Total dues come from the same calculation as the payment page, so both always agree
+      calculateSquadFees(session.squadId),
+      countSiblingMixedNominations(session.squadId, session.collegeId),
+    ]);
   const registrationOpen = meetSettings?.registration_open !== false;
   const lateEntryOpen = isLateEntryWindow(registrationOpen, squad);
   const registrationClosed = !registrationOpen && !lateEntryOpen;
-
-  const athletes = await listSquadAthletesAction();
-  const events = await getAvailableEventsAction();
-  const relayCount = await getSquadRelayCountAction();
-  // Total dues come from the same calculation as the payment page, so both always agree
-  const fees = await calculateSquadFees(session.squadId);
-
-  // The 4x400m Mixed Relay team is shared with the other division of this college:
-  // count their nominations too, so the "₹100 / free reserve" hint on the form is right.
-  let siblingMixedCount = 0;
-  if (squad?.college_id) {
-    const [{ data: mixedEvent }, { data: siblingSquads }] = await Promise.all([
-      supabaseAdmin.from('events').select('id').eq('code', MIXED_RELAY_CODE).maybeSingle(),
-      supabaseAdmin.from('squads').select('id').eq('college_id', squad.college_id).neq('id', session.squadId),
-    ]);
-    const siblingIds = (siblingSquads || []).map((s: any) => s.id);
-    if (mixedEvent?.id && siblingIds.length > 0) {
-      const { data: siblingProfiles } = await supabaseAdmin.from('profiles').select('id').in('squad_id', siblingIds);
-      const ids = (siblingProfiles || []).map((p: any) => p.id);
-      if (ids.length > 0) {
-        const { count } = await supabaseAdmin
-          .from('registrations')
-          .select('id', { count: 'exact', head: true })
-          .eq('kind', 'relay')
-          .eq('event_id', mixedEvent.id)
-          .in('profile_id', ids);
-        siblingMixedCount = count || 0;
-      }
-    }
-  }
 
   // Transform registrations to match interface
   const formattedAthletes = athletes.map((a: any) => ({

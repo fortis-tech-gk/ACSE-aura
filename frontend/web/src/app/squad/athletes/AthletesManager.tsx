@@ -103,6 +103,13 @@ export default function AthletesManager({
   lateEntryOpen = false,
 }: Props) {
   const [athletes, setAthletes] = useState<AthleteItem[]>(initialAthletes);
+  // Server actions here revalidate this page, so fresh props (roster, dues, relay counts) arrive
+  // with the action's response — no full page reload. Keep local state in step with them.
+  useEffect(() => {
+    setAthletes(initialAthletes);
+  }, [initialAthletes]);
+  // Athletes being removed right now (row shows "Removing…" and its buttons are disabled)
+  const [removingIds, setRemovingIds] = useState<Set<string>>(() => new Set());
   const [showAddModal, setShowAddModal] = useState(false);
   const [showReportModal, setShowReportModal] = useState(false);
   const [editingAthlete, setEditingAthlete] = useState<AthleteItem | null>(null);
@@ -453,9 +460,9 @@ export default function AthletesManager({
     try {
       const res = await addAthleteAction(formData);
       if (res.success) {
+        // The response already carries the re-rendered roster (the action revalidates this page)
         setShowAddModal(false);
         resetModalForm();
-        window.location.reload();
       } else {
         setError(res.error || 'Failed to add athlete.');
       }
@@ -473,13 +480,25 @@ export default function AthletesManager({
     }
     if (!confirm(`Are you sure you want to remove ${name} from the squad roster?`)) return;
 
-    const res = await deleteAthleteAction(athleteId);
-    if (res.success) {
-      setAthletes((prev) => prev.filter((a) => a.id !== athleteId));
-      // Reload so Total Dues is recalculated by the server (relay fee depends on team size)
-      window.location.reload();
-    } else {
-      alert(`Error: ${res.error}`);
+    // Instant feedback: the row is marked "Removing…" at once. The action revalidates this
+    // page, so the updated roster and Total Dues (relay fee depends on team size) come back
+    // with its response — no page reload.
+    setRemovingIds((prev) => new Set(prev).add(athleteId));
+    try {
+      const res = await deleteAthleteAction(athleteId);
+      if (res.success) {
+        setAthletes((prev) => prev.filter((a) => a.id !== athleteId));
+      } else {
+        alert(`Error: ${res.error}`);
+      }
+    } catch {
+      alert('Network error: the athlete was not removed. Please try again.');
+    } finally {
+      setRemovingIds((prev) => {
+        const next = new Set(prev);
+        next.delete(athleteId);
+        return next;
+      });
     }
   }
 
@@ -745,7 +764,11 @@ export default function AthletesManager({
                       <tr
                         key={athlete.id}
                         id={`row-athlete-${athlete.id}`}
-                        style={{ borderBottom: '1px solid var(--border-color)', transition: 'background 0.15s ease' }}
+                        style={{
+                          borderBottom: '1px solid var(--border-color)',
+                          transition: 'background 0.15s ease, opacity 0.15s ease',
+                          opacity: removingIds.has(athlete.id) ? 0.45 : 1,
+                        }}
                       >
                         <td style={{ padding: '1rem' }}>
                           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem', alignItems: 'flex-start' }}>
@@ -978,10 +1001,11 @@ export default function AthletesManager({
                             type="button"
                             onClick={() => handleDelete(athlete.id, athlete.sslc_name)}
                             id={`btn-delete-${athlete.id}`}
-                            disabled={rosterLocked}
+                            disabled={rosterLocked || removingIds.has(athlete.id)}
+                            aria-busy={removingIds.has(athlete.id) || undefined}
                             title={rosterLocked ? 'Roster is locked' : undefined}
                             style={{
-                              opacity: rosterLocked ? 0.4 : 1,
+                              opacity: rosterLocked ? 0.4 : removingIds.has(athlete.id) ? 0.6 : 1,
                               background: 'none',
                               border: '1px solid rgba(239, 68, 68, 0.3)',
                               color: 'var(--danger)',
@@ -993,7 +1017,7 @@ export default function AthletesManager({
                               transition: 'all 0.15s ease'
                             }}
                           >
-                            {rosterLocked ? '🔒 Locked' : '✕ Remove'}
+                            {rosterLocked ? '🔒 Locked' : removingIds.has(athlete.id) ? 'Removing…' : '✕ Remove'}
                           </button>
                         </td>
                       </tr>

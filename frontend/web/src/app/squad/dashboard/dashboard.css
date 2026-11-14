@@ -962,3 +962,53 @@
     gap: 1rem;
   }
 }
+
+/* ---------- Page loading skeleton (src/app/squad/loading.tsx) ---------- */
+.squad-skeleton {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  padding: 0.5rem 0 2rem;
+}
+.squad-skeleton-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+}
+.squad-skeleton-bar,
+.squad-skeleton-card,
+.squad-skeleton-panel {
+  border-radius: 10px;
+  background: linear-gradient(90deg, #e2e8f0 25%, #f1f5f9 50%, #e2e8f0 75%);
+  background-size: 200% 100%;
+  animation: squad-skeleton-shimmer 1.2s ease-in-out infinite;
+}
+.squad-skeleton-title { height: 2rem; width: min(420px, 80%); }
+.squad-skeleton-subtitle { height: 1rem; width: min(560px, 95%); }
+.squad-skeleton-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 1rem;
+}
+.squad-skeleton-card { height: 96px; }
+.squad-skeleton-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding: 1.25rem;
+  background: #ffffff;
+  animation: none;
+  border: 1px solid #e2e8f0;
+}
+.squad-skeleton-row { height: 2.25rem; }
+@keyframes squad-skeleton-shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .squad-skeleton-bar,
+  .squad-skeleton-card { animation: none; }
+}

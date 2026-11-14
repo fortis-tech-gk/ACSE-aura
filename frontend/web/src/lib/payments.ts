@@ -6,6 +6,7 @@
  */
 import { supabaseAdmin } from '@/lib/supabase';
 import { totalCredited } from '@/lib/payment-status';
+import { getEventsByCodes, getEventsCatalogue } from '@/lib/events-catalogue';
 
 /**
  * Accurately calculates squad fees:
@@ -38,12 +39,6 @@ export interface RelayTeamFee {
  *    come from both and it is billed once, to the squad that owns the team (as before).
  */
 export async function calculateSquadFees(squadId: string) {
-  const { data: squadProfiles } = await supabaseAdmin
-    .from('profiles')
-    .select('id')
-    .eq('squad_id', squadId);
-  const profileIds = (squadProfiles || []).map((p: any) => p.id);
-
   let regularEventsCount = 0;
   let reserveEventsCount = 0;
   let hmCount = 0;
@@ -55,102 +50,95 @@ export async function calculateSquadFees(squadId: string) {
     map.get(eventId)!.add(profileId);
   };
 
-  if (profileIds.length > 0) {
-    const { data: regs } = await supabaseAdmin
+  // Independent reads run together (one round trip instead of five in a row):
+  //  - this squad's registrations (joined through profiles, so no separate profile-id lookup)
+  //  - the squad's college and every squad of that college (for the shared mixed relay)
+  //  - relay teams owned by this squad, with their members
+  //  - the events catalogue (cached, same for everyone)
+  const [{ data: regs }, { data: squadRow }, { data: ownedTeams }, catalogue] = await Promise.all([
+    supabaseAdmin
       .from('registrations')
-      .select('id, kind, event_id, profile_id')
-      .in('profile_id', profileIds);
+      .select('id, kind, event_id, profile_id, profiles!inner(squad_id)')
+      .eq('profiles.squad_id', squadId),
+    supabaseAdmin
+      .from('squads')
+      .select('college_id, colleges(squads(id))')
+      .eq('id', squadId)
+      .maybeSingle(),
+    supabaseAdmin
+      .from('relay_teams')
+      .select('id, event_id, relay_members(profile_id)')
+      .eq('squad_id', squadId),
+    getEventsCatalogue(),
+  ]);
 
-    (regs || []).forEach((r: any) => {
-      if (r.kind === 'regular') regularEventsCount++;
-      else if (r.kind === 'reserve') reserveEventsCount++;
-      else if (r.kind === 'half_marathon') hmCount++;
-      else if (r.kind === 'relay' && r.event_id) {
-        relayEventIds.add(r.event_id);
-        addMember(nominations, r.event_id, r.profile_id);
-      }
-    });
-  }
+  (regs || []).forEach((r: any) => {
+    if (r.kind === 'regular') regularEventsCount++;
+    else if (r.kind === 'reserve') reserveEventsCount++;
+    else if (r.kind === 'half_marathon') hmCount++;
+    else if (r.kind === 'relay' && r.event_id) {
+      relayEventIds.add(r.event_id);
+      addMember(nominations, r.event_id, r.profile_id);
+    }
+  });
 
   // Relay teams composed on the Relay page (relay_teams + relay_members) are billed to the
   // squad that owns the team row. A mixed relay team is shared by the college and owned by
   // ONE squad, so it is billed exactly once.
-  const { data: squadRow } = await supabaseAdmin
-    .from('squads')
-    .select('college_id')
-    .eq('id', squadId)
-    .maybeSingle();
-
-  const { data: ownedTeams } = await supabaseAdmin
-    .from('relay_teams')
-    .select('id, event_id, relay_members(profile_id)')
-    .eq('squad_id', squadId);
-
   (ownedTeams || []).forEach((t: any) => {
     if (Array.isArray(t.relay_members) && t.relay_members.length > 0 && t.event_id) {
       relayEventIds.add(t.event_id);
     }
   });
 
+  const collegeRow: any = Array.isArray((squadRow as any)?.colleges) ? (squadRow as any).colleges[0] : (squadRow as any)?.colleges;
+  const siblingSquadIds: string[] = squadRow?.college_id
+    ? ((collegeRow?.squads || []) as any[]).map((x: any) => x.id).filter((id: string) => id && id !== squadId)
+    : [];
+
+  const eventById = new Map(catalogue.map((e) => [e.id, e]));
+  // Mixed relay draws members from the whole college: the sibling squad's nominations count too
+  const mixedEventIds = catalogue
+    .filter((e) => String(e.code || '').toUpperCase() === MIXED_RELAY_CODE)
+    .map((e) => e.id);
+
   // A relay nomination made at athlete registration for an event whose (mixed) team is owned
   // by the sibling squad of the same college is already billed there — don't double-charge.
-  let siblingSquadIds: string[] = [];
-  if (squadRow?.college_id) {
-    const { data: siblings } = await supabaseAdmin
-      .from('squads')
-      .select('id')
-      .eq('college_id', squadRow.college_id)
-      .neq('id', squadId);
-    siblingSquadIds = (siblings || []).map((x: any) => x.id);
-  }
+  // Both sibling reads are independent, so they also run together.
+  const candidateRelayIds = Array.from(relayEventIds);
+  const candidateMixedIds = mixedEventIds.filter((id) => relayEventIds.has(id));
+  const [{ data: siblingTeams }, { data: siblingRegs }] = await Promise.all([
+    siblingSquadIds.length > 0 && candidateRelayIds.length > 0
+      ? supabaseAdmin
+          .from('relay_teams')
+          .select('event_id, squad_id, relay_members(profile_id)')
+          .in('squad_id', siblingSquadIds)
+          .in('event_id', candidateRelayIds)
+      : Promise.resolve({ data: [] as any[] }),
+    siblingSquadIds.length > 0 && candidateMixedIds.length > 0
+      ? supabaseAdmin
+          .from('registrations')
+          .select('event_id, profile_id, profiles!inner(squad_id)')
+          .eq('kind', 'relay')
+          .in('event_id', candidateMixedIds)
+          .in('profiles.squad_id', siblingSquadIds)
+      : Promise.resolve({ data: [] as any[] }),
+  ]);
 
-  if (siblingSquadIds.length > 0 && relayEventIds.size > 0) {
-    const { data: siblingTeams } = await supabaseAdmin
-      .from('relay_teams')
-      .select('event_id, squad_id, relay_members(profile_id)')
-      .in('squad_id', siblingSquadIds)
-      .in('event_id', Array.from(relayEventIds));
+  (siblingTeams || []).forEach((t: any) => {
+    const ownedHere = (ownedTeams || []).some(
+      (o: any) => o.event_id === t.event_id && Array.isArray(o.relay_members) && o.relay_members.length > 0
+    );
+    const siblingHasMembers = Array.isArray(t.relay_members) && t.relay_members.length > 0;
+    if (!ownedHere && siblingHasMembers) relayEventIds.delete(t.event_id);
+  });
 
-    (siblingTeams || []).forEach((t: any) => {
-      const ownedHere = (ownedTeams || []).some(
-        (o: any) => o.event_id === t.event_id && Array.isArray(o.relay_members) && o.relay_members.length > 0
-      );
-      const siblingHasMembers = Array.isArray(t.relay_members) && t.relay_members.length > 0;
-      if (!ownedHere && siblingHasMembers) relayEventIds.delete(t.event_id);
-    });
-  }
+  const collegeMixedNominations = new Map<string, Set<string>>();
+  (siblingRegs || []).forEach((r: any) => addMember(collegeMixedNominations, r.event_id, r.profile_id));
 
   // Member count per billed relay team
   const relayTeams: RelayTeamFee[] = [];
   if (relayEventIds.size > 0) {
-    const { data: relayEvents } = await supabaseAdmin
-      .from('events')
-      .select('id, code, name')
-      .in('id', Array.from(relayEventIds));
-    const eventById = new Map((relayEvents || []).map((e: any) => [e.id, e]));
-
-    // Mixed relay draws members from the whole college: add the sibling squad's nominations
-    const mixedEventIds = (relayEvents || [])
-      .filter((e: any) => String(e.code || '').toUpperCase() === MIXED_RELAY_CODE)
-      .map((e: any) => e.id);
-    const collegeMixedNominations = new Map<string, Set<string>>();
-    if (mixedEventIds.length > 0 && siblingSquadIds.length > 0) {
-      const { data: siblingProfiles } = await supabaseAdmin
-        .from('profiles')
-        .select('id')
-        .in('squad_id', siblingSquadIds);
-      const siblingProfileIds = (siblingProfiles || []).map((p: any) => p.id);
-      if (siblingProfileIds.length > 0) {
-        const { data: siblingRegs } = await supabaseAdmin
-          .from('registrations')
-          .select('event_id, profile_id')
-          .eq('kind', 'relay')
-          .in('event_id', mixedEventIds)
-          .in('profile_id', siblingProfileIds);
-        (siblingRegs || []).forEach((r: any) => addMember(collegeMixedNominations, r.event_id, r.profile_id));
-      }
-    }
-
     for (const eventId of relayEventIds) {
       const members = new Set<string>(nominations.get(eventId) || []);
       (collegeMixedNominations.get(eventId) || new Set()).forEach((id) => members.add(id));
@@ -313,53 +301,55 @@ export async function getRelayReadinessIssues(squadId: string): Promise<string[]
 
   const { data: squad } = await supabaseAdmin
     .from('squads')
-    .select('id, college_id, gender')
+    .select('id, college_id, gender, colleges(squads(id, gender))')
     .eq('id', squadId)
     .maybeSingle();
   if (!squad) return ['Squad not found.'];
 
   const divisionalCodes = squad.gender === 'men' ? ['4X100M-M', '4X400M-M'] : ['4X100M-W', '4X400M-W'];
-  const { data: relayEvents } = await supabaseAdmin
-    .from('events')
-    .select('id, name, code')
-    .in('code', [...divisionalCodes, '4X400M-MIX']);
-  if (!relayEvents || relayEvents.length === 0) return issues;
+  const relayEvents = await getEventsByCodes([...divisionalCodes, MIXED_RELAY_CODE]);
+  if (relayEvents.length === 0) return issues;
+  const relayEventIds = relayEvents.map((e) => e.id);
 
-  const { data: collegeSquads } = await supabaseAdmin
-    .from('squads')
-    .select('id, gender')
-    .eq('college_id', squad.college_id);
-  const squadGender = new Map((collegeSquads || []).map((s: any) => [s.id, s.gender]));
+  const college: any = Array.isArray((squad as any).colleges) ? (squad as any).colleges[0] : (squad as any).colleges;
+  const collegeSquads: any[] = college?.squads?.length ? college.squads : [{ id: squad.id, gender: squad.gender }];
+  const squadGender = new Map(collegeSquads.map((s: any) => [s.id, s.gender]));
+  const collegeSquadIds = Array.from(squadGender.keys());
 
-  const { data: collegeProfiles } = await supabaseAdmin
-    .from('profiles')
-    .select('id, squad_id')
-    .in('squad_id', Array.from(squadGender.keys()));
-  const profileSquad = new Map((collegeProfiles || []).map((p: any) => [p.id, p.squad_id]));
-  if (profileSquad.size === 0) return issues;
-
-  const { data: nominations } = await supabaseAdmin
-    .from('registrations')
-    .select('profile_id, event_id')
-    .eq('kind', 'relay')
-    .in('event_id', relayEvents.map((e: any) => e.id))
-    .in('profile_id', Array.from(profileSquad.keys()));
+  // Nominations of the whole college (joined through profiles) and every relay team of the
+  // college for these events, fetched together instead of one query per event.
+  const [{ data: nominationRows }, { data: collegeTeams }] = await Promise.all([
+    supabaseAdmin
+      .from('registrations')
+      .select('profile_id, event_id, profiles!inner(squad_id)')
+      .eq('kind', 'relay')
+      .in('event_id', relayEventIds)
+      .in('profiles.squad_id', collegeSquadIds),
+    supabaseAdmin
+      .from('relay_teams')
+      .select('id, event_id, squad_id, relay_members(leg_order, is_reserve)')
+      .in('event_id', relayEventIds)
+      .in('squad_id', collegeSquadIds),
+  ]);
+  const profileSquad = new Map(
+    (nominationRows || []).map((n: any) => {
+      const prof = Array.isArray(n.profiles) ? n.profiles[0] : n.profiles;
+      return [n.profile_id, prof?.squad_id];
+    })
+  );
+  const nominations = nominationRows || [];
 
   for (const ev of relayEvents as any[]) {
-    const isMixed = ev.code === '4X400M-MIX';
-    const evNoms = (nominations || []).filter(
+    const isMixed = ev.code === MIXED_RELAY_CODE;
+    const evNoms = nominations.filter(
       (n: any) => n.event_id === ev.id && (isMixed || profileSquad.get(n.profile_id) === squadId)
     );
     if (evNoms.length === 0) continue;
 
     // Find the team: own squad for divisional; any college squad for mixed
-    const teamQuery = supabaseAdmin
-      .from('relay_teams')
-      .select('id, relay_members(leg_order, is_reserve)')
-      .eq('event_id', ev.id);
-    const { data: teams } = isMixed
-      ? await teamQuery.in('squad_id', Array.from(squadGender.keys()))
-      : await teamQuery.eq('squad_id', squadId);
+    const teams = (collegeTeams || []).filter(
+      (t: any) => t.event_id === ev.id && (isMixed || t.squad_id === squadId)
+    );
     const members: any[] = (teams || []).flatMap((t: any) => t.relay_members || []);
     const legs = members.filter((m) => !m.is_reserve && m.leg_order).length;
 

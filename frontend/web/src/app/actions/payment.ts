@@ -66,51 +66,52 @@ export async function getSquadFeeBreakdownAction(): Promise<{
 }> {
   const session = await requireSquad();
 
-  // Fetch fees + relay readiness
-  const [feeCalc, relayIssues] = await Promise.all([
+  // Fees, relay readiness, meet settings, squad + college (for the invoice), athlete count and
+  // payment history are independent reads: fetch them together.
+  const [
+    feeCalc,
+    relayIssues,
+    { data: settings },
+    { data: squad },
+    { count: athletesCount },
+    { data: payments },
+  ] = await Promise.all([
     calculateSquadFees(session.squadId),
     getRelayReadinessIssues(session.squadId),
+    supabaseAdmin
+      .from('meet_settings')
+      .select('host_upi_id, host_account_name, registration_open')
+      .limit(1)
+      .maybeSingle(),
+    supabaseAdmin
+      .from('squads')
+      .select(`
+        payment_status,
+        roster_locked,
+        gender,
+        ped_name,
+        ped_phone,
+        ped_email,
+        squad_code,
+        colleges (
+          id,
+          name,
+          code,
+          district
+        )
+      `)
+      .eq('id', session.squadId)
+      .single(),
+    supabaseAdmin
+      .from('profiles')
+      .select('id', { count: 'exact', head: true })
+      .eq('squad_id', session.squadId),
+    supabaseAdmin
+      .from('payments')
+      .select('*')
+      .eq('squad_id', session.squadId)
+      .order('created_at', { ascending: false }),
   ]);
-
-  // Fetch meet settings
-  const { data: settings } = await supabaseAdmin
-    .from('meet_settings')
-    .select('host_upi_id, host_account_name, registration_open')
-    .limit(1)
-    .maybeSingle();
-
-  // Fetch squad status and college details for invoice
-  const { data: squad } = await supabaseAdmin
-    .from('squads')
-    .select(`
-      payment_status,
-      roster_locked,
-      gender,
-      ped_name,
-      ped_phone,
-      ped_email,
-      squad_code,
-      colleges (
-        id,
-        name,
-        code,
-        district
-      )
-    `)
-    .eq('id', session.squadId)
-    .single();
-
-  const { count: athletesCount } = await supabaseAdmin
-    .from('profiles')
-    .select('id', { count: 'exact', head: true })
-    .eq('squad_id', session.squadId);
-
-  // Fetch payment history
-  const { data: payments } = await supabaseAdmin
-    .from('payments')
-    .select('*')
-    .eq('squad_id', session.squadId)
-    .order('created_at', { ascending: false });
 
   const totalPaid = totalCredited(payments as any[]);
 
@@ -157,6 +158,9 @@ export async function getSquadFeeBreakdownAction(): Promise<{
 /**
  * Submits an offline UPI payment transaction for verification by the host college finance desk.
  */
+/** Set once the payment-proofs bucket was confirmed in this server instance. */
+let paymentBucketEnsured = false;
+
 export async function submitPaymentAction(formData: FormData): Promise<{ success: boolean; error?: string }> {
   try {
     const session = await requireSquad();
@@ -181,11 +185,28 @@ export async function submitPaymentAction(formData: FormData): Promise<{ success
 
     // Relay readiness: payment freezes the roster, so every nominated relay must have a full lineup
     // (Skipped when already locked — e.g. re-upload after rejection — since the PED cannot edit then.)
-    const { data: lockRow } = await supabaseAdmin
-      .from('squads')
-      .select('roster_locked, ped_name, ped_phone')
-      .eq('id', session.squadId)
-      .maybeSingle();
+    // All reads the checks below need are independent, so they are fetched together and the
+    // checks then run in their original order.
+    const [{ data: lockRow }, relayIssuesIfUnlocked, { count: pendingCount }, feeCalc, { data: pastPayments }] =
+      await Promise.all([
+        supabaseAdmin
+          .from('squads')
+          .select('roster_locked, ped_name, ped_phone')
+          .eq('id', session.squadId)
+          .maybeSingle(),
+        getRelayReadinessIssues(session.squadId),
+        supabaseAdmin
+          .from('payments')
+          .select('id', { count: 'exact', head: true })
+          .eq('squad_id', session.squadId)
+          .eq('status', 'SUBMITTED'),
+        calculateSquadFees(session.squadId),
+        supabaseAdmin
+          .from('payments')
+          .select('*')
+          .eq('squad_id', session.squadId)
+          .eq('status', 'VERIFIED'),
+      ]);
 
     // The invoice, registration report and Finance Desk need a reachable PED
     if (!String(lockRow?.ped_name || '').trim() || !String(lockRow?.ped_phone || '').trim()) {
@@ -194,7 +215,7 @@ export async function submitPaymentAction(formData: FormData): Promise<{ success
         error: 'Please add the PED / Sports Director name and mobile number on the Contingent Overview page before submitting payment.',
       };
     }
-    const relayIssues = lockRow?.roster_locked === true ? [] : await getRelayReadinessIssues(session.squadId);
+    const relayIssues = lockRow?.roster_locked === true ? [] : relayIssuesIfUnlocked;
     if (relayIssues.length > 0) {
       return {
         success: false,
@@ -205,12 +226,6 @@ export async function submitPaymentAction(formData: FormData): Promise<{ success
     // Lifecycle guard: only one payment may be awaiting verification at a time.
     // DRAFT and REJECTED squads may submit; a VERIFIED squad may submit only if an admin
     // emergency-unlocked the roster and a differential balance is now due (checked below).
-    const { count: pendingCount } = await supabaseAdmin
-      .from('payments')
-      .select('id', { count: 'exact', head: true })
-      .eq('squad_id', session.squadId)
-      .eq('status', 'SUBMITTED');
-
     if ((pendingCount || 0) > 0) {
       return {
         success: false,
@@ -219,7 +234,6 @@ export async function submitPaymentAction(formData: FormData): Promise<{ success
     }
 
     // Get expected total fee calculated accurately with ₹100 per relay member (first 4 per team)
-    const feeCalc = await calculateSquadFees(session.squadId);
     const totalAmount = feeCalc.totalAmount;
     if (totalAmount <= 0) {
       return {
@@ -230,12 +244,6 @@ export async function submitPaymentAction(formData: FormData): Promise<{ success
 
     // Check prior verified payments to prevent duplicate payments on settled rosters
     // Only bank-confirmed amounts (amount_received) count as already paid
-    const { data: pastPayments } = await supabaseAdmin
-      .from('payments')
-      .select('*')
-      .eq('squad_id', session.squadId)
-      .eq('status', 'VERIFIED');
-
     const priorVerified = totalCredited(pastPayments as any[]);
     const balanceDue = Math.max(0, totalAmount - priorVerified);
 
@@ -272,7 +280,10 @@ export async function submitPaymentAction(formData: FormData): Promise<{ success
 
     try {
       // Private bucket: proofs are only viewable through signed links on the admin payments page
-      await supabaseAdmin.storage.createBucket('payment-proofs', { public: false }).catch(() => { });
+      if (!paymentBucketEnsured) {
+        await supabaseAdmin.storage.createBucket('payment-proofs', { public: false }).catch(() => { });
+        paymentBucketEnsured = true;
+      }
 
       if (screenshotFile && screenshotFile.size > 0 && typeof screenshotFile.arrayBuffer === 'function') {
         if (screenshotFile.size > MAX_FILE_SIZE) {

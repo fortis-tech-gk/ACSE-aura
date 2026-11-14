@@ -179,7 +179,8 @@ export default function PaymentClient({ breakdown, payments, squadCode, athletes
         setSuccess(true);
         setUtr('');
         setScreenshotData(null);
-        window.location.reload();
+        // The action revalidates this page: the locked status and payment history arrive with
+        // its response, so no full page reload is needed.
       } else {
         setError(res.error || 'Failed to submit payment.');
       }

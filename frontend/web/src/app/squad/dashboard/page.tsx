@@ -17,12 +17,23 @@ export const metadata = {
 export default async function SquadDashboardPage() {
   const session = await requireSquad();
 
-  // Fetch squad details from DB
-  const { data: squad } = await supabaseAdmin
-    .from('squads')
-    .select('*, colleges(*)')
-    .eq('id', session.squadId)
-    .single();
+  // Squad + college, meet settings, the roster, relay count and fees are independent reads:
+  // fetch them all together instead of one after another.
+  const [{ data: squad }, { data: meetSettings }, athletes, relayCount, squadFees] = await Promise.all([
+    supabaseAdmin
+      .from('squads')
+      .select('*, colleges(*)')
+      .eq('id', session.squadId)
+      .single(),
+    supabaseAdmin
+      .from('meet_settings')
+      .select('registration_open')
+      .limit(1)
+      .maybeSingle(),
+    listSquadAthletesAction(),
+    getSquadRelayCountAction(),
+    calculateSquadFees(session.squadId),
+  ]);
 
   const college = Array.isArray(squad?.colleges) ? squad.colleges[0] : squad?.colleges;
   const isMen = squad?.gender === 'men' || session.gender === 'men';
@@ -37,18 +48,11 @@ export default async function SquadDashboardPage() {
     paymentStatus + (rosterLocked ? ' · 🔒 Roster Locked' : '');
 
   // Fetch championship registration status
-  const { data: meetSettings } = await supabaseAdmin
-    .from('meet_settings')
-    .select('registration_open')
-    .limit(1)
-    .maybeSingle();
   const isRegistrationOpen = meetSettings ? meetSettings.registration_open !== false : true;
   const lateEntryOpen = isLateEntryWindow(isRegistrationOpen, squad);
   const canAddAthletes = canEditRoster(isRegistrationOpen, squad);
 
   // Fetch athletes and relay count
-  const athletes = await listSquadAthletesAction();
-  const relayCount = await getSquadRelayCountAction();
 
   const formattedAthletes = athletes.map((a: any) => ({
     ...a,
@@ -67,7 +71,7 @@ export default async function SquadDashboardPage() {
 
   // Same fee calculation as the payment page: ₹100 per regular / Half Marathon entry and,
   // per relay team, ₹100 for each of the first 4 members (members 5 & 6 free).
-  const totalSquadFee = (await calculateSquadFees(session.squadId)).totalAmount;
+  const totalSquadFee = squadFees.totalAmount;
 
   const billableEntries = formattedAthletes.reduce((acc: number, athlete: any) => {
     const billable = athlete.registrations.filter((r: any) => r.kind !== 'reserve').length;
