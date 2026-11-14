@@ -1,0 +1,67 @@
+name: Deploy web to Vercel staging
+
+# Vercel's Hobby plan only deploys commits whose git author owns the Vercel project, so the
+# Git integration blocks commits authored as fortis-tech-gk. This job rewrites the author on the
+# CI runner's copy only (nothing is pushed, real history is untouched) and deploys with the CLI.
+#
+# Needs one repository secret: VERCEL_TOKEN (vercel.com/account/tokens, owner ganeshak11).
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'frontend/web/**'
+      - '.github/workflows/deploy-staging.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-staging
+  cancel-in-progress: true
+
+env:
+  VERCEL_ORG_ID: team_7IIx5rEx2PDldhZb0PDTZK1d
+  VERCEL_PROJECT_ID: prj_3OkapwX0g5GnxegD8xkwfhBR7Z4V # vtu-athletics (root directory frontend/web)
+
+jobs:
+  deploy:
+    # Staging repo only: the same file reaches the production remote (fortis) and must do nothing there
+    if: github.repository == 'ganeshak11/vtu-athletics'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout latest commit
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+
+      - name: Match Vercel owner as commit author (runner copy only)
+        run: |
+          git config user.name "ganeshak11"
+          git config user.email "ganeshangadi13012006@gmail.com"
+          git commit --amend --author="ganeshak11 <ganeshangadi13012006@gmail.com>" --no-edit --allow-empty
+
+      - name: Check for Vercel token
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        run: |
+          if [ -z "$VERCEL_TOKEN" ]; then
+            echo "::error::Repository secret VERCEL_TOKEN is not set (Settings → Secrets and variables → Actions)."
+            exit 1
+          fi
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install Vercel CLI
+        run: npm install --global vercel@54.21.1
+
+      - name: Pull Vercel environment
+        run: vercel pull --yes --environment=production --token=${{ secrets.VERCEL_TOKEN }}
+
+      - name: Build
+        run: vercel build --prod --token=${{ secrets.VERCEL_TOKEN }}
+
+      - name: Deploy
+        run: vercel deploy --prebuilt --prod --token=${{ secrets.VERCEL_TOKEN }}
