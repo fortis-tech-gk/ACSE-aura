@@ -9,7 +9,7 @@ import { one } from '@/lib/officials/heats';
 import type { AthleteRef, OpPayload } from '@/lib/officials/types';
 import { ScanPanel } from './ScanPanel';
 import { HeatHeader } from './HeatHeader';
-import { Button, Card, Muted, OfflineBanner, Pill, colors } from '@/components/ui';
+import { Button, Card, Muted, OfflineBanner, Pill, colors, shadow } from '@/components/ui';
 
 type Member = { id: string; leg_order: number | null; is_reserve: boolean; profiles: { id: string; sslc_name: string; bid_number: number | null; squads: { gender: string } | null } | null };
 type Entry = {
@@ -238,7 +238,7 @@ export function CallRoomHeat({ heatId }: { heatId: string }) {
       <HeatHeader data={data.heat} />
 
       <View style={s.buttons}>
-        {(st === 'SCHEDULED') && <Button title="Open call room" onPress={openCallRoom} loading={busy} style={{ flexGrow: 1 }} />}
+        {(st === 'SCHEDULED') && <Button title="Open call room" icon="door" variant="gold" onPress={openCallRoom} loading={busy} style={{ flexGrow: 1 }} />}
         {(st === 'SCHEDULED' || st === 'CALL_ROOM') && (
           <Button title="Close & send to track" variant={st === 'CALL_ROOM' ? 'primary' : 'secondary'} onPress={sendToTrack} loading={busy} style={{ flexGrow: 1 }} />
         )}
@@ -310,18 +310,18 @@ const s = StyleSheet.create({
   buttons: { flexDirection: 'row', gap: 10, flexWrap: 'wrap', alignItems: 'center' },
   wideRow: { flexDirection: 'row', gap: 18, alignItems: 'flex-start' },
   counts: { flexDirection: 'row', gap: 8 },
-  count: { flex: 1, backgroundColor: '#fff', borderRadius: 14, borderWidth: 1, borderColor: colors.border, padding: 10, alignItems: 'center' },
+  count: { flex: 1, backgroundColor: '#fff', borderRadius: 16, borderWidth: 1, borderColor: colors.border, padding: 10, alignItems: 'center', ...shadow },
   countN: { fontSize: 22, fontWeight: '900' },
-  countL: { fontSize: 11, fontWeight: '700', color: colors.muted },
+  countL: { fontSize: 11, fontWeight: '800', color: colors.muted, textTransform: 'uppercase', letterSpacing: 0.5 },
   entry: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  lane: { width: 46, alignItems: 'center', backgroundColor: colors.navy, borderRadius: 10, paddingVertical: 4 },
-  laneN: { color: '#fff', fontSize: 20, fontWeight: '900' },
-  laneL: { color: '#c7d2fe', fontSize: 9, fontWeight: '800', textTransform: 'uppercase' },
+  lane: { width: 48, alignItems: 'center', backgroundColor: colors.navy, borderRadius: 12, paddingVertical: 5, borderBottomWidth: 3, borderBottomColor: colors.gold },
+  laneN: { color: colors.goldBright, fontSize: 20, fontWeight: '900' },
+  laneL: { color: colors.onNavyMuted, fontSize: 9, fontWeight: '800', textTransform: 'uppercase' },
   name: { fontSize: 16, fontWeight: '800', color: colors.text },
   members: { gap: 2, paddingLeft: 58 },
   member: { fontSize: 13, color: colors.text },
   actions: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, alignItems: 'center' },
-  chip: { paddingHorizontal: 14, paddingVertical: 9, borderRadius: 10, backgroundColor: colors.blueSoft },
-  chipText: { color: colors.blue, fontWeight: '800', fontSize: 14 },
+  chip: { paddingHorizontal: 14, paddingVertical: 9, borderRadius: 12, backgroundColor: colors.goldSoft, borderWidth: 1, borderColor: '#ead9ac' },
+  chipText: { color: colors.navy, fontWeight: '800', fontSize: 14 },
   swapName: { fontSize: 14, fontWeight: '700', color: colors.text, minWidth: 90, flexShrink: 1 },
 });

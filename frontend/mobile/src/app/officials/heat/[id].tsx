@@ -8,11 +8,11 @@ import { TrackReferee } from '@/components/officials/TrackReferee';
 import { FieldReferee } from '@/components/officials/FieldReferee';
 import { VerticalReferee } from '@/components/officials/VerticalReferee';
 import { SyncPill } from '@/components/officials/ScanPanel';
-import { Screen, colors } from '@/components/ui';
+import { AppHeader, Screen, colors } from '@/components/ui';
 
 /** One heat / flight: the call room view or the referee's result entry, by duty and event type */
 export default function HeatScreen() {
-  const { id, kind, startAt } = useLocalSearchParams<{ id: string; kind?: HeatKind; startAt?: string }>();
+  const { id, kind, startAt, title } = useLocalSearchParams<{ id: string; kind?: HeatKind; startAt?: string; title?: string }>();
   const { status, staff, pendingCount, sessionExpired, syncing } = useOfficialSession();
 
   if (status === 'loading') {
@@ -26,10 +26,19 @@ export default function HeatScreen() {
 
   const isCallRoom = staff.role === 'call_room_official';
   return (
-    <Screen edges={['top', 'bottom']} maxWidth={1280}>
-      <View style={{ alignItems: 'flex-end', marginBottom: -8 }}>
-        <SyncPill pending={pendingCount} expired={sessionExpired} syncing={syncing} onPress={() => router.push('/officials/history')} />
-      </View>
+    <Screen
+      edges={['bottom']}
+      maxWidth={1280}
+      header={
+        <AppHeader
+          back="All heats"
+          eyebrow={isCallRoom ? 'Call room' : kind === 'field' ? 'Referee · distance card' : kind === 'vertical' ? 'Referee · result card' : 'Referee · track'}
+          title={title || 'Heat'}
+          maxWidth={1280}
+          right={<SyncPill pending={pendingCount} expired={sessionExpired} syncing={syncing} onPress={() => router.push('/officials/history')} />}
+        />
+      }
+    >
       {isCallRoom ? (
         <CallRoomHeat heatId={id} />
       ) : kind === 'field' ? (

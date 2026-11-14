@@ -3,7 +3,7 @@ import { Image, Platform, Pressable, StyleSheet, Text, TextInput, Vibration, Vie
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import type { Outcome } from '@/lib/officials/session';
 import type { AthleteRef } from '@/lib/officials/types';
-import { Button, Muted, colors, useNow } from '@/components/ui';
+import { Button, Icon, Muted, colors, useNow } from '@/components/ui';
 
 const TONE = {
   green: { bg: '#047857', icon: '✓' },
@@ -168,10 +168,11 @@ function ResultCard({ result, onClose, large }: { result: Outcome; onClose: () =
 }
 
 export function SyncPill({ pending, expired, syncing, onPress }: { pending: number; expired: boolean; syncing: boolean; onPress: () => void }) {
-  const tone = expired ? { bg: colors.redSoft, fg: colors.red } : pending ? { bg: colors.amberSoft, fg: colors.amber } : { bg: colors.greenSoft, fg: colors.green };
-  const label = expired ? 'Log in to sync' : pending ? `${syncing ? 'Syncing' : 'Waiting'} · ${pending}` : 'All synced';
+  const tone = expired ? { bg: colors.redSoft, fg: colors.red } : pending ? { bg: colors.amberSoft, fg: colors.amber } : { bg: 'rgba(220,243,231,0.14)', fg: '#7fe0b0' };
+  const label = expired ? 'Log in to sync' : pending ? `${syncing ? 'Syncing' : 'Waiting'} · ${pending}` : 'Synced';
   return (
     <Pressable onPress={onPress} accessibilityRole="button" accessibilityLabel={`Sync status: ${label}. Open scan history.`} style={[s.pill, { backgroundColor: tone.bg }]} hitSlop={8}>
+      <Icon name={expired || pending ? 'history' : 'synced'} size={15} color={tone.fg} />
       <Text style={[s.pillText, { color: tone.fg }]}>{label}</Text>
     </Pressable>
   );
@@ -189,11 +190,11 @@ export function RosterNote({ count, at }: { count: number; at: number | null }) 
 }
 
 const s = StyleSheet.create({
-  cameraBox: { borderRadius: 20, overflow: 'hidden', backgroundColor: '#000' },
+  cameraBox: { borderRadius: 22, overflow: 'hidden', backgroundColor: '#000', borderWidth: 3, borderColor: colors.navy },
   permission: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 20, gap: 14, backgroundColor: colors.navy },
   permissionText: { color: '#fff', fontSize: 15, textAlign: 'center' },
   frameWrap: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, alignItems: 'center', justifyContent: 'center', gap: 14 },
-  frame: { borderWidth: 3, borderColor: colors.gold, borderRadius: 22 },
+  frame: { borderWidth: 3, borderColor: colors.goldBright, borderRadius: 22 },
   cameraHint: { color: '#fff', fontWeight: '700', backgroundColor: 'rgba(0,0,0,0.55)', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 10, overflow: 'hidden' },
   result: { padding: 18, gap: 14, justifyContent: 'center' },
   resultTop: { flexDirection: 'row', alignItems: 'center', gap: 14 },
@@ -208,7 +209,7 @@ const s = StyleSheet.create({
   detail: { color: '#fff', fontSize: 16, fontWeight: '600', lineHeight: 22 },
   tapNext: { color: '#fff', opacity: 0.8, fontSize: 13, textAlign: 'center', marginTop: Platform.OS === 'web' ? 0 : 4 },
   bibRow: { flexDirection: 'row', gap: 10, alignItems: 'center' },
-  bibInput: { flex: 1, minWidth: 0, minHeight: 50, borderWidth: 1, borderColor: colors.border, borderRadius: 12, paddingHorizontal: 14, fontSize: 18, fontWeight: '700', backgroundColor: '#fff', color: colors.text },
-  pill: { borderRadius: 999, paddingHorizontal: 12, paddingVertical: 6 },
+  bibInput: { flex: 1, minWidth: 0, minHeight: 52, borderWidth: 1.5, borderColor: colors.border, borderRadius: 14, paddingHorizontal: 14, fontSize: 18, fontWeight: '800', backgroundColor: '#fffdf8', color: colors.text },
+  pill: { flexDirection: 'row', alignItems: 'center', gap: 5, borderRadius: 999, paddingHorizontal: 11, paddingVertical: 7 },
   pillText: { fontSize: 13, fontWeight: '800' },
 });

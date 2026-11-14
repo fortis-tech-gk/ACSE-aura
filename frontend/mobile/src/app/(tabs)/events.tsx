@@ -5,10 +5,10 @@ import { dayKey, fmtDay, fmtTime, kindLabel, stageLabel } from '@/lib/format';
 import { isRemindable } from '@/lib/reminders';
 import { REMINDER_OFFSETS_MIN } from '@/lib/config';
 import type { ScheduleEntry } from '@/lib/types';
-import { Card, Muted, OfflineBanner, Pill, Screen, Title, colors } from '@/components/ui';
+import { AppHeader, Card, Icon, Muted, OfflineBanner, Pill, Screen, SectionLabel, colors } from '@/components/ui';
 
 function statusPill(e: ScheduleEntry) {
-  if (e.reported) return <Pill label="✓ Reported" tone="green" />;
+  if (e.reported) return <Pill label="Reported" icon="check" tone="green" />;
   switch (e.status) {
     case 'CALL_ROOM':
     case 'CALL_ROOM_OPEN':
@@ -42,12 +42,12 @@ export default function EventsScreen() {
   }
 
   return (
-    <Screen refreshing={refreshing} onRefresh={refresh}>
+    <Screen
+      refreshing={refreshing}
+      onRefresh={refresh}
+      header={<AppHeader eyebrow="AURA Athletes" title="My Events" subtitle={`Reminders ${REMINDER_OFFSETS_MIN.join(', ')} min before each call room`} />}
+    >
       <OfflineBanner offline={offline} lastSyncedAt={lastSyncedAt} />
-      <Title>My Events</Title>
-      <Muted>
-        You’ll get reminders {REMINDER_OFFSETS_MIN.join(', ')} minutes before each call room time. Pull down to refresh.
-      </Muted>
 
       {schedule.length === 0 && (
         <Card>
@@ -57,7 +57,7 @@ export default function EventsScreen() {
 
       {groups.map((g) => (
         <View key={g.key} style={{ gap: 10 }}>
-          <Text style={s.day}>{g.label}</Text>
+          <SectionLabel>{g.label}</SectionLabel>
           {g.items.map((e) => {
             const tag = e.isRelayReserve ? 'Relay reserve' : kindLabel(e.kind);
             const detail = [stageLabel(e.stage), e.heatNumber ? `Heat ${e.heatNumber}` : '', e.lane ? `Lane ${e.lane}` : '', e.relayLeg ? `Leg ${e.relayLeg}` : '']
@@ -69,15 +69,15 @@ export default function EventsScreen() {
                   <Text style={s.event}>{e.eventName}</Text>
                   {statusPill(e)}
                 </View>
-                {!!tag && <Pill label={tag} tone="grey" />}
+                {!!tag && <Pill label={tag} tone="gold" />}
                 <Muted>
                   {detail || stageLabel(e.stage) || 'Event'}
                   {!e.heatNumber && !e.lane ? ' · Heat & lane to be announced' : ''}
                 </Muted>
                 <View style={s.times}>
-                  <View style={s.timeBox}>
-                    <Text style={s.timeLabel}>CALL ROOM</Text>
-                    <Text style={[s.timeValue, { color: colors.red }]}>
+                  <View style={[s.timeBox, s.timeBoxNavy]}>
+                    <Text style={[s.timeLabel, { color: colors.onNavyMuted }]}>CALL ROOM</Text>
+                    <Text style={[s.timeValue, { color: colors.goldBright }]}>
                       {fmtTime(e.callRoomAt)}
                       {e.callRoomEstimated ? '*' : ''}
                     </Text>
@@ -89,7 +89,10 @@ export default function EventsScreen() {
                 </View>
                 {e.callRoomEstimated && <Muted style={{ fontSize: 12 }}>* Approximate — report 30 minutes before the start.</Muted>}
                 {isRemindable(e) ? (
-                  <Text style={s.reminder}>🔔 Reminders set</Text>
+                  <View style={s.reminderRow}>
+                    <Icon name="bell" size={15} color={colors.green} />
+                    <Text style={s.reminder}>Reminders set</Text>
+                  </View>
                 ) : e.kind === 'reserve' || e.isRelayReserve ? (
                   <Muted style={{ fontSize: 12 }}>No reminders for reserve entries — your team manager will call you if needed.</Muted>
                 ) : null}
@@ -103,12 +106,13 @@ export default function EventsScreen() {
 }
 
 const s = StyleSheet.create({
-  day: { fontSize: 15, fontWeight: '800', color: colors.navy, marginTop: 6 },
   rowTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10 },
-  event: { fontSize: 18, fontWeight: '800', color: colors.text, flex: 1 },
+  event: { fontSize: 18, fontWeight: '900', color: colors.navy, flex: 1 },
   times: { flexDirection: 'row', gap: 10 },
-  timeBox: { flex: 1, backgroundColor: '#f8fafc', borderRadius: 12, padding: 10, borderWidth: 1, borderColor: colors.border },
+  timeBox: { flex: 1, backgroundColor: '#fbf8f1', borderRadius: 14, padding: 10, borderWidth: 1, borderColor: colors.border },
+  timeBoxNavy: { backgroundColor: colors.navy, borderColor: colors.navy },
   timeLabel: { fontSize: 11, fontWeight: '800', color: colors.muted, letterSpacing: 1 },
-  timeValue: { fontSize: 20, fontWeight: '800', color: colors.text },
-  reminder: { color: colors.green, fontWeight: '700', fontSize: 13 },
+  timeValue: { fontSize: 21, fontWeight: '900', color: colors.navy },
+  reminderRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  reminder: { color: colors.green, fontWeight: '800', fontSize: 13 },
 });

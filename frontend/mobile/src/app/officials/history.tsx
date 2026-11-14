@@ -1,10 +1,9 @@
 import React, { useMemo, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { router } from 'expo-router';
+import { StyleSheet, Text, View } from 'react-native';
 import { useOfficialSession } from '@/lib/officials/session';
 import type { QueuedScan } from '@/lib/officials/types';
 import { fmtTime } from '@/lib/format';
-import { Button, Card, Muted, Pill, Screen, Title, colors } from '@/components/ui';
+import { AppHeader, Button, Card, Muted, Pill, Screen, Segmented, colors } from '@/components/ui';
 
 const KIND: Record<QueuedScan['kind'], string> = { meal: 'Meal', checkin: 'Hostel check-in', accreditation: 'Accreditation', op: 'Entry' };
 const MEAL: Record<string, string> = { BREAKFAST: 'Breakfast', LUNCH: 'Lunch', SNACKS: 'Snacks', DINNER: 'Dinner' };
@@ -22,11 +21,13 @@ export default function ScanHistory() {
   }, [queue, filter]);
 
   return (
-    <Screen edges={['top', 'bottom']} refreshing={syncing} onRefresh={syncNow} maxWidth={860}>
-      <Pressable onPress={() => router.back()} accessibilityRole="button" hitSlop={12} style={{ alignSelf: 'flex-start' }}>
-        <Text style={{ color: colors.blue, fontWeight: '700', fontSize: 15 }}>‹ Scanner</Text>
-      </Pressable>
-      <Title>Scans on this device</Title>
+    <Screen
+      edges={['bottom']}
+      refreshing={syncing}
+      onRefresh={syncNow}
+      maxWidth={860}
+      header={<AppHeader back="Back" eyebrow="AURA Officials" title="Saved on this phone" subtitle="Scans and entries, and whether they reached the server" maxWidth={860} />}
+    >
 
       <Card style={{ gap: 10 }}>
         <Text style={s.big}>
@@ -44,11 +45,15 @@ export default function ScanHistory() {
         {pendingCount > 0 && !sessionExpired && <Button title="Send now" onPress={syncNow} loading={syncing} />}
       </Card>
 
-      <View style={s.tabs}>
-        <Tab label={`All (${queue.length})`} active={filter === 'all'} onPress={() => setFilter('all')} />
-        <Tab label={`Waiting (${pendingCount})`} active={filter === 'pending'} onPress={() => setFilter('pending')} />
-        <Tab label={`Refused (${rejected})`} active={filter === 'rejected'} onPress={() => setFilter('rejected')} />
-      </View>
+      <Segmented
+        value={filter}
+        onChange={setFilter}
+        options={[
+          { key: 'all', label: `All (${queue.length})` },
+          { key: 'pending', label: `Waiting (${pendingCount})` },
+          { key: 'rejected', label: `Refused (${rejected})` },
+        ]}
+      />
 
       {list.length === 0 && (
         <Card>
@@ -88,20 +93,8 @@ export default function ScanHistory() {
   );
 }
 
-function Tab({ label, active, onPress }: { label: string; active: boolean; onPress: () => void }) {
-  return (
-    <Pressable onPress={onPress} accessibilityRole="tab" accessibilityState={{ selected: active }} style={[s.tab, active && s.tabActive]}>
-      <Text style={[s.tabText, active && { color: colors.navy }]}>{label}</Text>
-    </Pressable>
-  );
-}
-
 const s = StyleSheet.create({
   big: { fontSize: 20, fontWeight: '900', color: colors.navy },
-  tabs: { flexDirection: 'row', backgroundColor: '#e7ebf3', borderRadius: 12, padding: 4, gap: 4 },
-  tab: { flex: 1, paddingVertical: 9, borderRadius: 9, alignItems: 'center' },
-  tabActive: { backgroundColor: '#fff' },
-  tabText: { fontSize: 13, fontWeight: '700', color: colors.muted },
   row: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 },
   kind: { fontSize: 15, fontWeight: '800', color: colors.text },
   who: { fontSize: 15, color: colors.text },

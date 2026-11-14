@@ -3,6 +3,8 @@ import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import * as Notifications from 'expo-notifications';
+import { useFonts } from 'expo-font';
+import { Cinzel_700Bold, Cinzel_900Black } from '@expo-google-fonts/cinzel';
 import { AthleteSessionProvider, useAthleteSession } from '@/lib/athlete-session';
 
 // Show reminders and pushes even while the app is open
@@ -30,12 +32,14 @@ function PushRefresh() {
 }
 
 export default function RootLayout() {
+  // Titles use Cinzel (the ID card's display face); until it loads they show in the system serif
+  useFonts({ Cinzel_700Bold, Cinzel_900Black });
   return (
     <SafeAreaProvider>
       <AthleteSessionProvider>
         <PushRefresh />
-        <StatusBar style="dark" />
-        <Stack screenOptions={{ headerShown: false }}>
+        <StatusBar style="light" />
+        <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: '#f6f3ec' } }}>
           <Stack.Screen name="index" />
           <Stack.Screen name="login" />
           <Stack.Screen name="scan" options={{ presentation: 'modal' }} />

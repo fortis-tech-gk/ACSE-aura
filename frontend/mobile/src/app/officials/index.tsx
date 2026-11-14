@@ -8,7 +8,7 @@ import { api } from '@/lib/api';
 import { useOfficialsLayout } from '@/lib/officials/layout';
 import { RosterNote, ScanPanel, SyncPill } from '@/components/officials/ScanPanel';
 import { HeatList } from '@/components/officials/HeatList';
-import { Card, Muted, Screen, colors } from '@/components/ui';
+import { AppHeader, Card, Icon, Muted, Screen, SectionLabel, Stat, colors } from '@/components/ui';
 
 const ROLE_TITLE: Record<string, string> = {
   food_volunteer: 'Food counter',
@@ -46,20 +46,29 @@ export default function OfficialsHome() {
   }
 
   return (
-    <Screen maxWidth={1280}>
-      <View style={s.header}>
-        <View style={{ flex: 1 }}>
-          <Text style={s.role}>{ROLE_TITLE[staff.role] || staff.role}</Text>
-          <Muted style={{ fontSize: 13 }} >{staff.displayName}</Muted>
-        </View>
-        <SyncPill pending={pendingCount} expired={sessionExpired} syncing={syncing} onPress={() => router.push('/officials/history')} />
-        <Pressable onPress={confirmLogout} accessibilityRole="button" accessibilityLabel="Log out" hitSlop={10} style={s.logout}>
-          <Text style={{ fontSize: 18 }}>⏻</Text>
-        </Pressable>
-      </View>
+    <Screen
+      maxWidth={1280}
+      header={
+        <AppHeader
+          eyebrow="AURA Officials"
+          title={ROLE_TITLE[staff.role] || staff.role}
+          subtitle={staff.displayName}
+          maxWidth={1280}
+          right={
+            <View style={s.headerRight}>
+              <SyncPill pending={pendingCount} expired={sessionExpired} syncing={syncing} onPress={() => router.push('/officials/history')} />
+              <Pressable onPress={confirmLogout} accessibilityRole="button" accessibilityLabel="Log out" hitSlop={10} style={s.logout}>
+                <Icon name="logout" size={20} color={colors.goldBright} />
+              </Pressable>
+            </View>
+          }
+        />
+      }
+    >
 
       {sessionExpired && (
         <Pressable onPress={() => logout().then(() => router.replace('/officials/login'))} style={s.expired} accessibilityRole="button">
+          <Icon name="warning" size={18} color={colors.red} />
           <Text style={s.expiredText}>Your login has expired. Tap to log in again — saved scans will be sent after.</Text>
         </Pressable>
       )}
@@ -131,6 +140,7 @@ function FoodDesk({ token }: { token: string | null }) {
 
   const controls = (
     <View style={{ gap: 10 }}>
+      <SectionLabel>Meal</SectionLabel>
       <View style={s.chips} accessibilityRole="radiogroup">
         {MEALS.map((m) => {
           const active = m.key === meal;
@@ -145,7 +155,6 @@ function FoodDesk({ token }: { token: string | null }) {
               }}
               style={[s.chip, active && s.chipActive]}
             >
-              <Text style={{ fontSize: 20 }}>{m.icon}</Text>
               <Text style={[s.chipText, active && s.chipTextActive]}>{m.label}</Text>
             </Pressable>
           );
@@ -195,7 +204,7 @@ function WardenDesk({ token }: { token: string | null }) {
 
   const controls = (
       <Card style={{ gap: 10 }}>
-        <Text style={s.cardTitle}>Hostel</Text>
+        <SectionLabel>Hostel</SectionLabel>
         <View style={s.chips}>
           <HostelChip label="Allotted to college" active={hostelId === null} onPress={() => setHostelId(null)} />
           {hostels.map((h) => (
@@ -296,33 +305,19 @@ function HostelChip({ label, active, onPress }: { label: string; active: boolean
   );
 }
 
-function Stat({ label, value }: { label: string; value: string }) {
-  return (
-    <View style={s.stat}>
-      <Text style={s.statValue}>{value}</Text>
-      <Text style={s.statLabel}>{label}</Text>
-    </View>
-  );
-}
-
 const s = StyleSheet.create({
-  header: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  role: { fontSize: 22, fontWeight: '900', color: colors.navy },
-  logout: { width: 40, height: 40, borderRadius: 20, backgroundColor: '#fff', borderWidth: 1, borderColor: colors.border, alignItems: 'center', justifyContent: 'center' },
-  expired: { backgroundColor: colors.redSoft, borderRadius: 12, padding: 12 },
-  expiredText: { color: colors.red, fontWeight: '700' },
+  headerRight: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  logout: { width: 40, height: 40, borderRadius: 20, backgroundColor: 'rgba(255,255,255,0.08)', borderWidth: 1, borderColor: 'rgba(233,199,104,0.45)', alignItems: 'center', justifyContent: 'center' },
+  expired: { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: colors.redSoft, borderRadius: 14, padding: 12 },
+  expiredText: { flex: 1, color: colors.red, fontWeight: '700' },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  chip: { flexGrow: 1, flexBasis: '22%', alignItems: 'center', paddingVertical: 8, borderRadius: 12, backgroundColor: '#fff', borderWidth: 2, borderColor: colors.border, gap: 2 },
-  chipActive: { borderColor: colors.blue, backgroundColor: colors.blueSoft },
-  chipText: { fontSize: 13, fontWeight: '700', color: colors.muted },
-  chipTextActive: { color: colors.blue },
-  hChip: { maxWidth: '100%', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 999, backgroundColor: '#fff', borderWidth: 2, borderColor: colors.border },
+  chip: { flexGrow: 1, flexBasis: '22%', alignItems: 'center', paddingVertical: 12, borderRadius: 14, backgroundColor: '#fff', borderWidth: 1.5, borderColor: colors.border },
+  chipActive: { borderColor: colors.navy, backgroundColor: colors.navy },
+  chipText: { fontSize: 14, fontWeight: '800', color: colors.muted },
+  chipTextActive: { color: colors.goldBright },
+  hChip: { maxWidth: '100%', paddingHorizontal: 14, paddingVertical: 9, borderRadius: 999, backgroundColor: '#fff', borderWidth: 1.5, borderColor: colors.border },
   hChipText: { fontSize: 13, fontWeight: '700', color: colors.muted },
-  cardTitle: { fontSize: 15, fontWeight: '800', color: colors.text },
-  input: { minHeight: 46, borderWidth: 1, borderColor: colors.border, borderRadius: 12, paddingHorizontal: 14, fontSize: 16, color: colors.text, backgroundColor: '#fff' },
+  input: { minHeight: 50, borderWidth: 1.5, borderColor: colors.border, borderRadius: 14, paddingHorizontal: 14, fontSize: 16, fontWeight: '700', color: colors.text, backgroundColor: '#fffdf8' },
   stats: { flexDirection: 'row', gap: 8 },
   wideRow: { flexDirection: 'row', gap: 18, alignItems: 'flex-start' },
-  stat: { flex: 1, backgroundColor: '#fff', borderRadius: 14, borderWidth: 1, borderColor: colors.border, padding: 12, alignItems: 'center' },
-  statValue: { fontSize: 22, fontWeight: '900', color: colors.navy },
-  statLabel: { fontSize: 11, fontWeight: '700', color: colors.muted, textAlign: 'center' },
 });

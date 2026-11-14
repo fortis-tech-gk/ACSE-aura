@@ -7,16 +7,16 @@ import { HEAT_STATUS, heatTitle, whenLine } from '@/lib/officials/heats';
 import { useOfficialsLayout } from '@/lib/officials/layout';
 import { dayKey, fmtDay } from '@/lib/format';
 import type { HeatSummary } from '@/lib/officials/types';
-import { Button, Card, Muted, OfflineBanner, Pill, colors } from '@/components/ui';
+import { Button, Card, Icon, Muted, OfflineBanner, Pill, SectionLabel, colors, shadow, type IconName } from '@/components/ui';
 import { entryName, type EntryPerson } from './entry';
 
-const KIND_ICON: Record<HeatSummary['kind'], string> = { track: '🏃', relay: '🔁', field: '🥏', vertical: '🪜' };
+const KIND_ICON: Record<HeatSummary['kind'], IconName> = { track: 'run', relay: 'relay', field: 'disc', vertical: 'height' };
 
 const DONE = ['COMPLETED', 'OFFICIAL'];
 
 /** Open one heat / flight screen */
-export function openHeat(h: Pick<HeatSummary, 'id' | 'kind' | 'startAt'>, mode: 'callroom' | 'referee', replace = false) {
-  const href = { pathname: '/officials/heat/[id]', params: { id: h.id, mode, kind: h.kind, startAt: h.startAt || '' } } as unknown as Href;
+export function openHeat(h: Pick<HeatSummary, 'id' | 'kind' | 'startAt' | 'eventName' | 'stage' | 'heatNumber'>, mode: 'callroom' | 'referee', replace = false) {
+  const href = { pathname: '/officials/heat/[id]', params: { id: h.id, mode, kind: h.kind, startAt: h.startAt || '', title: heatTitle(h) } } as unknown as Href;
   if (replace) router.replace(href);
   else router.push(href);
 }
@@ -78,6 +78,8 @@ export function HeatList({ mode }: { mode: 'callroom' | 'referee' }) {
         </Card>
       )}
 
+      {data && list.length > 0 && <SectionLabel>{mode === 'referee' ? 'Heats & flights' : 'Call room'}</SectionLabel>}
+
       {data && list.length === 0 && (
         <Card style={{ gap: 6 }}>
           <Text style={s.cardTitle}>{heats.length ? 'Nothing left on this day' : 'No heats yet'}</Text>
@@ -99,7 +101,9 @@ export function HeatList({ mode }: { mode: 'callroom' | 'referee' }) {
               accessibilityRole="button"
               style={({ pressed }) => [s.heat, wide && s.heatWide, pressed && { opacity: 0.8 }]}
             >
-              <Text style={s.icon}>{KIND_ICON[h.kind]}</Text>
+              <View style={s.iconTile}>
+                <Icon name={KIND_ICON[h.kind]} size={22} color={colors.navy} />
+              </View>
               <View style={{ flex: 1, gap: 4, minWidth: 0 }}>
                 <Text style={s.title} numberOfLines={2}>{heatTitle(h)}</Text>
                 <Muted style={{ fontSize: 13 }}>{whenLine(h)}</Muted>
@@ -109,7 +113,7 @@ export function HeatList({ mode }: { mode: 'callroom' | 'referee' }) {
                   {mode === 'referee' && <Pill label={`${h.entries} ${h.kind === 'relay' ? 'teams' : 'athletes'}`} tone="grey" />}
                 </View>
               </View>
-              <Text style={s.chev}>›</Text>
+              <Icon name="chevron" size={22} color={colors.muted} />
             </Pressable>
           );
         })}
@@ -169,35 +173,34 @@ function NextHeatBrief({ heat }: { heat: HeatSummary }) {
           ))}
         </View>
       )}
-      <Button title="Go to next heat ›" onPress={() => openHeat(heat, 'referee')} />
+      <Button title="Go to next heat" iconRight="chevron" variant="gold" onPress={() => openHeat(heat, 'referee')} style={{ marginTop: 4 }} />
     </View>
   );
 }
 
 const s = StyleSheet.create({
   days: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  day: { paddingHorizontal: 12, paddingVertical: 8, borderRadius: 999, backgroundColor: '#fff', borderWidth: 2, borderColor: colors.border },
-  dayActive: { borderColor: colors.blue, backgroundColor: colors.blueSoft },
-  dayText: { fontSize: 13, fontWeight: '700', color: colors.muted },
-  dayTextActive: { color: colors.blue },
+  day: { paddingHorizontal: 14, paddingVertical: 9, borderRadius: 999, backgroundColor: '#fff', borderWidth: 1.5, borderColor: colors.border },
+  dayActive: { borderColor: colors.navy, backgroundColor: colors.navy },
+  dayText: { fontSize: 13, fontWeight: '800', color: colors.muted },
+  dayTextActive: { color: colors.goldBright },
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
-  heat: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: '#fff', borderRadius: 16, borderWidth: 1, borderColor: colors.border, padding: 14 },
+  heat: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: '#fff', borderRadius: 18, borderWidth: 1, borderColor: colors.border, padding: 14, ...shadow },
   heatWide: { flexBasis: '48%', flexGrow: 1 },
-  icon: { fontSize: 28 },
+  iconTile: { width: 44, height: 44, borderRadius: 13, backgroundColor: colors.goldSoft, alignItems: 'center', justifyContent: 'center' },
   title: { fontSize: 16, fontWeight: '800', color: colors.text },
   row: { flexDirection: 'row', gap: 6, flexWrap: 'wrap' },
-  chev: { fontSize: 28, color: colors.muted },
   cardTitle: { fontSize: 16, fontWeight: '800', color: colors.text },
   toggle: { color: colors.blue, fontWeight: '700', textAlign: 'center' },
-  next: { backgroundColor: colors.navy, borderRadius: 18, padding: 18, gap: 6 },
+  next: { backgroundColor: colors.navy, borderRadius: 20, padding: 18, gap: 6, borderWidth: 1, borderColor: 'rgba(233,199,104,0.35)', ...shadow },
   nextTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  nextLabel: { color: colors.gold, fontWeight: '900', letterSpacing: 2, fontSize: 12 },
-  nextTitle: { color: '#fff', fontSize: 22, fontWeight: '900' },
-  nextWhen: { color: '#c7d2fe', fontSize: 14 },
+  nextLabel: { color: colors.goldBright, fontWeight: '900', letterSpacing: 2.4, fontSize: 12 },
+  nextTitle: { color: '#fff', fontSize: 23, fontWeight: '900' },
+  nextWhen: { color: colors.onNavyMuted, fontSize: 14 },
   startList: { backgroundColor: '#fff', borderRadius: 12, overflow: 'hidden', marginVertical: 6 },
   slRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 10, paddingVertical: 7, borderBottomWidth: 1, borderBottomColor: colors.border, gap: 8 },
-  slHead: { backgroundColor: '#f1f5f9' },
-  slHeadText: { fontSize: 11, fontWeight: '900', color: colors.muted, textTransform: 'uppercase' },
+  slHead: { backgroundColor: colors.goldSoft },
+  slHeadText: { fontSize: 11, fontWeight: '900', color: colors.goldDeep, textTransform: 'uppercase' },
   slLane: { width: 44, fontSize: 15, fontWeight: '900', color: colors.navy, textAlign: 'center' },
   slBib: { width: 50, fontSize: 14, fontWeight: '700', color: colors.text, textAlign: 'center' },
   slName: { flex: 1, minWidth: 0, fontSize: 15, fontWeight: '700', color: colors.text },

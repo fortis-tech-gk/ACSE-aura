@@ -1,5 +1,4 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { BackLink } from '@/components/BackLink';
 import { Alert, AppState, Linking, Platform, StyleSheet, Switch, Text, View } from 'react-native';
 import { Redirect, router } from 'expo-router';
 import Constants from 'expo-constants';
@@ -14,7 +13,7 @@ import {
   type PermissionState,
 } from '@/lib/reminders';
 import { REMINDER_OFFSETS_MIN } from '@/lib/config';
-import { Button, Card, Muted, Pill, Screen, Title, colors } from '@/components/ui';
+import { AppHeader, Button, Card, Muted, Pill, Screen, SectionLabel, colors } from '@/components/ui';
 
 export default function SettingsScreen() {
   const { status, me, logout, refresh, refreshing, lastSyncedAt, remindersScheduled, resyncReminders } = useAthleteSession();
@@ -86,9 +85,8 @@ export default function SettingsScreen() {
   const synced = lastSyncedAt ? new Date(lastSyncedAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) : 'never';
 
   return (
-    <Screen edges={['top', 'bottom']}>
-      <BackLink />
-      <Title>Settings</Title>
+    <Screen edges={['bottom']} header={<AppHeader back="More" eyebrow="AURA Athletes" title="Settings" />}>
+      <SectionLabel>Reminders</SectionLabel>
 
       <Card style={{ gap: 12 }}>
         <View style={s.row}>
@@ -123,18 +121,18 @@ export default function SettingsScreen() {
         </Muted>
       </Card>
 
+      <SectionLabel>Data</SectionLabel>
       <Card style={{ gap: 10 }}>
-        <Text style={s.rowTitle}>Data</Text>
         <Muted>Last updated at {synced}. Your pass and schedule are saved on this phone and work offline.</Muted>
-        <Button title="Refresh now" variant="secondary" loading={refreshing} onPress={refresh} />
+        <Button title="Refresh now" icon="refresh" variant="secondary" loading={refreshing} onPress={refresh} />
       </Card>
 
+      <SectionLabel>Account</SectionLabel>
       <Card style={{ gap: 10 }}>
-        <Text style={s.rowTitle}>Account</Text>
         <Muted>
           Logged in as {me?.athlete.name} (bib {me?.athlete.bibNumber ?? '—'})
         </Muted>
-        <Button title="Log out" variant="danger" onPress={confirmLogout} />
+        <Button title="Log out" icon="logout" variant="danger" onPress={confirmLogout} />
       </Card>
 
       <Muted style={{ textAlign: 'center', fontSize: 12 }}>
@@ -146,5 +144,5 @@ export default function SettingsScreen() {
 
 const s = StyleSheet.create({
   row: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  rowTitle: { fontSize: 16, fontWeight: '800', color: colors.text },
+  rowTitle: { fontSize: 16, fontWeight: '900', color: colors.navy },
 });

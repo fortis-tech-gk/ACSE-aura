@@ -354,7 +354,7 @@ export function TrackReferee({ heatId, startAt }: { heatId: string; startAt?: st
       {!done ? (
         <View style={s.footer}>
           {dirtyCount > 0 && <Button title={`Save all (${dirtyCount})`} onPress={saveAll} style={{ flexGrow: 1 }} />}
-          <Button title="Finish heat & save results" variant={dirtyCount ? 'secondary' : 'primary'} onPress={finalize} loading={busy} style={{ flexGrow: 1 }} />
+          <Button title="Finish heat & save results" icon="check" variant={dirtyCount ? 'secondary' : 'gold'} onPress={finalize} loading={busy} style={{ flexGrow: 1 }} />
         </View>
       ) : (
         <Card style={{ backgroundColor: colors.greenSoft, borderColor: colors.greenSoft }}>

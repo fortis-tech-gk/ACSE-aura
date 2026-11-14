@@ -287,7 +287,7 @@ export function VerticalReferee({ heatId, startAt }: { heatId: string; startAt?:
         })}
       />
       {!done ? (
-        <Button title="Finish heat & save results" onPress={finalize} loading={busy} />
+        <Button title="Finish heat & save results" icon="check" variant="gold" onPress={finalize} loading={busy} />
       ) : (
         <Card style={{ backgroundColor: colors.greenSoft, borderColor: colors.greenSoft }}>
           <Text style={{ color: colors.green, fontWeight: '800' }}>Results are finalized.</Text>

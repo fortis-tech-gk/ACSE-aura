@@ -1,19 +1,23 @@
-import React, { useState } from 'react';
-import { KeyboardAvoidingView, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { Redirect, router } from 'expo-router';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useOfficialSession } from '@/lib/officials/session';
 import type { LoginRole } from '@/lib/officials/types';
 import { ApiError } from '@/lib/api';
-import { MEET } from '@/lib/config';
-import { Button, Card, Muted, Screen, colors } from '@/components/ui';
+import { BrandHero } from '@/components/BrandHero';
+import { Button, Card, Icon, Muted, Select, colors, styles as ui, type SelectOption } from '@/components/ui';
 
-const ROLES: { key: LoginRole; icon: string; title: string; sub: string }[] = [
-  { key: 'food_volunteer', icon: '🍽️', title: 'Food counter', sub: 'Scan athletes at meals' },
-  { key: 'warden', icon: '🏨', title: 'Hostel warden', sub: 'Check athletes into hostels' },
-  { key: 'accreditation_volunteer', icon: '🪪', title: 'Accreditation desk', sub: 'Accredit athletes on arrival' },
-  { key: 'call_room_official', icon: '🚪', title: 'Call room', sub: 'Check athletes in before their heat' },
-  { key: 'referee', icon: '⏱️', title: 'Referee', sub: 'Enter times, distances and heights' },
+const ROLES: SelectOption<LoginRole>[] = [
+  { value: 'referee', label: 'Referee', sub: 'Times, distances and heights', icon: 'timer' },
+  { value: 'call_room_official', label: 'Call room', sub: 'Check athletes in before their heat', icon: 'door' },
+  { value: 'accreditation_volunteer', label: 'Accreditation desk', sub: 'Accredit athletes on arrival', icon: 'verified' },
+  { value: 'warden', label: 'Hostel warden', sub: 'Check athletes into hostels', icon: 'bed' },
+  { value: 'food_volunteer', label: 'Food counter', sub: 'Scan athletes at meals', icon: 'food' },
 ];
+
+/** The duty picked last time on this phone — officials usually keep the same duty all meet */
+const LAST_ROLE_KEY = '@aura/off-last-role';
 
 export default function OfficialsLogin() {
   const { status, login, pendingCount } = useOfficialSession();
@@ -22,15 +26,24 @@ export default function OfficialsLogin() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  useEffect(() => {
+    AsyncStorage.getItem(LAST_ROLE_KEY)
+      .then((v) => {
+        if (v && ROLES.some((r) => r.value === v)) setRole((cur) => cur ?? (v as LoginRole));
+      })
+      .catch(() => {});
+  }, []);
+
   if (status === 'signedIn') return <Redirect href="/officials" />;
 
   async function submit() {
     if (!role) return setError('Choose your duty first.');
-    if (!/^\d{4,8}$/.test(pin)) return setError('Enter your 4–8 digit PIN.');
+    if (!/^\d{4,8}$/.test(pin)) return setError('Enter your PIN (4–8 digits).');
     setError(null);
     setLoading(true);
     try {
       await login(role, pin);
+      AsyncStorage.setItem(LAST_ROLE_KEY, role).catch(() => {});
       router.replace('/officials');
     } catch (e) {
       setError(e instanceof ApiError ? (e.offline ? 'No internet. Logging in needs the network once; scanning then works offline.' : e.message) : 'Could not log in.');
@@ -41,81 +54,74 @@ export default function OfficialsLogin() {
   }
 
   return (
-    <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-      <Screen maxWidth={560}>
-        <View style={s.hero}>
-          <Text style={s.brand}>AURA OFFICIALS</Text>
-          <Text style={s.meet}>{MEET.name}</Text>
-          <Text style={s.sub}>{MEET.dates}</Text>
-        </View>
+    <KeyboardAvoidingView style={{ flex: 1, backgroundColor: colors.bg }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+      <ScrollView contentContainerStyle={{ paddingBottom: 32 }} keyboardShouldPersistTaps="handled">
+        <BrandHero app="OFFICIALS" />
 
-        <Text style={s.section}>Your duty</Text>
-        <View style={{ gap: 10 }} accessibilityRole="radiogroup">
-          {ROLES.map((r) => {
-            const active = role === r.key;
-            return (
-              <Pressable
-                key={r.key}
-                accessibilityRole="radio"
-                accessibilityState={{ checked: active }}
-                onPress={() => setRole(r.key)}
-                style={[s.role, active && s.roleActive]}
-              >
-                <Text style={{ fontSize: 28 }}>{r.icon}</Text>
-                <View style={{ flex: 1 }}>
-                  <Text style={[s.roleTitle, active && { color: colors.blue }]}>{r.title}</Text>
-                  <Muted style={{ fontSize: 13 }}>{r.sub}</Muted>
-                </View>
-                <View style={[s.radio, active && s.radioOn]} />
-              </Pressable>
-            );
-          })}
-        </View>
+        <View style={s.body}>
+          <Card style={s.form}>
+            <Text style={s.formTitle}>Sign in</Text>
+            <Muted style={{ marginTop: -6 }}>Use the PIN given to you by the meet office.</Muted>
 
-        <Card style={{ gap: 12 }}>
-          <Text style={s.label} nativeID="pinLabel">PIN</Text>
-          <TextInput
-            accessibilityLabelledBy="pinLabel"
-            accessibilityLabel="PIN"
-            value={pin}
-            onChangeText={(v) => setPin(v.replace(/\D/g, '').slice(0, 8))}
-            keyboardType="number-pad"
-            secureTextEntry
-            maxLength={8}
-            placeholder="••••"
-            placeholderTextColor="#94a3b8"
-            onSubmitEditing={submit}
-            style={s.pin}
-          />
-          {!!error && <Text style={s.error} accessibilityRole="alert">{error}</Text>}
-          <Button title="Log in" onPress={submit} loading={loading} />
-          <Muted style={{ fontSize: 12 }}>Your PIN is given by the meet office. Scans keep working without internet after you log in.</Muted>
-        </Card>
+            <Select label="Duty" value={role} options={ROLES} onChange={(v) => { setRole(v); setError(null); }} placeholder="Choose your duty" />
 
-        {pendingCount > 0 && (
-          <Card style={{ backgroundColor: colors.amberSoft, borderColor: colors.amberSoft }}>
-            <Text style={{ color: colors.amber, fontWeight: '700' }}>
-              {pendingCount} scan{pendingCount === 1 ? '' : 's'} saved on this device will be sent after you log in.
-            </Text>
+            <View>
+              <Text style={ui.fieldLabel} nativeID="pinLabel">
+                PIN
+              </Text>
+              <View style={[ui.field, s.pinField]}>
+                <Icon name="lock" size={20} color={colors.muted} />
+                <TextInput
+                  accessibilityLabelledBy="pinLabel"
+                  accessibilityLabel="PIN"
+                  value={pin}
+                  onChangeText={(v) => setPin(v.replace(/\D/g, '').slice(0, 8))}
+                  keyboardType="number-pad"
+                  secureTextEntry
+                  maxLength={8}
+                  placeholder="••••••"
+                  placeholderTextColor="#b4b9c4"
+                  onSubmitEditing={submit}
+                  returnKeyType="go"
+                  style={s.pin}
+                />
+              </View>
+            </View>
+
+            {!!error && (
+              <View style={s.error} accessibilityRole="alert">
+                <Icon name="warning" size={18} color={colors.red} />
+                <Text style={s.errorText}>{error}</Text>
+              </View>
+            )}
+
+            <Button title="Log in" variant="gold" onPress={submit} loading={loading} />
           </Card>
-        )}
-      </Screen>
+
+          {pendingCount > 0 && (
+            <View style={s.pending}>
+              <Icon name="history" size={18} color={colors.amber} />
+              <Text style={s.pendingText}>
+                {pendingCount} scan{pendingCount === 1 ? '' : 's'} saved on this phone will be sent after you log in.
+              </Text>
+            </View>
+          )}
+
+          <Muted style={{ textAlign: 'center', fontSize: 12 }}>Scans keep working without internet after you log in.</Muted>
+        </View>
+      </ScrollView>
     </KeyboardAvoidingView>
   );
 }
 
 const s = StyleSheet.create({
-  hero: { backgroundColor: colors.navy, borderRadius: 20, padding: 22, gap: 4 },
-  brand: { color: colors.gold, fontWeight: '900', letterSpacing: 2, fontSize: 13 },
-  meet: { color: '#fff', fontSize: 26, fontWeight: '900', marginTop: 4 },
-  sub: { color: '#c7d2fe', fontSize: 13 },
-  section: { fontSize: 15, fontWeight: '800', color: colors.navy },
-  role: { flexDirection: 'row', alignItems: 'center', gap: 14, backgroundColor: '#fff', borderRadius: 16, borderWidth: 2, borderColor: colors.border, padding: 14 },
-  roleActive: { borderColor: colors.blue, backgroundColor: '#f5f8ff' },
-  roleTitle: { fontSize: 17, fontWeight: '800', color: colors.text },
-  radio: { width: 22, height: 22, borderRadius: 11, borderWidth: 2, borderColor: colors.border },
-  radioOn: { borderColor: colors.blue, borderWidth: 7 },
-  label: { fontSize: 14, fontWeight: '800', color: colors.text },
-  pin: { minHeight: 56, borderWidth: 1, borderColor: colors.border, borderRadius: 12, fontSize: 28, letterSpacing: 10, textAlign: 'center', color: colors.text, backgroundColor: '#fff' },
-  error: { color: colors.red, fontWeight: '700' },
+  body: { paddingHorizontal: 16, gap: 14, marginTop: -30, width: '100%', maxWidth: 520, alignSelf: 'center' },
+  form: { gap: 16, padding: 20 },
+  formTitle: { fontSize: 22, fontWeight: '900', color: colors.navy },
+  pinField: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  pin: { flex: 1, minWidth: 0, fontSize: 24, fontWeight: '800', letterSpacing: 8, color: colors.text, paddingVertical: 10 },
+  error: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: colors.redSoft, borderRadius: 12, padding: 12 },
+  errorText: { flex: 1, color: colors.red, fontWeight: '700' },
+  pending: { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: colors.amberSoft, borderRadius: 14, padding: 12 },
+  pendingText: { flex: 1, color: colors.amber, fontWeight: '700' },
 });

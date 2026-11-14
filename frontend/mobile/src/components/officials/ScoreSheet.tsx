@@ -176,7 +176,8 @@ export function PrintSheetButton({ build }: { build: () => PrintSheet }) {
   const [busy, setBusy] = React.useState(false);
   return (
     <Button
-      title="🖨  Print / Save PDF"
+      title="Print / Save PDF"
+      icon="print"
       variant="secondary"
       loading={busy}
       onPress={async () => {

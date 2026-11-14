@@ -1,12 +1,12 @@
 import React, { useRef, useState } from 'react';
-import { KeyboardAvoidingView, Platform, Pressable, StyleSheet, Text, TextInput, View, type TextInputInstance } from 'react-native';
+import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, TextInput, View, type TextInputInstance } from 'react-native';
 import { router } from 'expo-router';
 import { useAthleteSession } from '@/lib/athlete-session';
 import { ApiError } from '@/lib/api';
-import { MEET } from '@/lib/config';
 import { openVenueDirections } from '@/lib/venue';
 import { toIsoDate } from '@/lib/format';
-import { Button, Card, Muted, Screen, colors } from '@/components/ui';
+import { BrandHero } from '@/components/BrandHero';
+import { Button, Card, Icon, Muted, colors, styles as ui } from '@/components/ui';
 
 export default function LoginScreen() {
   const { login } = useAthleteSession();
@@ -39,145 +39,126 @@ export default function LoginScreen() {
   const digits = (v: string) => v.replace(/\D/g, '');
 
   return (
-    <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-      <Screen>
-        <View style={s.hero}>
-          <View style={s.heroTop}>
-            <Text style={s.brand}>AURA ATHLETES</Text>
-            <Pressable
-              accessibilityRole="link"
-              accessibilityLabel="Directions to the venue in Maps"
-              onPress={openVenueDirections}
-              hitSlop={10}
-              style={({ pressed }) => [s.mapBtn, pressed && { opacity: 0.7 }]}
-            >
-              <Text style={s.mapBtnText}>📍 Venue map</Text>
-            </Pressable>
-          </View>
-          <Text style={s.meet}>{MEET.name}</Text>
-          <Text style={s.sub}>{MEET.subtitle}</Text>
-          <Text style={s.sub}>{MEET.dates}</Text>
-        </View>
+    <KeyboardAvoidingView style={{ flex: 1, backgroundColor: colors.bg }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+      <ScrollView contentContainerStyle={{ paddingBottom: 32 }} keyboardShouldPersistTaps="handled">
+        <BrandHero app="ATHLETES" />
 
-        <Card style={{ gap: 14 }}>
-          <View>
-            <Text style={s.label} nativeID="bibLabel">Bib number</Text>
-            <TextInput
-              accessibilityLabelledBy="bibLabel"
-              value={bib}
-              onChangeText={(v) => setBib(digits(v).slice(0, 5))}
-              keyboardType="number-pad"
-              returnKeyType="next"
-              onSubmitEditing={() => ddRef.current?.focus()}
-              placeholder="e.g. 105"
-              placeholderTextColor="#94a3b8"
-              style={[s.input, s.bibInput]}
-              maxLength={5}
-            />
-          </View>
+        <View style={s.body}>
+          <Card style={s.form}>
+            <Text style={s.formTitle}>Sign in</Text>
+            <Muted style={{ marginTop: -6 }}>Your bib number is printed on your ID card.</Muted>
 
-          <View>
-            <Text style={s.label} nativeID="dobLabel">Date of birth (as per SSLC)</Text>
-            <View style={s.dobRow}>
+            <View>
+              <Text style={ui.fieldLabel} nativeID="bibLabel">
+                Bib number
+              </Text>
               <TextInput
-                ref={ddRef}
-                accessibilityLabel="Day of birth"
-                value={dd}
-                onChangeText={(v) => {
-                  const x = digits(v).slice(0, 2);
-                  setDd(x);
-                  if (x.length === 2) mmRef.current?.focus();
-                }}
+                accessibilityLabelledBy="bibLabel"
+                value={bib}
+                onChangeText={(v) => setBib(digits(v).slice(0, 5))}
                 keyboardType="number-pad"
-                placeholder="DD"
-                placeholderTextColor="#94a3b8"
-                style={[s.input, s.dobBox]}
-                maxLength={2}
-              />
-              <Text style={s.slash}>/</Text>
-              <TextInput
-                ref={mmRef}
-                accessibilityLabel="Month of birth"
-                value={mm}
-                onChangeText={(v) => {
-                  const x = digits(v).slice(0, 2);
-                  setMm(x);
-                  if (x.length === 2) yyyyRef.current?.focus();
-                }}
-                keyboardType="number-pad"
-                placeholder="MM"
-                placeholderTextColor="#94a3b8"
-                style={[s.input, s.dobBox]}
-                maxLength={2}
-              />
-              <Text style={s.slash}>/</Text>
-              <TextInput
-                ref={yyyyRef}
-                accessibilityLabel="Year of birth"
-                value={yyyy}
-                onChangeText={(v) => setYyyy(digits(v).slice(0, 4))}
-                keyboardType="number-pad"
-                placeholder="YYYY"
-                placeholderTextColor="#94a3b8"
-                style={[s.input, s.dobBox, { flex: 1.6 }]}
-                maxLength={4}
-                returnKeyType="go"
-                onSubmitEditing={submit}
+                returnKeyType="next"
+                onSubmitEditing={() => ddRef.current?.focus()}
+                placeholder="e.g. 105"
+                placeholderTextColor="#b4b9c4"
+                style={[ui.field, s.bibInput]}
+                maxLength={5}
               />
             </View>
-          </View>
 
-          {error && (
-            <View style={s.error} accessibilityRole="alert">
-              <Text style={s.errorText}>{error}</Text>
+            <View>
+              <Text style={ui.fieldLabel} nativeID="dobLabel">
+                Date of birth (as per SSLC)
+              </Text>
+              <View style={s.dobRow}>
+                <TextInput
+                  ref={ddRef}
+                  accessibilityLabel="Day of birth"
+                  value={dd}
+                  onChangeText={(v) => {
+                    const x = digits(v).slice(0, 2);
+                    setDd(x);
+                    if (x.length === 2) mmRef.current?.focus();
+                  }}
+                  keyboardType="number-pad"
+                  placeholder="DD"
+                  placeholderTextColor="#b4b9c4"
+                  style={[ui.field, s.dobBox]}
+                  maxLength={2}
+                />
+                <Text style={s.slash}>/</Text>
+                <TextInput
+                  ref={mmRef}
+                  accessibilityLabel="Month of birth"
+                  value={mm}
+                  onChangeText={(v) => {
+                    const x = digits(v).slice(0, 2);
+                    setMm(x);
+                    if (x.length === 2) yyyyRef.current?.focus();
+                  }}
+                  keyboardType="number-pad"
+                  placeholder="MM"
+                  placeholderTextColor="#b4b9c4"
+                  style={[ui.field, s.dobBox]}
+                  maxLength={2}
+                />
+                <Text style={s.slash}>/</Text>
+                <TextInput
+                  ref={yyyyRef}
+                  accessibilityLabel="Year of birth"
+                  value={yyyy}
+                  onChangeText={(v) => setYyyy(digits(v).slice(0, 4))}
+                  keyboardType="number-pad"
+                  placeholder="YYYY"
+                  placeholderTextColor="#b4b9c4"
+                  style={[ui.field, s.dobBox, { flex: 1.6 }]}
+                  maxLength={4}
+                  returnKeyType="go"
+                  onSubmitEditing={submit}
+                />
+              </View>
             </View>
-          )}
 
-          <Button title="Log in" onPress={submit} loading={loading} />
-        </Card>
+            {error && (
+              <View style={s.error} accessibilityRole="alert">
+                <Icon name="warning" size={18} color={colors.red} />
+                <Text style={s.errorText}>{error}</Text>
+              </View>
+            )}
 
-        <View style={s.orRow}>
-          <View style={s.line} />
-          <Text style={s.or}>or</Text>
-          <View style={s.line} />
+            <Button title="Log in" variant="gold" onPress={submit} loading={loading} />
+
+            <View style={s.orRow}>
+              <View style={s.line} />
+              <Text style={s.or}>or</Text>
+              <View style={s.line} />
+            </View>
+
+            <Button title="Scan the QR on my ID card" icon="qr" variant="secondary" onPress={() => router.push('/scan')} />
+          </Card>
+
+          <Button title="Directions to the venue" icon="location" variant="ghost" onPress={openVenueDirections} />
+
+          <Muted style={{ textAlign: 'center', fontSize: 12.5 }}>
+            If your date of birth is not accepted, ask your college PED to check it on the registration portal.
+          </Muted>
         </View>
-
-        <Button title="📷  Scan the QR on my ID card" variant="secondary" onPress={() => router.push('/scan')} />
-
-        <Muted style={{ textAlign: 'center', marginTop: 4 }}>
-          Your bib number is printed on your ID card. If your date of birth is not accepted, ask your college PED to check it on the registration portal.
-        </Muted>
-      </Screen>
+      </ScrollView>
     </KeyboardAvoidingView>
   );
 }
 
 const s = StyleSheet.create({
-  hero: { backgroundColor: colors.navy, borderRadius: 20, padding: 22, gap: 4 },
-  heroTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 },
-  mapBtn: { backgroundColor: 'rgba(255,255,255,0.14)', borderColor: 'rgba(255,255,255,0.35)', borderWidth: 1, borderRadius: 999, paddingHorizontal: 12, paddingVertical: 7 },
-  mapBtnText: { color: '#fff', fontWeight: '800', fontSize: 13 },
-  brand: { color: colors.gold, fontWeight: '900', letterSpacing: 2, fontSize: 13 },
-  meet: { color: '#fff', fontSize: 26, fontWeight: '900', marginTop: 4 },
-  sub: { color: '#c7d2fe', fontSize: 13 },
-  label: { fontSize: 14, fontWeight: '700', color: colors.text, marginBottom: 6 },
-  input: {
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 12,
-    paddingHorizontal: 14,
-    minHeight: 52,
-    fontSize: 18,
-    color: colors.text,
-    backgroundColor: '#f8fafc',
-  },
-  bibInput: { fontSize: 24, fontWeight: '800', letterSpacing: 2 },
+  body: { paddingHorizontal: 16, gap: 12, marginTop: -30, width: '100%', maxWidth: 520, alignSelf: 'center' },
+  form: { gap: 16, padding: 20 },
+  formTitle: { fontSize: 22, fontWeight: '900', color: colors.navy },
+  bibInput: { fontSize: 26, fontWeight: '900', letterSpacing: 3, color: colors.navy },
   dobRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  dobBox: { flex: 1, textAlign: 'center', fontWeight: '700' },
+  dobBox: { flex: 1, flexBasis: 0, minWidth: 0, textAlign: 'center', fontSize: 18, fontWeight: '800', color: colors.text, paddingHorizontal: 6 },
   slash: { fontSize: 20, color: colors.muted },
-  error: { backgroundColor: colors.redSoft, borderRadius: 10, padding: 12 },
-  errorText: { color: colors.red, fontWeight: '600', lineHeight: 20 },
+  error: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: colors.redSoft, borderRadius: 12, padding: 12 },
+  errorText: { flex: 1, color: colors.red, fontWeight: '700', lineHeight: 20 },
   orRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   line: { flex: 1, height: 1, backgroundColor: colors.border },
-  or: { color: colors.muted, fontWeight: '600' },
+  or: { color: colors.muted, fontWeight: '700' },
 });

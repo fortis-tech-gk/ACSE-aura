@@ -4,7 +4,7 @@ import { useAthleteSession } from '@/lib/athlete-session';
 import { useCachedFetch } from '@/lib/useCachedFetch';
 import { fmtDay, fmtMark, medal, ordinal, stageLabel } from '@/lib/format';
 import type { AthletePerformance, PerformanceResult } from '@/lib/types';
-import { Card, Muted, OfflineBanner, Pill, Screen, Title, colors } from '@/components/ui';
+import { AppHeader, Card, Muted, OfflineBanner, Pill, Screen, SectionLabel, Stat, colors, fonts } from '@/components/ui';
 
 const STATUS_LABEL: Record<string, string> = { DNF: 'Did not finish', DQ: 'Disqualified', DNS: 'Did not start', NM: 'No mark' };
 
@@ -58,9 +58,8 @@ export default function PerformanceScreen() {
   const cs = data?.collegeStanding;
 
   return (
-    <Screen refreshing={loading} onRefresh={reload}>
+    <Screen refreshing={loading} onRefresh={reload} header={<AppHeader eyebrow="AURA Athletes" title="My Results" subtitle="Your rounds, marks, medals and points" />}>
       <OfflineBanner offline={offline} lastSyncedAt={savedAt} />
-      <Title>My Performance</Title>
 
       {!data && (
         <Card>
@@ -71,16 +70,16 @@ export default function PerformanceScreen() {
       {data && sum && (
         <Card style={s.summary}>
           <View style={s.medals}>
-            <MedalCount glyph="🥇" n={sum.golds} />
-            <MedalCount glyph="🥈" n={sum.silvers} />
-            <MedalCount glyph="🥉" n={sum.bronzes} />
+            <MedalCount label="Gold" color="#d9b24c" n={sum.golds} />
+            <MedalCount label="Silver" color="#c3c8d2" n={sum.silvers} />
+            <MedalCount label="Bronze" color="#c4844f" n={sum.bronzes} />
           </View>
           <View style={s.statsRow}>
-            <Stat label="My points" value={String(sum.individualPoints)} />
-            <Stat label="College" value={cs?.overallRank ? `#${cs.overallRank}` : '—'} />
-            <Stat label="Division" value={cs?.divisionRank ? `#${cs.divisionRank}` : '—'} />
+            <Stat tone="navy" label="My points" value={String(sum.individualPoints)} />
+            <Stat tone="navy" label="College" value={cs?.overallRank ? `#${cs.overallRank}` : '—'} />
+            <Stat tone="navy" label="Division" value={cs?.divisionRank ? `#${cs.divisionRank}` : '—'} />
           </View>
-          <Muted style={{ color: '#c7d2fe', fontSize: 12 }}>
+          <Muted style={{ color: colors.onNavyMuted, fontSize: 12 }}>
             Points: 5 / 3 / 1 for individual 1st–3rd. Relay points count for your college only.
           </Muted>
         </Card>
@@ -88,7 +87,7 @@ export default function PerformanceScreen() {
 
       {data && data.official.length > 0 && (
         <Card style={{ gap: 10 }}>
-          <Text style={s.cardTitle}>Official placings</Text>
+          <SectionLabel>Official placings</SectionLabel>
           {data.official.map((o) => (
             <View key={`${o.eventId}-${o.place}`} style={s.officialRow}>
               <Text style={s.officialPlace}>{medal(o.place) || ordinal(o.place)}</Text>
@@ -106,7 +105,7 @@ export default function PerformanceScreen() {
 
       {data && (
         <>
-          <Text style={s.section}>Rounds</Text>
+          <SectionLabel>Rounds</SectionLabel>
           {data.results.length === 0 && (
             <Card>
               <Muted>No heats yet. Your results will appear here as soon as the officials record them.</Muted>
@@ -135,7 +134,7 @@ export default function PerformanceScreen() {
                   )}
                 </View>
                 <View style={s.resultRow}>
-                  <Text style={[s.result, { color: line.tone === 'green' ? colors.text : line.tone === 'red' ? colors.red : colors.muted }]}>{line.main}</Text>
+                  <Text style={[s.result, line.tone !== 'green' && s.resultSoft, { color: line.tone === 'green' ? colors.navy : line.tone === 'red' ? colors.red : colors.muted }]}>{line.main}</Text>
                   {r.status === 'DQ' && !!r.dqRule && <Pill label={r.dqRule} tone="red" />}
                 </View>
                 <View style={s.metaRow}>
@@ -152,47 +151,39 @@ export default function PerformanceScreen() {
   );
 }
 
-function MedalCount({ glyph, n }: { glyph: string; n: number }) {
+function MedalCount({ label, color, n }: { label: string; color: string; n: number }) {
   return (
-    <View style={{ alignItems: 'center', flex: 1 }}>
-      <Text style={{ fontSize: 30 }}>{glyph}</Text>
-      <Text style={s.medalN}>{n}</Text>
-    </View>
-  );
-}
-
-function Stat({ label, value }: { label: string; value: string }) {
-  return (
-    <View style={{ flex: 1 }}>
-      <Text style={s.statLabel}>{label}</Text>
-      <Text style={s.statValue}>{value}</Text>
+    <View style={{ alignItems: 'center', flex: 1, gap: 4 }}>
+      <View style={[s.disc, { backgroundColor: color }]}>
+        <Text style={s.discN}>{n}</Text>
+      </View>
+      <Text style={s.discL}>{label}</Text>
     </View>
   );
 }
 
 const s = StyleSheet.create({
-  summary: { backgroundColor: colors.navy, borderColor: colors.navy, gap: 14 },
+  summary: { backgroundColor: colors.navy, borderColor: 'rgba(233,199,104,0.4)', gap: 16 },
   medals: { flexDirection: 'row' },
-  medalN: { color: '#fff', fontSize: 22, fontWeight: '900' },
+  disc: { width: 58, height: 58, borderRadius: 29, alignItems: 'center', justifyContent: 'center', borderWidth: 3, borderColor: 'rgba(255,255,255,0.35)' },
+  discN: { color: colors.navy, fontFamily: fonts.display, fontSize: 24 },
+  discL: { color: colors.onNavyMuted, fontSize: 11, fontWeight: '800', letterSpacing: 1, textTransform: 'uppercase' },
   statsRow: { flexDirection: 'row', gap: 10 },
-  statLabel: { color: '#94a3b8', fontSize: 11, fontWeight: '800', letterSpacing: 1, textTransform: 'uppercase' },
-  statValue: { color: '#fff', fontSize: 20, fontWeight: '900' },
-  cardTitle: { fontSize: 16, fontWeight: '800', color: colors.text },
   officialRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   officialPlace: { fontSize: 24, width: 40, textAlign: 'center', fontWeight: '800', color: colors.navy },
   officialEvent: { fontSize: 15, fontWeight: '800', color: colors.text },
-  officialPts: { fontSize: 15, fontWeight: '800', color: colors.blue },
-  section: { fontSize: 15, fontWeight: '800', color: colors.navy, marginTop: 4 },
+  officialPts: { fontSize: 15, fontWeight: '900', color: colors.goldDeep },
   rowTop: { flexDirection: 'row', gap: 10, alignItems: 'flex-start' },
-  event: { fontSize: 18, fontWeight: '800', color: colors.text },
-  placeBadge: { alignItems: 'center', backgroundColor: colors.blueSoft, borderRadius: 12, paddingHorizontal: 10, paddingVertical: 6, minWidth: 58 },
-  placeText: { fontSize: 18, fontWeight: '900', color: colors.blue },
-  placeSub: { fontSize: 10, fontWeight: '700', color: colors.blue },
+  event: { fontSize: 18, fontWeight: '900', color: colors.navy },
+  placeBadge: { alignItems: 'center', backgroundColor: colors.navy, borderRadius: 14, paddingHorizontal: 10, paddingVertical: 6, minWidth: 60 },
+  placeText: { fontSize: 18, fontWeight: '900', color: colors.goldBright },
+  placeSub: { fontSize: 10, fontWeight: '800', color: colors.onNavyMuted },
   resultRow: { flexDirection: 'row', alignItems: 'center', gap: 10, flexWrap: 'wrap' },
-  result: { fontSize: 28, fontWeight: '900' },
+  result: { fontSize: 30, fontWeight: '900' },
+  resultSoft: { fontSize: 17, fontWeight: '800' },
   metaRow: { flexDirection: 'row', gap: 6, flexWrap: 'wrap' },
   attemptRow: { flexDirection: 'row', gap: 4, flexWrap: 'wrap' },
-  attempt: { flexGrow: 1, flexBasis: 40, borderWidth: 1, borderColor: colors.border, borderRadius: 8, paddingHorizontal: 4, paddingVertical: 4, alignItems: 'center' },
+  attempt: { flexGrow: 1, flexBasis: 40, borderWidth: 1, borderColor: colors.border, borderRadius: 10, paddingHorizontal: 4, paddingVertical: 5, alignItems: 'center', backgroundColor: '#fbf8f1' },
   attemptTop: { fontSize: 10, fontWeight: '800', color: colors.muted },
   attemptVal: { fontSize: 14, fontWeight: '800' },
 });

@@ -1,9 +1,9 @@
 import React, { useMemo, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 import { useAthleteSession } from '@/lib/athlete-session';
 import { useCachedFetch } from '@/lib/useCachedFetch';
 import type { BestAthleteRow, LiveLeaderboard, StandingRow } from '@/lib/types';
-import { Card, Muted, OfflineBanner, Screen, Title, colors } from '@/components/ui';
+import { AppHeader, Card, Muted, OfflineBanner, Screen, Segmented, colors } from '@/components/ui';
 
 type View_ = 'overall' | 'men' | 'women' | 'athletes';
 const TABS: { key: View_; label: string }[] = [
@@ -48,33 +48,26 @@ export default function LeaderboardScreen() {
   const updated = savedAt ? new Date(savedAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) : null;
 
   return (
-    <Screen refreshing={loading} onRefresh={reload}>
+    <Screen
+      refreshing={loading}
+      onRefresh={reload}
+      header={
+        <AppHeader
+          eyebrow="Championship"
+          title="Standings"
+          subtitle={`Updates every 30 s${updated ? ` · last ${updated}` : ''}`}
+          right={
+            <View style={s.live}>
+              <View style={[s.dot, { backgroundColor: offline ? colors.amber : '#38d39f' }]} />
+              <Text style={s.liveText}>{offline ? 'Offline' : 'Live'}</Text>
+            </View>
+          }
+        />
+      }
+    >
       <OfflineBanner offline={offline} lastSyncedAt={savedAt} />
-      <View style={s.header}>
-        <Title>Leaderboard</Title>
-        <View style={s.live}>
-          <View style={[s.dot, { backgroundColor: offline ? colors.amber : colors.green }]} />
-          <Text style={s.liveText}>{offline ? 'Offline' : 'Live'}</Text>
-        </View>
-      </View>
-      <Muted>Championship points · updates every 30 s{updated ? ` · last ${updated}` : ''}</Muted>
 
-      <View style={s.segment} accessibilityRole="tablist">
-        {TABS.map((t) => {
-          const active = view === t.key;
-          return (
-            <Pressable
-              key={t.key}
-              accessibilityRole="tab"
-              accessibilityState={{ selected: active }}
-              onPress={() => setView(t.key)}
-              style={[s.segBtn, active && s.segActive]}
-            >
-              <Text style={[s.segText, active && s.segTextActive]}>{t.label}</Text>
-            </Pressable>
-          );
-        })}
-      </View>
+      <Segmented value={view} options={TABS} onChange={setView} />
 
       {!data && (
         <Card>
@@ -152,7 +145,7 @@ export default function LeaderboardScreen() {
 function CollegeRow({ r, mine }: { r: StandingRow; mine: boolean }) {
   return (
     <View style={[s.row, mine && s.mineRow]}>
-      <Text style={[s.rank, r.rank <= 3 && { color: colors.gold }]}>{r.rank}</Text>
+      <Text style={[s.rank, r.rank <= 3 && { color: colors.goldDeep }]}>{r.rank}</Text>
       <View style={s.name}>
         <Text style={s.collegeCode} numberOfLines={1}>
           {r.college_code}
@@ -169,30 +162,24 @@ function CollegeRow({ r, mine }: { r: StandingRow; mine: boolean }) {
 }
 
 const s = StyleSheet.create({
-  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  live: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: '#fff', borderRadius: 999, paddingHorizontal: 10, paddingVertical: 4, borderWidth: 1, borderColor: colors.border },
+  live: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: 'rgba(255,255,255,0.08)', borderRadius: 999, paddingHorizontal: 11, paddingVertical: 6, borderWidth: 1, borderColor: 'rgba(233,199,104,0.45)' },
   dot: { width: 8, height: 8, borderRadius: 4 },
-  liveText: { fontSize: 12, fontWeight: '800', color: colors.text },
-  segment: { flexDirection: 'row', backgroundColor: '#e7ebf3', borderRadius: 12, padding: 4, gap: 4 },
-  segBtn: { flex: 1, paddingVertical: 9, borderRadius: 9, alignItems: 'center' },
-  segActive: { backgroundColor: '#fff' },
-  segText: { fontSize: 13, fontWeight: '700', color: colors.muted },
-  segTextActive: { color: colors.navy },
+  liveText: { fontSize: 12, fontWeight: '900', color: '#fff', letterSpacing: 0.5 },
   row: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 10, borderTopWidth: 1, borderTopColor: colors.border, gap: 6 },
-  headRow: { backgroundColor: '#f8fafc', borderTopWidth: 0 },
-  headText: { fontSize: 11, fontWeight: '800', color: colors.muted },
-  mineRow: { backgroundColor: '#fff7d6' },
+  headRow: { backgroundColor: colors.navy, borderTopWidth: 0 },
+  headText: { fontSize: 11, fontWeight: '900', color: colors.goldBright },
+  mineRow: { backgroundColor: colors.goldSoft },
   rank: { width: 26, fontSize: 15, fontWeight: '900', color: colors.navy, textAlign: 'center' },
   name: { flex: 1, minWidth: 0 },
   collegeCode: { fontSize: 15, fontWeight: '800', color: colors.text },
   collegeName: { fontSize: 11, color: colors.muted },
   medalCol: { width: 26, textAlign: 'center', fontSize: 13, fontWeight: '700', color: colors.text },
-  pts: { width: 40, textAlign: 'right', fontSize: 16, fontWeight: '900', color: colors.blue },
+  pts: { width: 40, textAlign: 'right', fontSize: 16, fontWeight: '900', color: colors.navy },
   gap: { alignItems: 'center', paddingVertical: 2, borderTopWidth: 1, borderTopColor: colors.border },
   gapText: { color: colors.muted, fontWeight: '900' },
-  groupTitle: { fontSize: 16, fontWeight: '800', color: colors.text },
+  groupTitle: { fontSize: 16, fontWeight: '900', color: colors.navy },
   athRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 6, borderRadius: 10, paddingHorizontal: 4 },
   athRank: { width: 22, textAlign: 'center', fontSize: 15, fontWeight: '900', color: colors.navy },
   athName: { fontSize: 15, fontWeight: '800', color: colors.text },
-  athPts: { fontSize: 16, fontWeight: '900', color: colors.blue },
+  athPts: { fontSize: 16, fontWeight: '900', color: colors.navy },
 });
