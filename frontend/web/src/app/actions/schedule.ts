@@ -54,7 +54,11 @@ export async function generateHeatDrawAction(eventId: string, stage: string, num
 
   revalidatePath('/admin/schedule');
   revalidatePath('/admin/heats');
-  return { success: true, draw: data as { num_heats?: number; total_athletes?: number } | null };
+  return { success: true, draw: data as {
+      num_heats?: number;
+      total_athletes?: number;
+      left_out?: { not_accredited?: number; not_paid?: number };
+    } | null };
 }
 
 export async function setCallRoomReportedAction(heatAthleteId: string, reported: boolean) {

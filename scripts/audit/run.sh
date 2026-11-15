@@ -41,6 +41,10 @@ docker run -d --name "$NAME-db" --network "$NAME-net" -e POSTGRES_PASSWORD=audit
 for _ in $(seq 1 60); do $PSQL -c 'select 1' >/dev/null 2>&1 && break; sleep 2; done
 
 echo "▸ applying migrations"
+# The bare Postgres image has no Storage service; give migrations that touch buckets a stub.
+${PSQL/-U postgres/-U supabase_admin} -c "CREATE SCHEMA IF NOT EXISTS storage;
+  CREATE TABLE IF NOT EXISTS storage.buckets (id text PRIMARY KEY, name text, public boolean DEFAULT false);
+  GRANT ALL ON storage.buckets TO postgres;" >/dev/null
 for f in "$REPO"/supabase/migrations/[0-9][0-9][0-9][0-9]_*.sql; do
   $PSQL -f "$f" >/dev/null || { echo "migration failed: $(basename "$f")"; exit 2; }
 done

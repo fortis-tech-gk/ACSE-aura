@@ -117,7 +117,12 @@ export function ScheduleManagerView({
       if (!res.success) {
         setStatusMessage(res.error || 'Failed to generate heat draw');
       } else {
-        setStatusMessage(`✅ Seeding complete! Generated ${res.draw?.num_heats ?? '?'} heats for ${res.draw?.total_athletes ?? '?'} athletes.`);
+        const notAcc = res.draw?.left_out?.not_accredited ?? 0;
+        const notPaid = res.draw?.left_out?.not_paid ?? 0;
+        const leftOut = notAcc + notPaid > 0
+          ? ` Left out: ${notAcc} not accredited, ${notPaid} from colleges whose payment is not verified.`
+          : '';
+        setStatusMessage(`✅ Draw complete: ${res.draw?.num_heats ?? '?'} heat(s) for ${res.draw?.total_athletes ?? '?'} athletes.${leftOut}`);
         fetchHeats(selectedEvent.id, selectedStage);
       }
     } catch (err: any) {
