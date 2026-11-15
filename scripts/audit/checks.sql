@@ -198,6 +198,15 @@ SELECT chk('P8', :'tr_err' <> '', 'An impossible track time (1.00 s hurdles) is 
 SELECT chk('P9', (SELECT array_agg(points ORDER BY place) FROM team_points WHERE event_id = audit_ev('5000M-M')) = ARRAY[5,3,1]::numeric[],
        'Individual points are 5-3-1 (official rules)');
 
+-- L1 a corrected result is logged with its old value; a re-sent identical value is not
+SELECT submit_track_result(audit_ha((SELECT id FROM heats WHERE event_id = audit_ev('110H-M')), 'Spare 4'), 14.6, NULL, NULL, 'FINISHED', '', NULL) \gset ignore_
+SELECT submit_track_result(audit_ha((SELECT id FROM heats WHERE event_id = audit_ev('110H-M')), 'Spare 4'), 14.9, NULL, NULL, 'FINISHED', '', NULL) \gset ignore_
+SELECT chk('L1', (SELECT count(*) FROM result_changes WHERE event_id = audit_ev('110H-M') AND source = 'track_results') = 1
+              AND EXISTS (SELECT 1 FROM result_changes WHERE event_id = audit_ev('110H-M') AND (old_values->>'time_seconds')::numeric = 14.6
+                          AND (new_values->>'time_seconds')::numeric = 14.9),
+       'A corrected result is logged with old and new value (re-sending the same value is not)',
+       (SELECT count(*) || ' log row(s)' FROM result_changes WHERE event_id = audit_ev('110H-M')));
+
 -- ============================================================================
 -- S. Event-day scanners
 -- ============================================================================
@@ -229,6 +238,30 @@ SELECT chk('S6', (process_accreditation_scan('99999999-9999-9999-9999-9999999999
        'Accreditation: offline replay is safe, a second scan is flagged');
 SELECT try_sql($$SELECT process_accommodation_checkin(gen_random_uuid(), audit_pid('Woman W1'), (SELECT id FROM hostels WHERE name = 'Audit Men Hostel'), NULL, 'R2', 0, NULL, now())$$) AS gender_err \gset
 SELECT chk('S7', :'gender_err' <> '', 'A woman cannot be checked into a men''s hostel');
+
+-- ============================================================================
+-- C. Call room reserve substitution (plan §7.3)
+-- ============================================================================
+SELECT audit_athlete(audit_sq('CE'), 'Sub Absent', '1AA23SB001') \gset ignore_
+SELECT audit_athlete(audit_sq('CE'), 'Sub Reserve', '1AA23SB002') \gset ignore_
+SELECT audit_athlete(audit_sq('CF'), 'Sub Other College', '1AA23SB003') \gset ignore_
+INSERT INTO registrations (profile_id, event_id, kind) VALUES (audit_pid('Sub Absent'), audit_ev('HT-M'), 'regular');
+INSERT INTO registrations (profile_id, event_id, kind) VALUES (audit_pid('Sub Reserve'), audit_ev('DT-M'), 'regular');
+INSERT INTO registrations (profile_id, event_id, kind) VALUES (audit_pid('Sub Reserve'), audit_ev('HT-M'), 'reserve');
+INSERT INTO registrations (profile_id, event_id, kind) VALUES (audit_pid('Sub Other College'), audit_ev('DT-M'), 'regular');
+INSERT INTO registrations (profile_id, event_id, kind) VALUES (audit_pid('Sub Other College'), audit_ev('HT-M'), 'reserve');
+SELECT audit_heat('HT-M', 'FINAL', 1, ARRAY['Sub Absent'], 'CALL_ROOM') \gset ignore_
+SELECT try_sql($$SELECT substitute_reserve_in_heat(audit_ha((SELECT id FROM heats WHERE event_id = audit_ev('HT-M')), 'Sub Absent'), audit_pid('Sub Other College'), NULL)$$) AS other_err \gset
+SELECT try_sql($$SELECT substitute_reserve_in_heat(audit_ha((SELECT id FROM heats WHERE event_id = audit_ev('HT-M')), 'Sub Absent'), audit_pid('Sub Reserve'), NULL)$$) AS sub_err \gset
+SELECT chk('C1', :'other_err' <> '' AND :'sub_err' = ''
+              AND EXISTS (SELECT 1 FROM heat_athletes ha JOIN heats h ON h.id = ha.heat_id
+                          WHERE h.event_id = audit_ev('HT-M') AND ha.profile_id = audit_pid('Sub Reserve') AND ha.call_room_reported)
+              AND EXISTS (SELECT 1 FROM call_room_substitutions WHERE absent_profile_id = audit_pid('Sub Absent')),
+       'Call room: a reserve of the same college takes an absent athlete''s place (logged); another college''s reserve is refused',
+       'other college: ' || coalesce(nullif(:'other_err', ''), 'ACCEPTED') || ' / same college: ' || coalesce(nullif(:'sub_err', ''), 'ok'));
+UPDATE heats SET status = 'ON_TRACK' WHERE event_id = audit_ev('HT-M');
+SELECT chk('C2', try_sql($$SELECT substitute_reserve_in_heat(audit_ha((SELECT id FROM heats WHERE event_id = audit_ev('HT-M')), 'Sub Reserve'), audit_pid('Sub Absent'), NULL)$$) <> '',
+       'Call room: no substitution after the call room has closed');
 
 -- ============================================================================
 -- R. Database security

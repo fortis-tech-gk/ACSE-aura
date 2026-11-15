@@ -42,8 +42,10 @@ the Supabase ones the Supabase CLI already uses. Override ports with `AUDIT_DB_P
 | P5–P6 | Field and high-jump countback |
 | P7–P8 | Impossible marks and times are rejected |
 | P9 | Points are 5-3-1 (official rules) |
+| L1 | A corrected result is logged with its old and new value |
 | S1–S4 | Accreditation, call room, meals and hostel refuse unpaid or unaccredited athletes |
 | S5–S7 | Offline replays count once, duplicates are flagged, hostel gender is enforced |
+| C1–C2 | Call room reserve substitution: same college only, logged, not after the call room closes |
 | R1 | Row-level security is ON for every table |
 | B1–B7 | Database backstops for rules the website already enforces (B1 follows the 07-11 reserve amendment; B3 is website-only by design) |
 | A1 | A referee can't write results outside their assigned events |
