@@ -24,6 +24,8 @@ type Entry = {
 type HeatData = {
   heat: { id: string; heat_number: number; stage: string; status: string; events: { id: string; name: string; code: string; category: string } };
   athletes: Entry[];
+  /** Accredited reserves of the same college, per entry that has not reported (individual events) */
+  reserves?: Record<string, { id: string; name: string; bib: number | null }[]>;
 };
 
 type CrStatus = 'REPORTED' | 'SCRATCH' | 'DNS' | 'DISQUALIFIED' | null;
@@ -152,6 +154,14 @@ export function CallRoomHeat({ heatId }: { heatId: string }) {
     run({ path: '/callroom/inspect', body: { heatAthleteId: e.id, reportedStatus: st, actedAt: new Date().toISOString() }, label: `${entryName(e)}: ${st === 'NOT_REPORTED' ? 'not reported' : STATUS_UI[st || 'NONE'].label}`, heatId });
   }
 
+  async function useReserve(e: Entry, reserve: { id: string; name: string; bib: number | null }) {
+    const lane = `${laneLabel(data!)} ${e.lane_number}`;
+    if (!(await confirm('Use the reserve?', `${reserve.name} comes in for ${entryName(e)} in ${lane}. ${entryName(e)} will not run this event.`, 'Use reserve'))) return;
+    setOpen(null);
+    const r = await run({ path: '/callroom/reserve-swap', body: { heatAthleteId: e.id, reserveProfileId: reserve.id }, label: `${lane}: reserve ${reserve.name} in`, heatId }, false);
+    if (r.status === 'ok') notify('Reserve in', `${reserve.name} runs in ${lane} and is marked reported.`);
+  }
+
   async function swap(team: NonNullable<Entry['relay_teams']>, leg: number, reserve: Member) {
     const out = team.relay_members.find((m) => m.leg_order === leg && !m.is_reserve);
     if (!(await confirm('Swap runner?', `Leg ${leg}: ${reserve.profiles?.sslc_name} comes in for ${out?.profiles?.sslc_name}.`, 'Swap'))) return;
@@ -222,6 +232,16 @@ export function CallRoomHeat({ heatId }: { heatId: string }) {
                   <Chip label="Scratch" onPress={() => setStatus(e, 'SCRATCH')} />
                   <Chip label="DNS" onPress={() => setStatus(e, 'DNS')} />
                 </View>
+                {!team && (!status || status === 'DNS') && !isClosed && (data.reserves?.[e.id]?.length ?? 0) > 0 && (
+                  <View style={{ gap: 6 }}>
+                    <Muted style={{ fontSize: 13 }}>Not here? A reserve from the same college can take this {laneLabel(data).toLowerCase()}:</Muted>
+                    <View style={s.actions}>
+                      {data.reserves![e.id].map((r) => (
+                        <Chip key={r.id} label={`Use reserve: ${r.name}${r.bib != null ? ` (${r.bib})` : ''}`} onPress={() => useReserve(e, r)} />
+                      ))}
+                    </View>
+                  </View>
+                )}
                 {team && team.relay_members.some((x) => x.is_reserve) && (
                   <View style={{ gap: 6 }}>
                     <Muted style={{ fontSize: 13 }}>Substitute: tap the reserve and the leg they run</Muted>

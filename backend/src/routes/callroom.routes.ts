@@ -147,7 +147,20 @@ callRoomRouter.get('/heats/:heatId', async (req: AuthenticatedRequest, res: Resp
 
     if (athErr) return res.status(400).json({ error: athErr.message });
 
-    return res.json({ heat, athletes: athletes || [] });
+    // Reserves who could come in for an athlete who has not reported (individual events only)
+    const reserves: Record<string, { id: string; name: string; bib: number | null }[]> = {};
+    if ((heat as any)?.events?.category !== 'relay' && ['SCHEDULED', 'DELAYED', 'CALL_ROOM'].includes((heat as any)?.status)) {
+      await Promise.all(
+        (athletes || [])
+          .filter((a: any) => a.profiles && !a.call_room_reported)
+          .map(async (a: any) => {
+            const { data: list } = await supabase.rpc('eligible_reserves_for_entry', { p_heat_athlete_id: a.id });
+            if (list?.length) reserves[a.id] = list.map((r: any) => ({ id: r.profile_id, name: r.sslc_name, bib: r.bid_number }));
+          })
+      );
+    }
+
+    return res.json({ heat, athletes: athletes || [], reserves });
   } catch (err: any) {
     return res.status(500).json({ error: err.message });
   }
@@ -224,7 +237,17 @@ callRoomRouter.post('/scan', async (req: AuthenticatedRequest, res: Response) =>
         .eq('profile_id', who.athleteId)
         .neq('heat_id', heatId);
       const open = (elsewhere || []).find((h: any) => !['COMPLETED', 'OFFICIAL'].includes(h.heats?.status));
-      const hint = open ? ` They are in ${(open as any).heats?.events?.name}, heat ${(open as any).heats?.heat_number}.` : '';
+      let hint = open ? ` They are in ${(open as any).heats?.events?.name}, heat ${(open as any).heats?.heat_number}.` : '';
+      if (!hint) {
+        const { data: res } = await supabase
+          .from('registrations')
+          .select('id')
+          .eq('profile_id', who.athleteId)
+          .eq('event_id', heat.event_id)
+          .eq('kind', 'reserve')
+          .maybeSingle();
+        if (res) hint = ' They are a reserve for this event: tap the absent athlete of their college and choose "Use reserve".';
+      }
       return res.status(404).json({ error: `Not in this heat.${hint}`, athlete });
     }
 
@@ -316,6 +339,38 @@ callRoomRouter.post('/inspect', async (req: AuthenticatedRequest, res: Response)
     });
 
     if (error) return res.status(400).json({ error: error.message });
+    return res.json({ success: true, result: data });
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * POST /api/callroom/reserve-swap
+ * Body: { heatAthleteId, reserveProfileId } — an accredited reserve of the same college takes the
+ * lane of an athlete who has not reported (plan §7.3). First round only, before the call room closes.
+ */
+callRoomRouter.post('/reserve-swap', async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const { heatAthleteId, reserveProfileId } = req.body || {};
+    if (!heatAthleteId || !reserveProfileId) {
+      return res.status(400).json({ error: 'heatAthleteId and reserveProfileId are required.' });
+    }
+    const heat = await heatStateOfEntry(String(heatAthleteId));
+    if (!heat) return res.status(404).json({ error: 'Entry not found in any heat.' });
+    try {
+      assertEventScope(req.user!, heat.event_id);
+    } catch (e: any) {
+      return res.status(e instanceof ProgressionError ? e.status : 403).json({ error: e.message });
+    }
+    const { data, error } = await supabase.rpc('substitute_reserve_in_heat', {
+      p_heat_athlete_id: heatAthleteId,
+      p_reserve_profile_id: reserveProfileId,
+      p_official_id: req.user!.entityId,
+    });
+    if (error) return res.status(400).json({ error: error.message });
+    invalidateCache('live');
+    invalidateCache('schedule');
     return res.json({ success: true, result: data });
   } catch (err: any) {
     return res.status(500).json({ error: err.message });
