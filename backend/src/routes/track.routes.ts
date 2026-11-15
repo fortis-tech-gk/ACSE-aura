@@ -142,8 +142,8 @@ trackRouter.post('/finalize', async (req: AuthenticatedRequest, res: Response) =
   try {
     const heatId = String(req.body?.heatId || '');
     if (!heatId) return res.status(400).json({ error: 'heatId is required.' });
-    // Event and stage are read from the database, not the request (audit #6)
-    return res.json(await finalizeHeat(heatId, req.user!));
+    // Event and stage come from the database; a different one in the request is refused (audit #6)
+    return res.json(await finalizeHeat(heatId, req.user!, { eventId: req.body?.eventId, stage: req.body?.stage }));
   } catch (err: any) {
     return res.status(err instanceof ProgressionError ? err.status : 500).json({ error: err.message });
   }

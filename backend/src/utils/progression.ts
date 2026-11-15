@@ -234,43 +234,22 @@ async function buildNextRound(heat: HeatRow, roundHeats: HeatRow[]) {
   return { nextStage, heats: created, qualified: qualified.length };
 }
 
-const POINTS = (code: string, category: string) =>
-  code.toUpperCase() === '4X400M-MIX' ? [0, 0, 0] : category === 'relay' ? [10, 6, 2] : [5, 3, 1];
-
-/** Points for a FINAL. One section: the database function. Several sections: ranked by time across all. */
-async function awardPoints(heat: HeatRow, finalHeats: HeatRow[]) {
-  const ev = heat.events!;
-  if (finalHeats.length === 1 || !isTrack(ev.category)) {
-    const target = finalHeats.length === 1 ? finalHeats[0].id : heat.id;
-    const { data, error } = await supabase.rpc('allocate_event_points', { p_event_id: ev.id, p_heat_id: target });
-    if (error) throw new ProgressionError(`Results saved, but points could not be awarded: ${error.message}`);
-    return data;
-  }
-
-  // Final run in sections (audit #3): top 3 by time over every section
-  const top = (await trackFinishers(finalHeats.map((h) => h.id))).slice(0, 3);
-  const pts = POINTS(ev.code, ev.category);
-  const rows = [];
-  for (let i = 0; i < top.length; i++) {
-    const t = top[i];
-    let squad: any = null;
-    if (t.profileId) squad = (await supabase.from('profiles').select('squads(id, college_id)').eq('id', t.profileId).maybeSingle()).data?.squads;
-    else squad = (await supabase.from('relay_teams').select('squads(id, college_id)').eq('id', t.relayTeamId!).maybeSingle()).data?.squads;
-    squad = Array.isArray(squad) ? squad[0] : squad;
-    if (!squad) continue;
-    rows.push({ event_id: ev.id, heat_id: t.heatId, college_id: squad.college_id, squad_id: squad.id, profile_id: t.profileId, relay_team_id: t.relayTeamId, place: i + 1, points: pts[i] });
-  }
-  const { error: delErr } = await supabase.from('team_points').delete().eq('event_id', ev.id);
-  if (delErr) throw new ProgressionError(`Results saved, but points could not be awarded: ${delErr.message}`);
-  if (rows.length) {
-    const { error } = await supabase.from('team_points').insert(rows);
-    if (error) throw new ProgressionError(`Results saved, but points could not be awarded: ${error.message}`);
-  }
-  return { status: 'SUCCESS', event_id: ev.id, placers_awarded: rows.length, sections: finalHeats.length };
+/**
+ * Points for a FINAL. The database ranks every section of the final together by time
+ * (audit #3), lets ties share a place, and recalculates by itself if a result is edited later.
+ */
+async function awardPoints(heat: HeatRow) {
+  const { data, error } = await supabase.rpc('allocate_event_points', { p_event_id: heat.event_id, p_heat_id: heat.id });
+  if (error) throw new ProgressionError(`Results saved, but points could not be awarded: ${error.message}`);
+  return data;
 }
 
 /** Finalize a heat and run everything that follows from it. */
-export async function finalizeHeat(heatId: string, user: TokenPayload) {
+export async function finalizeHeat(
+  heatId: string,
+  user: TokenPayload,
+  claimed: { eventId?: unknown; stage?: unknown } = {},
+) {
   const { data: heat, error } = await supabase
     .from('heats')
     .select('id, event_id, stage, heat_number, status, events(id, name, code, category, start_type, max_lanes)')
@@ -279,6 +258,13 @@ export async function finalizeHeat(heatId: string, user: TokenPayload) {
   if (error) throw new ProgressionError(error.message);
   if (!heat) throw new ProgressionError('Heat not found.', 404);
   const h = { ...(heat as any), events: Array.isArray((heat as any).events) ? (heat as any).events[0] : (heat as any).events } as HeatRow;
+  // The app may say which event / stage it thinks this is; a mismatch means the wrong heat (audit #6)
+  if (claimed.eventId != null && claimed.eventId !== '' && String(claimed.eventId) !== h.event_id) {
+    throw new ProgressionError('This heat belongs to a different event. Reload the heat list and try again.', 409);
+  }
+  if (claimed.stage != null && claimed.stage !== '' && String(claimed.stage) !== h.stage) {
+    throw new ProgressionError(`This heat is a ${h.stage}, not a ${String(claimed.stage)}. Reload the heat list and try again.`, 409);
+  }
   assertEventScope(user, h.event_id);
   if (user.role !== 'meet_admin') assertCallRoomClosed(h.status);
 
@@ -296,7 +282,7 @@ export async function finalizeHeat(heatId: string, user: TokenPayload) {
   let nextRound: any = null;
   let pointsAwarded: any = null;
   if (!waiting.length) {
-    if (h.stage === 'FINAL') pointsAwarded = await awardPoints(h, roundHeats);
+    if (h.stage === 'FINAL') pointsAwarded = await awardPoints(h);
     else nextRound = await buildNextRound(h, roundHeats);
   }
 
