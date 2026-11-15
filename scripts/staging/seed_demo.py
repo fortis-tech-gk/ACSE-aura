@@ -423,7 +423,7 @@ Data: {counts.replace('|', ' colleges · ', 1).replace('|', ' athletes · ', 1).
 The first three run in **100m Men, Heat 1** (Day 2). The last one won the 100m Women final on Day 1.
 
 ## Staging addresses
-- Website: https://aura-2026-staging.vercel.app (Live Results: `/results`, admin: `/login/admin`, colleges: `/login/squad`)
+- Website: https://vtu-athletics.vercel.app (Live Results: `/results`, admin: `/login/admin`, colleges: `/login/squad`)
 - API: https://aura-api-staging-wgebilkjsa-el.a.run.app
 - Apps: the `athletes-demo` / `officials-demo` APKs (they talk to staging only)
 
