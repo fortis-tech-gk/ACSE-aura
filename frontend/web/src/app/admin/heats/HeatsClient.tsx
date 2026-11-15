@@ -14,7 +14,7 @@ export default function HeatsClient({ heats }: Props) {
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
   async function handleGenerateHeats() {
-    if (!window.confirm('This will seed all verified athletes with bib numbers into preliminary heats and preferred lanes. Continue?')) {
+    if (!window.confirm('This draws every sprint, hurdles and relay event that has not started yet: accredited athletes of paid colleges only, teammates in different heats, random lanes. Events already under way are left alone. Continue?')) {
       return;
     }
 
@@ -26,7 +26,8 @@ export default function HeatsClient({ heats }: Props) {
       if (res.success) {
         setMessage({
           type: 'success',
-          text: `Successfully seeded ${res.totalAthletesSeeded} athletes across ${res.totalHeatsCreated} track heats!`,
+          text: `Drew ${res.totalAthletesSeeded} entries into ${res.totalHeatsCreated} heat(s).` +
+            (res.skipped?.length ? ` Not drawn — ${res.skipped.join('; ')}` : ''),
         });
         router.refresh();
       } else {
@@ -58,7 +59,7 @@ export default function HeatsClient({ heats }: Props) {
       <div className="admin-page-header">
         <div className="admin-title-group">
           <h2>Automated Track Heats &amp; Lane Seeding</h2>
-          <p>World Athletics standard lane assignment (preferred lanes 4, 5, 3, 6, 2, 7, 1, 8) for verified athletes</p>
+          <p>Random heats and lanes (centre lanes first) for accredited athletes of paid colleges; teammates in different heats</p>
         </div>
 
         <div className="admin-actions-group">

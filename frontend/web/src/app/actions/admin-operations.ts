@@ -484,108 +484,73 @@ export async function verifySquadPaymentAction(
 }
 
 /**
- * 7. Automatically seeds verified athletes into track preliminary heats and lane assignments.
+ * 7. Draws every lane event (sprints, hurdles, relays) through the database draw
+ *    (generate_heat_draw): only accredited athletes of paid colleges, teammates in different
+ *    heats, random lanes. An event that fits in one race is drawn straight as a FINAL; a
+ *    bigger one gets HEATS. Events that are already under way are left alone.
  */
 export async function generateTrackHeatsAction(): Promise<{
   success: boolean;
   totalHeatsCreated?: number;
   totalAthletesSeeded?: number;
+  skipped?: string[];
   error?: string;
 }> {
   await requireAdmin();
 
-  // Fetch track sprint and hurdle events that have lanes
   const { data: trackEvents, error: evErr } = await supabaseAdmin
     .from('events')
-    .select('id, name, code, gender, category, max_lanes, start_type')
-    .in('category', ['track_sprint', 'track_hurdles', 'relay'])
+    .select('id, name, code, max_lanes, start_type, heats(status)')
+    .eq('start_type', 'lanes')
     .order('code', { ascending: true });
 
   if (evErr || !trackEvents || trackEvents.length === 0) {
-    return { success: false, error: 'No lane-based track events found.' };
+    return { success: false, error: evErr?.message || 'No lane-based track events found.' };
   }
 
   let totalHeatsCreated = 0;
   let totalAthletesSeeded = 0;
+  const skipped: string[] = [];
 
-  for (const event of trackEvents) {
-    // Find verified athletes registered for this event with valid bib numbers
-    const { data: regs } = await supabaseAdmin
-      .from('registrations')
-      .select(`
-        id,
-        profile_id,
-        profiles!inner (
-          id,
-          sslc_name,
-          bid_number,
-          squads!inner (
-            payment_status
-          )
-        )
-      `)
-      .eq('event_id', event.id)
-      .eq('profiles.squads.payment_status', 'VERIFIED')
-      .not('profiles.bid_number', 'is', null);
+  const draw = async (eventId: string, stage: 'HEATS' | 'FINAL', lanes: number) =>
+    supabaseAdmin.rpc('generate_heat_draw', { p_event_id: eventId, p_stage: stage, p_num_lanes: lanes });
 
-    const eligible = regs?.map((r: any) => r.profiles).filter((p: any) => Boolean(p.bid_number)) || [];
-    if (eligible.length === 0) continue;
+  for (const event of trackEvents as any[]) {
+    if ((event.heats || []).some((h: any) => h.status !== 'SCHEDULED')) {
+      skipped.push(`${event.name}: already under way`);
+      continue;
+    }
+    const lanes = event.max_lanes || 8;
 
-    // Shuffle athletes for random heat & lane draw
-    const shuffled = [...eligible].sort(() => Math.random() - 0.5);
-    const lanesPerHeat = event.max_lanes || 8;
-    const numHeats = Math.ceil(shuffled.length / lanesPerHeat);
-
-    // Delete existing heats for this event if re-generating
-    const { data: existingHeats } = await supabaseAdmin
-      .from('heats')
-      .select('id')
-      .eq('event_id', event.id);
-
-    if (existingHeats && existingHeats.length > 0) {
-      const heatIds = existingHeats.map((h: any) => h.id);
-      await supabaseAdmin.from('heat_athletes').delete().in('heat_id', heatIds);
-      await supabaseAdmin.from('heats').delete().in('id', heatIds);
+    // Nothing has started: clear the old draft so the event is drawn from scratch
+    if ((event.heats || []).length) {
+      const { error: delErr } = await supabaseAdmin.from('heats').delete().eq('event_id', event.id).eq('status', 'SCHEDULED');
+      if (delErr) {
+        skipped.push(`${event.name}: could not clear the old draw (${delErr.message})`);
+        continue;
+      }
     }
 
-    // Standard preferred lanes: 4, 5, 3, 6, 2, 7, 1, 8
-    const preferredLanes = [4, 5, 3, 6, 2, 7, 1, 8];
-
-    for (let h = 0; h < numHeats; h++) {
-      const { data: newHeat, error: heatErr } = await supabaseAdmin
-        .from('heats')
-        .insert({
-          event_id: event.id,
-          heat_number: h + 1,
-          stage: numHeats > 1 ? 'Heats' : 'Final',
-          status: 'SCHEDULED',
-        })
-        .select('id')
-        .single();
-
-      if (heatErr || !newHeat) continue;
-      totalHeatsCreated++;
-
-      const heatAthletesBatch = shuffled.slice(h * lanesPerHeat, (h + 1) * lanesPerHeat);
-      const heatAthleteInserts = heatAthletesBatch.map((athlete: any, idx: number) => ({
-        heat_id: newHeat.id,
-        athlete_id: athlete.id,
-        lane_number: preferredLanes[idx % preferredLanes.length] || (idx + 1),
-      }));
-
-      await supabaseAdmin.from('heat_athletes').insert(heatAthleteInserts);
-      totalAthletesSeeded += heatAthletesBatch.length;
+    // Straight final when everyone fits in one race; otherwise heats
+    let { data, error } = await draw(event.id, 'FINAL', lanes);
+    if (error && /Draw HEATS first/i.test(error.message)) {
+      ({ data, error } = await draw(event.id, 'HEATS', lanes));
     }
+
+    if (error) {
+      skipped.push(`${event.name}: ${error.message}`);
+      continue;
+    }
+    totalHeatsCreated += Number((data as any)?.num_heats) || 0;
+    totalAthletesSeeded += Number((data as any)?.total_athletes) || 0;
   }
 
-  await logAudit('GENERATED_TRACK_HEATS', {
-    totalHeatsCreated,
-    totalAthletesSeeded,
-  });
+  await logAudit('GENERATED_TRACK_HEATS', { totalHeatsCreated, totalAthletesSeeded, skipped });
 
   revalidatePath('/admin/heats');
+  revalidatePath('/admin/schedule');
 
-  return { success: true, totalHeatsCreated, totalAthletesSeeded };
+  return { success: true, totalHeatsCreated, totalAthletesSeeded, skipped };
 }
 
 /**
