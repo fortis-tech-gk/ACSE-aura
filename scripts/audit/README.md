@@ -45,7 +45,7 @@ the Supabase ones the Supabase CLI already uses. Override ports with `AUDIT_DB_P
 | S1–S4 | Accreditation, call room, meals and hostel refuse unpaid or unaccredited athletes |
 | S5–S7 | Offline replays count once, duplicates are flagged, hostel gender is enforced |
 | R1 | Row-level security is ON for every table |
-| B1–B7 | Database backstops for rules the website already enforces |
+| B1–B7 | Database backstops for rules the website already enforces (B1 follows the 07-11 reserve amendment; B3 is website-only by design) |
 | A1 | A referee can't write results outside their assigned events |
 | A2 | The API rejects impossible times |
 | A3–A4 | `finalize` can't award medals from a heat or under the wrong event |

@@ -246,15 +246,21 @@ SELECT audit_athlete(audit_sq('CD'), 'Backstop A', '1AA23BS001') \gset ignore_
 SELECT audit_athlete(audit_sq('CD'), 'Backstop B', '1AA23BS002') \gset ignore_
 INSERT INTO registrations (profile_id, event_id, kind) VALUES (audit_pid('Backstop A'), audit_ev('400M-M'), 'regular'),
                                                               (audit_pid('Backstop A'), audit_ev('800M-M'), 'regular');
-SELECT chk('B1', try_sql($$INSERT INTO registrations (profile_id, event_id, kind) VALUES (audit_pid('Backstop A'), audit_ev('200M-M'), 'reserve')$$) <> '',
-       '[backstop] No reserve event when the athlete already has 2 events (official rule)');
+-- Amended 07-11-2026: 1 reserve is allowed even with 2 events, but needs a regular event (Rule 36)
+SELECT audit_athlete(audit_sq('CD'), 'Backstop C', '1AA23BS003') \gset ignore_
+-- The reserve rule is a deferred trigger: make it fire inside try_sql
+BEGIN;
+SET CONSTRAINTS ALL IMMEDIATE;
+SELECT chk('B1', try_sql($$INSERT INTO registrations (profile_id, event_id, kind) VALUES (audit_pid('Backstop A'), audit_ev('200M-M'), 'reserve')$$) = ''
+              AND try_sql($$INSERT INTO registrations (profile_id, event_id, kind) VALUES (audit_pid('Backstop C'), audit_ev('200M-M'), 'reserve')$$) <> '',
+       '[backstop] Reserve allowed with 2 events (07-11 amendment); a reserve-only entry is refused (Rule 36)');
+COMMIT;
 SELECT chk('B2', try_sql($$INSERT INTO registrations (profile_id, event_id, kind) VALUES (audit_pid('Backstop B'), audit_ev('100M-M'), 'regular')$$) IS NOT NULL
              OR (SELECT count(*) FROM registrations r JOIN profiles p ON p.id = r.profile_id JOIN squads s ON s.id = p.squad_id
                  WHERE s.id = audit_sq('CD') AND r.event_id = audit_ev('100M-M') AND r.kind = 'regular') <= 2,
        '[backstop] Max 2 athletes per college per event');
-SELECT chk('B3', try_sql($$UPDATE squads SET roster_locked = true WHERE id = audit_sq('CE');
-                           INSERT INTO registrations (profile_id, event_id, kind) VALUES (audit_pid('Spare 10'), audit_ev('LJ-M'), 'regular')$$) <> '',
-       '[backstop] No new entries on a locked roster');
+-- B3 (no entries on a locked roster) is enforced by the website only, by design: Directorate
+-- withdrawals / substitutions change locked rosters (see migration 0030).
 SELECT chk('B4', try_sql($$SELECT audit_athlete(audit_sq('CB'), 'Dup USN', '1AA23BS001')$$) <> '',
        '[backstop] USN is unique across the championship');
 SELECT chk('B5', try_sql($$UPDATE profiles SET aadhaar_number = '12AB34' WHERE sslc_name = 'Backstop B'$$) <> '',
