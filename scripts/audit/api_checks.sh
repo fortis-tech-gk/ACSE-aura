@@ -75,4 +75,12 @@ for i in $(seq 1 30); do code /auth/staff/pin-login "{\"pin\":\"$((3000+i))\"}" 
 MS=$(( ($(date +%s%N) - START) / 1000000 ))
 chk A9 "$([ $MS -lt 3000 ] && echo 1 || echo 0)" "30 concurrent bad PIN logins finish in < 3 s (no CPU stall)" "took ${MS} ms"
 
+# A10: the public (anon) REST role can neither read nor change data
+REST="http://127.0.0.1:${AUDIT_REST_PORT:-55433}"
+RD=$(curl -s "$REST/profiles?select=usn,aadhaar_number&limit=5")
+WR=$(curl -s -o /dev/null -w '%{http_code}' -X PATCH "$REST/squads?id=not.is.null" -H 'Content-Type: application/json' -d '{"payment_status":"VERIFIED"}')
+RPC=$(curl -s -o /dev/null -w '%{http_code}' -X POST "$REST/rpc/get_championship_standings" -H 'Content-Type: application/json' -d '{}')
+ok=0; { [ "$RD" = "[]" ] || ! echo "$RD" | grep -q '"usn"'; } && [ "$WR" -ge 400 ] && [ "$RPC" -ge 400 ] && ok=1
+chk A10 "$ok" "The anon key cannot read athletes, change payments or call database functions" "read: ${RD:0:80} / write HTTP $WR / rpc HTTP $RPC"
+
 echo "API: $PASS passed, $FAIL failed"
