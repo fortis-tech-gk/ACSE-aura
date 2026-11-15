@@ -302,7 +302,10 @@ for code, stage, sess, time, status in ITEMS:
 # Heat draws (accredited regular entrants of paid squads, random order; lane races centre-first)
 def entrants(code, relay=False):
     if relay:
-        return [t[0] for t in teams if t[2] == events[code][0]]
+        # A relay team can report only with 4 accredited runners (migration 0035)
+        ok = set(accredited)
+        return [t[0] for t in teams if t[2] == events[code][0]
+                and sum(1 for m in members if m[0] == t[0] and m[1] in ok) >= 4]
     return [pid for pid, eid, kind in regs if eid == events[code][0] and kind == 'regular' and pid in set(accredited)]
 
 
