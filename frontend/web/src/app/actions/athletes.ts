@@ -419,7 +419,7 @@ export async function addAthleteAction(formData: FormData): Promise<AddAthleteRe
   }
 
   // Insert athlete profile
-  let insertPayload: any = {
+  const insertPayload: any = {
     squad_id: session.squadId,
     sslc_name: sslcName,
     usn,

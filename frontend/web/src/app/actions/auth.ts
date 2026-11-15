@@ -22,7 +22,7 @@ export interface AuthResponse {
  */
 export async function loginSquad(formData: FormData): Promise<AuthResponse> {
   let collegeCode = (formData.get('collegeCode') as string || formData.get('squadCode') as string || '').trim().toUpperCase();
-  let rawGender = (formData.get('gender') as string || '').trim().toLowerCase();
+  const rawGender = (formData.get('gender') as string || '').trim().toLowerCase();
   const passphrase = (formData.get('passphrase') as string || '').trim();
 
   let gender = rawGender === 'male' || rawGender === 'men' ? 'men' : (rawGender === 'female' || rawGender === 'women' ? 'women' : '');
