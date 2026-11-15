@@ -47,6 +47,7 @@ the Supabase ones the Supabase CLI already uses. Override ports with `AUDIT_DB_P
 | S5–S7 | Offline replays count once, duplicates are flagged, hostel gender is enforced |
 | C1–C2 | Call room reserve substitution: same college only, logged, not after the call room closes |
 | R1 | Row-level security is ON for every table |
+| R2 | The anon key cannot execute any database function, including ones created later |
 | B1–B7 | Database backstops for rules the website already enforces (B1 follows the 07-11 reserve amendment; B3 is website-only by design) |
 | A1 | A referee can't write results outside their assigned events |
 | A2 | The API rejects impossible times |

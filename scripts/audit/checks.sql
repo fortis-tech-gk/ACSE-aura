@@ -272,6 +272,16 @@ SELECT chk('R1', NOT EXISTS (SELECT 1 FROM pg_class c JOIN pg_namespace n ON n.o
        (SELECT count(*) || ' tables without RLS (anon key = full read/write)' FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
           WHERE n.nspname = 'public' AND c.relkind = 'r' AND NOT c.relrowsecurity AND c.relname <> 'audit_results'));
 
+CREATE FUNCTION public.audit_priv_probe() RETURNS int LANGUAGE sql AS 'SELECT 1';
+SELECT chk('R2', NOT EXISTS (SELECT 1 FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
+                             WHERE n.nspname = 'public' AND p.proname NOT IN ('chk', 'try_sql', 'call_ok') AND p.proname NOT LIKE 'audit\_%'
+                               AND has_function_privilege('anon', p.oid, 'execute'))
+              AND NOT has_function_privilege('anon', 'public.audit_priv_probe()', 'execute'),
+       'The anon key cannot execute any database function, including ones created later',
+       (SELECT count(*) || ' function(s) executable by anon' FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
+          WHERE n.nspname = 'public' AND has_function_privilege('anon', p.oid, 'execute')));
+DROP FUNCTION public.audit_priv_probe();
+
 -- ============================================================================
 -- B. Database backstops for rules the website already enforces (defence in depth)
 -- ============================================================================
