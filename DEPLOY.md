@@ -276,7 +276,7 @@ The App Store listing text and the reviewer notes are in `docs/app-store/athlete
 | 0038 result change log | ✅ | ✅ |
 | 0039 function privileges | ✅ | ✅ |
 | 0040 20 km walk, decathlon, heptathlon events | ✅ | ✅ rows already present, not run |
-| 0041 relay teams built from athlete-form nominations | ✅ | ⏳ to run |
+| 0041 relay teams built from athlete-form nominations | ✅ | ✅ |
 
 ## Deploy log
 
