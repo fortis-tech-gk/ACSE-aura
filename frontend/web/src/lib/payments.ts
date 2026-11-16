@@ -62,7 +62,7 @@ export async function calculateSquadFees(squadId: string) {
       .eq('profiles.squad_id', squadId),
     supabaseAdmin
       .from('squads')
-      .select('college_id, colleges(squads(id))')
+      .select('college_id, gender, colleges(squads(id))')
       .eq('id', squadId)
       .maybeSingle(),
     supabaseAdmin
@@ -135,6 +135,18 @@ export async function calculateSquadFees(squadId: string) {
 
   const collegeMixedNominations = new Map<string, Set<string>>();
   (siblingRegs || []).forEach((r: any) => addMember(collegeMixedNominations, r.event_id, r.profile_id));
+
+  // No team built on the Relay page yet, but both squads of the college nominated athletes to
+  // the mixed relay: each squad would otherwise bill the whole college team. Bill it once, to
+  // the men's squad, until a team row decides the owner.
+  if ((squadRow as any)?.gender === 'women') {
+    for (const eventId of candidateMixedIds) {
+      const hasTeam = [...(ownedTeams || []), ...(siblingTeams || [])].some(
+        (t: any) => t.event_id === eventId && Array.isArray(t.relay_members) && t.relay_members.length > 0
+      );
+      if (!hasTeam && (collegeMixedNominations.get(eventId)?.size || 0) > 0) relayEventIds.delete(eventId);
+    }
+  }
 
   // Member count per billed relay team
   const relayTeams: RelayTeamFee[] = [];
