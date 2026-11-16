@@ -84,6 +84,15 @@ function relayMemberLabel(alreadyNominated: number): string {
     ? `₹100 (member ${alreadyNominated + 1} of 4)`
     : `₹0 (reserve ${alreadyNominated - 3} — free)`;
 }
+/** Mixed relay: each squad pays ₹100 for each of its OWN first 2 members; further members are free. */
+function mixedMemberShare(ownNominated: number): number {
+  return ownNominated < 2 ? RELAY_MEMBER_FEE : 0;
+}
+function mixedMemberLabel(ownNominated: number): string {
+  return ownNominated < 2
+    ? `₹100 (your squad's member ${ownNominated + 1} of 2)`
+    : '₹0 (your squad already pays for 2 — free)';
+}
 
 /** Official VTU USN pattern, e.g. 1RV21CS001, 4MT22MBA05 (mirrors server validation) */
 const VTU_USN_REGEX = /^[1-4][A-Z]{2}\d{2}[A-Z]{2,3}\d{2,3}$/;
@@ -203,11 +212,13 @@ export default function AthletesManager({
   const registeredMixedRelay = athletes.filter((a) =>
     a.registrations.some((r) => isMixedRelayCode(r.events?.code))
   ).length + siblingMixedCount;
+  // Mixed relay fee is per squad: only this squad's own nominations count
+  const ownMixedRelay = registeredMixedRelay - siblingMixedCount;
 
   // Real-time fee calculation for current athlete modal:
   // ₹100 per regular event / HM. Reserve is FREE (₹0).
-  // For relays, the ₹400 team fee is shown as ₹100 for each of the first 4 members
-  // (the runners) and ₹0 for members 5 & 6 (the free reserves) — so a full team totals ₹400.
+  // For divisional relays, the ₹400 team fee is shown as ₹100 for each of the first 4 members
+  // and ₹0 for members 5 & 6. Mixed relay: ₹100 for each of this squad's own first 2 members.
   const modalFee = useMemo(() => {
     let fee = 0;
     if (event1) fee += 100;
@@ -215,14 +226,13 @@ export default function AthletesManager({
     if (isHalfMarathon) fee += 100;
     if (relayChoice === '4x100') fee += relayMemberShare(registered100mRelay);
     else if (relayChoice === '4x400') fee += relayMemberShare(registered400mRelay);
-    // Mixed team is shared by the college; this squad's members are counted here
-    if (isMixedRelay) fee += relayMemberShare(registeredMixedRelay);
+    if (isMixedRelay) fee += mixedMemberShare(ownMixedRelay);
     return fee;
-  }, [event1, event2, relayChoice, isMixedRelay, isHalfMarathon, registered100mRelay, registered400mRelay, registeredMixedRelay]);
+  }, [event1, event2, relayChoice, isMixedRelay, isHalfMarathon, registered100mRelay, registered400mRelay, ownMixedRelay]);
 
   // Squad total dues. The server value (same calculation as the payment page) is used when
   // available; the fallback mirrors it: ₹100 per regular / Half Marathon entry and, per relay
-  // team, ₹100 for each of the first 4 members (members 5 & 6 free).
+  // team, ₹100 for each of the first 4 members (members 5 & 6 free); mixed relay: first 2 of this squad.
   const totalSquadFee = useMemo(() => {
     if (typeof totalDues === 'number') return totalDues;
     const regularEntries = athletes.reduce((acc, a) => acc + a.registrations.filter((r) => r.kind === 'regular').length, 0);
@@ -233,7 +243,13 @@ export default function AthletesManager({
         .filter((r) => r.kind === 'relay' && r.event_id)
         .forEach((r) => relayMembers.set(r.event_id, (relayMembers.get(r.event_id) || 0) + 1));
     });
-    const relayFee = Array.from(relayMembers.values()).reduce((sum, n) => sum + Math.min(n, 4) * 100, 0);
+    const mixedIds = new Set(
+      athletes.flatMap((a) => a.registrations.filter((r) => isMixedRelayCode(r.events?.code)).map((r) => r.event_id))
+    );
+    const relayFee = Array.from(relayMembers.entries()).reduce(
+      (sum, [id, n]) => sum + Math.min(n, mixedIds.has(id) ? 2 : 4) * 100,
+      0
+    );
     return regularEntries * 100 + hmEntries * 100 + relayFee;
   }, [athletes, totalDues]);
 
@@ -1589,7 +1605,7 @@ export default function AthletesManager({
                             />
                             <div>
                               <div style={{ fontWeight: 700, fontSize: '0.9rem', color: 'var(--text-primary)' }}>
-                                Code 22: 4x400m Mixed Relay Pool (₹100 each for first 4 members, reserves free)
+                                Code 22: 4x400m Mixed Relay Pool (each squad pays ₹100 each for its first 2 members, rest free)
                               </div>
                               <div style={{ fontSize: '0.725rem', color: 'var(--text-secondary)' }}>
                                 Can be combined with other entries. Max 6 nominations per college (Men + Women). Order: Leg 1: W • Leg 2: M • Leg 3: W • Leg 4: M
@@ -1671,7 +1687,7 @@ export default function AthletesManager({
                         <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.875rem' }}>
                           <span>Mixed Relay Pool:</span>
                           <span style={{ fontWeight: 700 }}>
-                            {!isMixedRelay ? '₹0' : relayMemberLabel(registeredMixedRelay)}
+                            {!isMixedRelay ? '₹0' : mixedMemberLabel(ownMixedRelay)}
                           </span>
                         </div>
 

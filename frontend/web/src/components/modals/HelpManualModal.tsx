@@ -174,7 +174,7 @@ const STEPS: Step[] = [
             <tr><td style={td}><strong>Event 2</strong></td><td style={td}>Optional; must be different from Event 1. <strong>Max 2 individual events</strong> per athlete</td><td style={td}>₹100</td></tr>
             <tr><td style={td}><strong>Reserve event</strong></td><td style={td}><strong>1 reserve allowed</strong> when the athlete has at least one individual event &mdash; <strong>even with 2 events</strong>. Must be a different event</td><td style={td}>Free</td></tr>
             <tr><td style={td}><strong>Divisional relay</strong></td><td style={td}>Choose <strong>4×100m OR 4×400m</strong>, never both. Max 6 athletes per relay (4 runners + 2 reserves)</td><td style={td}>₹100 each for the first 4 members, members 5 &amp; 6 free (max ₹400)</td></tr>
-            <tr><td style={td}><strong>4×400m Mixed relay</strong></td><td style={td}>Optional tick box. Max 6 per college (Men + Women together); needs at least 2 women and 2 men</td><td style={td}>₹100 each for the first 4 members (max ₹400, once per college)</td></tr>
+            <tr><td style={td}><strong>4×400m Mixed relay</strong></td><td style={td}>Optional tick box. Max 6 per college (Men + Women together); needs at least 2 women and 2 men</td><td style={td}>Each squad pays ₹100 each for its own first 2 members (max ₹200 per squad, ₹400 per college)</td></tr>
             <tr><td style={td}><strong>Half Marathon (21 km)</strong></td><td style={td}>Optional tick box; can be the only event</td><td style={td}>₹100</td></tr>
           </tbody>
         </table>
@@ -252,6 +252,7 @@ const STEPS: Step[] = [
             <tr><td style={td}>Half Marathon (per athlete)</td><td style={td}>₹100</td></tr>
             <tr><td style={td}>Relay team: each of the first 4 members</td><td style={td}>₹100 each (max ₹400 per team)</td></tr>
             <tr><td style={td}>Relay team: members 5 and 6</td><td style={td}>Free</td></tr>
+            <tr><td style={td}>Mixed relay: each of your squad&apos;s first 2 members</td><td style={td}>₹100 each (max ₹200 per squad); more members free</td></tr>
           </tbody>
         </table>
         <div style={box}>

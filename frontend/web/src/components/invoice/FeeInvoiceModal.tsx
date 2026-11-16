@@ -244,7 +244,7 @@ export default function FeeInvoiceModal({ isOpen, onClose, breakdown, payments, 
             </span>
             <span>Half Marathon {breakdown.hmCount} × ₹{breakdown.hmFeeRate || 100}</span>
             <span>
-              Relay members {breakdown.relayMembersBilled} × ₹{breakdown.relayFeeRate || 100} (first 4 per team)
+              Relay members {breakdown.relayMembersBilled} × ₹{breakdown.relayFeeRate || 100} (first 4 per team; mixed relay first 2 per squad)
             </span>
             <span>Reserve events {breakdown.reserveEventsCount} (free)</span>
             <span className="kit-total">Total fee: ₹{breakdown.totalAmount.toLocaleString('en-IN')}/-</span>

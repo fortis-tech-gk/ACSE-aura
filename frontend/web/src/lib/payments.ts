@@ -14,10 +14,13 @@ import { getEventsByCodes, getEventsCatalogue } from '@/lib/events-catalogue';
  * - Reserve events = Free (₹0)
  * - 21km Half Marathon = ₹100
  * - Relay teams = ₹100 for each of the first 4 members; members 5 & 6 free (max ₹400 per team)
+ * - Mixed relay = ₹100 for each of the squad's own first 2 members (max ₹200 per squad)
  */
 /** Relay fee: ₹100 for each of the first 4 members of a team; members 5 & 6 are free (max ₹400/team). */
 export const RELAY_FEE_PER_MEMBER = 100;
 export const RELAY_BILLABLE_MEMBERS = 4;
+/** Mixed relay: each squad pays for its own members only, at most 2 (₹200 per squad, ₹400 per college). */
+export const MIXED_RELAY_BILLABLE_PER_SQUAD = 2;
 export const MIXED_RELAY_CODE = '4X400M-MIX';
 
 export interface RelayTeamFee {
@@ -35,8 +38,8 @@ export interface RelayTeamFee {
  *  - Relays: ₹100 × (number of team members, counting at most 4). So a team of 1/2/3 costs
  *    ₹100/₹200/₹300 and a team of 4–6 costs ₹400. A member is any athlete nominated to that
  *    relay (tick-box on the athlete form) or placed on the Relay page lineup — counted once.
- *  - The 4x400m Mixed Relay team is shared by the college's Men's and Women's squads: its members
- *    come from both and it is billed once, to the squad that owns the team (as before).
+ *  - The 4x400m Mixed Relay team is shared by the college's Men's and Women's squads. Each squad
+ *    pays ₹100 for each of its OWN members, counting at most 2 (₹100 for 1, ₹200 for 2 or more).
  */
 export async function calculateSquadFees(squadId: string) {
   let regularEventsCount = 0;
@@ -62,7 +65,7 @@ export async function calculateSquadFees(squadId: string) {
       .eq('profiles.squad_id', squadId),
     supabaseAdmin
       .from('squads')
-      .select('college_id, gender, colleges(squads(id))')
+      .select('college_id, colleges(squads(id))')
       .eq('id', squadId)
       .maybeSingle(),
     supabaseAdmin
@@ -82,95 +85,67 @@ export async function calculateSquadFees(squadId: string) {
     }
   });
 
-  // Relay teams composed on the Relay page (relay_teams + relay_members) are billed to the
-  // squad that owns the team row. A mixed relay team is shared by the college and owned by
-  // ONE squad, so it is billed exactly once.
+  const eventById = new Map(catalogue.map((e) => [e.id, e]));
+  const mixedEventIds = new Set(
+    catalogue.filter((e) => String(e.code || '').toUpperCase() === MIXED_RELAY_CODE).map((e) => e.id)
+  );
+
+  // Divisional relays: team members = athletes nominated on the athlete form ∪ the squad's own
+  // Relay-page lineup, billed for at most 4.
   (ownedTeams || []).forEach((t: any) => {
-    if (Array.isArray(t.relay_members) && t.relay_members.length > 0 && t.event_id) {
+    if (t.event_id && !mixedEventIds.has(t.event_id) && Array.isArray(t.relay_members) && t.relay_members.length > 0) {
       relayEventIds.add(t.event_id);
     }
   });
 
+  // Mixed relay: the team is shared by the college, but each squad pays only for its OWN members
+  // (men's squad for its men, women's squad for its women), at most 2 each — so ₹200 per squad,
+  // ₹400 per college. Members = this squad's tick-box nominations ∪ this squad's athletes in the
+  // college's mixed team on the Relay page, whichever squad owns that team row.
   const collegeRow: any = Array.isArray((squadRow as any)?.colleges) ? (squadRow as any).colleges[0] : (squadRow as any)?.colleges;
-  const siblingSquadIds: string[] = squadRow?.college_id
-    ? ((collegeRow?.squads || []) as any[]).map((x: any) => x.id).filter((id: string) => id && id !== squadId)
-    : [];
-
-  const eventById = new Map(catalogue.map((e) => [e.id, e]));
-  // Mixed relay draws members from the whole college: the sibling squad's nominations count too
-  const mixedEventIds = catalogue
-    .filter((e) => String(e.code || '').toUpperCase() === MIXED_RELAY_CODE)
-    .map((e) => e.id);
-
-  // A relay nomination made at athlete registration for an event whose (mixed) team is owned
-  // by the sibling squad of the same college is already billed there — don't double-charge.
-  // Both sibling reads are independent, so they also run together.
-  const candidateRelayIds = Array.from(relayEventIds);
-  const candidateMixedIds = mixedEventIds.filter((id) => relayEventIds.has(id));
-  const [{ data: siblingTeams }, { data: siblingRegs }] = await Promise.all([
-    siblingSquadIds.length > 0 && candidateRelayIds.length > 0
-      ? supabaseAdmin
+  const collegeSquadIds: string[] = ((collegeRow?.squads || []) as any[]).map((x: any) => x.id).filter(Boolean);
+  if (!collegeSquadIds.includes(squadId)) collegeSquadIds.push(squadId);
+  const { data: mixedTeams } =
+    mixedEventIds.size > 0
+      ? await supabaseAdmin
           .from('relay_teams')
-          .select('event_id, squad_id, relay_members(profile_id)')
-          .in('squad_id', siblingSquadIds)
-          .in('event_id', candidateRelayIds)
-      : Promise.resolve({ data: [] as any[] }),
-    siblingSquadIds.length > 0 && candidateMixedIds.length > 0
-      ? supabaseAdmin
-          .from('registrations')
-          .select('event_id, profile_id, profiles!inner(squad_id)')
-          .eq('kind', 'relay')
-          .in('event_id', candidateMixedIds)
-          .in('profiles.squad_id', siblingSquadIds)
-      : Promise.resolve({ data: [] as any[] }),
-  ]);
-
-  (siblingTeams || []).forEach((t: any) => {
-    const ownedHere = (ownedTeams || []).some(
-      (o: any) => o.event_id === t.event_id && Array.isArray(o.relay_members) && o.relay_members.length > 0
-    );
-    const siblingHasMembers = Array.isArray(t.relay_members) && t.relay_members.length > 0;
-    if (!ownedHere && siblingHasMembers) relayEventIds.delete(t.event_id);
+          .select('event_id, relay_members(profile_id, profiles(squad_id))')
+          .in('squad_id', collegeSquadIds)
+          .in('event_id', Array.from(mixedEventIds))
+      : { data: [] as any[] };
+  (mixedTeams || []).forEach((t: any) => {
+    (t.relay_members || []).forEach((m: any) => {
+      const prof = Array.isArray(m?.profiles) ? m.profiles[0] : m?.profiles;
+      if (m?.profile_id && prof?.squad_id === squadId) {
+        relayEventIds.add(t.event_id);
+        addMember(nominations, t.event_id, m.profile_id);
+      }
+    });
   });
 
-  const collegeMixedNominations = new Map<string, Set<string>>();
-  (siblingRegs || []).forEach((r: any) => addMember(collegeMixedNominations, r.event_id, r.profile_id));
-
-  // No team built on the Relay page yet, but both squads of the college nominated athletes to
-  // the mixed relay: each squad would otherwise bill the whole college team. Bill it once, to
-  // the men's squad, until a team row decides the owner.
-  if ((squadRow as any)?.gender === 'women') {
-    for (const eventId of candidateMixedIds) {
-      const hasTeam = [...(ownedTeams || []), ...(siblingTeams || [])].some(
-        (t: any) => t.event_id === eventId && Array.isArray(t.relay_members) && t.relay_members.length > 0
-      );
-      if (!hasTeam && (collegeMixedNominations.get(eventId)?.size || 0) > 0) relayEventIds.delete(eventId);
-    }
-  }
-
-  // Member count per billed relay team
   const relayTeams: RelayTeamFee[] = [];
-  if (relayEventIds.size > 0) {
-    for (const eventId of relayEventIds) {
-      const members = new Set<string>(nominations.get(eventId) || []);
-      (collegeMixedNominations.get(eventId) || new Set()).forEach((id) => members.add(id));
+  for (const eventId of relayEventIds) {
+    const members = new Set<string>(nominations.get(eventId) || []);
+    const isMixed = mixedEventIds.has(eventId);
+    if (!isMixed) {
       (ownedTeams || [])
         .filter((t: any) => t.event_id === eventId)
         .forEach((t: any) => (t.relay_members || []).forEach((m: any) => m?.profile_id && members.add(m.profile_id)));
-
-      const billedMembers = Math.min(members.size, RELAY_BILLABLE_MEMBERS);
-      const ev: any = eventById.get(eventId) || {};
-      relayTeams.push({
-        eventId,
-        code: ev.code || '',
-        name: ev.name || 'Relay',
-        members: members.size,
-        billedMembers,
-        fee: billedMembers * RELAY_FEE_PER_MEMBER,
-      });
     }
-    relayTeams.sort((a, b) => a.code.localeCompare(b.code));
+    if (members.size === 0) continue;
+
+    const billedMembers = Math.min(members.size, isMixed ? MIXED_RELAY_BILLABLE_PER_SQUAD : RELAY_BILLABLE_MEMBERS);
+    const ev: any = eventById.get(eventId) || {};
+    relayTeams.push({
+      eventId,
+      code: ev.code || '',
+      name: ev.name || 'Relay',
+      members: members.size,
+      billedMembers,
+      fee: billedMembers * RELAY_FEE_PER_MEMBER,
+    });
   }
+  relayTeams.sort((a, b) => a.code.localeCompare(b.code));
 
   const relayTeamsCount = relayTeams.length;
   const relayMembersBilled = relayTeams.reduce((sum, t) => sum + t.billedMembers, 0);

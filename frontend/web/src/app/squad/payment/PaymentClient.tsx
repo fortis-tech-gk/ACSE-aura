@@ -309,7 +309,7 @@ export default function PaymentClient({ breakdown, payments, squadCode, athletes
                     Relay Members ({breakdown.relayMembersBilled} &times; ₹{breakdown.relayFeeRate})
                   </span>
                   <div style={{ fontSize: '0.78rem', color: '#64748b' }}>
-                    ₹100 for each of the first 4 members of a team; members 5 &amp; 6 free (max ₹400 per team)
+                    ₹100 for each of the first 4 members of a team; members 5 &amp; 6 free (max ₹400 per team). Mixed relay: ₹100 for each of your squad&apos;s first 2 members (max ₹200)
                   </div>
                   {(breakdown.relayTeams || []).map((t) => (
                     <div key={t.eventId} style={{ fontSize: '0.78rem', color: '#475569' }}>
