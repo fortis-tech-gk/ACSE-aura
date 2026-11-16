@@ -1,8 +1,8 @@
 import { supabaseAdmin } from '@/lib/supabase';
 
-import { COLLEGE_MAX_ATHLETES, COLLEGE_MIN_ATHLETES } from '@/lib/college-strength-limits';
+import { COLLEGE_MIN_ATHLETES } from '@/lib/college-strength-limits';
 
-export { COLLEGE_MAX_ATHLETES, COLLEGE_MIN_ATHLETES };
+export { COLLEGE_MIN_ATHLETES };
 
 export interface CollegeStrength {
   /** Athletes across both squads of the college */

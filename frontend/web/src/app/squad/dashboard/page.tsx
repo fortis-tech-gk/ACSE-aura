@@ -8,7 +8,7 @@ import './dashboard.css';
 import PedContactCard from './PedContactCard';
 import CollegeDetailsCard from './CollegeDetailsCard';
 import { canEditRoster, isLateEntryWindow } from '@/lib/roster-window';
-import { countCollegeAthletes, COLLEGE_MAX_ATHLETES, COLLEGE_MIN_ATHLETES } from '@/lib/college-strength';
+import { countCollegeAthletes, COLLEGE_MIN_ATHLETES } from '@/lib/college-strength';
 
 export const metadata = {
   title: 'Contingent Overview — VTU SportsOS',
@@ -68,13 +68,13 @@ export default async function SquadDashboardPage() {
 
   // Calculations
   const totalAthletes = formattedAthletes.length;
-  // Rule 23 (min 8) and the 25-athlete cap apply to the whole college: both squads together.
-  const maxQuota = COLLEGE_MAX_ATHLETES;
+  // Rule 23 (min 8) applies to the whole college: both squads together. There is no upper limit.
   const minQuota = COLLEGE_MIN_ATHLETES;
   const collegeTotal = Math.max(collegeStrength.total, totalAthletes);
   const siblingAthletes = Math.max(0, collegeTotal - totalAthletes);
   const siblingLabel = isMen ? 'women' : 'men';
-  const quotaPercent = Math.min(100, Math.round((collegeTotal / maxQuota) * 100));
+  // Progress towards the Rule 23 minimum (full once the college has 8 athletes)
+  const quotaPercent = Math.min(100, Math.round((collegeTotal / minQuota) * 100));
 
   // Same fee calculation as the payment page: ₹100 per regular / Half Marathon entry and,
   // per relay team, ₹100 for each of the first 4 members (members 5 & 6 free).
@@ -208,7 +208,7 @@ export default async function SquadDashboardPage() {
           <div>
             <div className="squad-kpi-metric">
               <span className="squad-kpi-number">{collegeTotal}</span>
-              <span className="squad-kpi-sub">/ {maxQuota} Max (college)</span>
+              <span className="squad-kpi-sub">athletes (college)</span>
             </div>
             <div style={{ width: '100%', height: '6px', background: '#f1f5f9', borderRadius: '9999px', overflow: 'hidden', margin: '0.65rem 0' }}>
               <div
@@ -222,7 +222,6 @@ export default async function SquadDashboardPage() {
             </div>
             <div className="squad-kpi-footer">
               <span>{totalAthletes} this squad · {siblingAthletes} {siblingLabel}</span>
-              <span style={{ color: '#2563eb', fontWeight: 700 }}>{Math.max(0, maxQuota - collegeTotal)} slots open</span>
             </div>
             <div style={{ marginTop: '0.45rem', paddingTop: '0.35rem', borderTop: '1px dashed #e2e8f0', fontSize: '0.72rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
               <span style={{ color: collegeTotal >= minQuota ? '#16a34a' : '#d97706', fontWeight: 600 }}>
