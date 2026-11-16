@@ -592,12 +592,14 @@ export async function deleteAthleteAction(profileId: string): Promise<{ success:
   // profile delete never trips a foreign key, even on schemas without ON DELETE CASCADE.
   // The three child tables are independent of each other, so they are cleared together.
   // heat_athletes may not exist before scheduling; its errors are ignored (FK is ON DELETE CASCADE).
-  const [{ error: regDelErr }, { error: relayDelErr }] = await Promise.all([
-    supabaseAdmin.from('registrations').delete().eq('profile_id', profileId),
+  // Registrations first: removing a relay nomination also takes the athlete out of the relay team
+  // and moves a reserve up into the freed leg (migration 0041). Then any leftovers.
+  const { error: regDelErr } = await supabaseAdmin.from('registrations').delete().eq('profile_id', profileId);
+  if (regDelErr) return { success: false, error: regDelErr.message };
+  const [{ error: relayDelErr }] = await Promise.all([
     supabaseAdmin.from('relay_members').delete().eq('profile_id', profileId),
     supabaseAdmin.from('heat_athletes').delete().eq('profile_id', profileId),
   ]);
-  if (regDelErr) return { success: false, error: regDelErr.message };
   if (relayDelErr) return { success: false, error: relayDelErr.message };
 
   const { error } = await supabaseAdmin

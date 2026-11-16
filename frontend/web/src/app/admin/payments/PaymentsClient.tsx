@@ -235,6 +235,15 @@ export default function PaymentsClient({ squads }: Props) {
                               : `Claimed: ₹${(payment.amount_submitted || 0).toLocaleString()}`}
                           </div>
                         </div>
+                      ) : sq.otherDivisionPayment ? (
+                        <div>
+                          <div style={{ fontSize: '0.75rem', color: '#475569', fontWeight: 600 }}>
+                            Paid with the {sq.otherDivisionPayment.fromGender === 'women' ? "Women's" : "Men's"} receipt
+                          </div>
+                          <div style={{ fontSize: '0.75rem', color: '#2563eb' }}>
+                            UTR: {sq.otherDivisionPayment.utr_number || 'N/A'}
+                          </div>
+                        </div>
                       ) : (
                         <span style={{ fontSize: '0.75rem', color: '#94a3b8', fontStyle: 'italic' }}>
                           No submission yet

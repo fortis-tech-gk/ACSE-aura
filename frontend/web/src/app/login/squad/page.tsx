@@ -236,7 +236,7 @@ export default function SquadLoginPage() {
                   type="password"
                   value={passphrase}
                   onChange={(e) => setPassphrase(e.target.value)}
-                  placeholder="e.g. word-word-word-word-1234"
+                  placeholder="e.g. swift-falcon-84"
                   required
                   className="login-input"
                   style={{ textTransform: 'none', letterSpacing: 'normal', fontSize: '0.95rem' }}

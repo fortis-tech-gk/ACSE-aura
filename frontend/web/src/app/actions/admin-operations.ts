@@ -362,6 +362,7 @@ export async function listPaymentsForAdminAction() {
     collegePayments.set(k, [...(collegePayments.get(k) || []), ...(sq.payments || [])]);
   }
 
+  const squadGender = new Map((squads || []).map((s: any) => [s.id, s.gender]));
   const enrichedSquads = (squads || []).map(
     (sq: any) => {
       const fees = feesBySquad.get(sq.id) || emptySquadFees();
@@ -374,6 +375,15 @@ export async function listPaymentsForAdminAction() {
       const latestPayment = sortedPayments[0] || null;
       const pendingPayment = sortedPayments.find((p: any) => p.status === 'SUBMITTED') || null;
       const totalVerified = totalCredited(collegePayments.get(collegeKey(sq)) || []);
+      // One payment per college: when the receipt was sent from the other division's login, the
+      // row shows that receipt instead of "No submission yet".
+      const collegeLatest = [...(collegePayments.get(collegeKey(sq)) || [])].sort(
+        (a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+      )[0] || null;
+      const otherDivisionPayment =
+        !latestPayment && collegeLatest && collegeLatest.squad_id !== sq.id
+          ? { ...collegeLatest, fromGender: squadGender.get(collegeLatest.squad_id) || null }
+          : null;
 
       return {
         ...sq,
@@ -385,6 +395,7 @@ export async function listPaymentsForAdminAction() {
         balanceDue: Math.max(0, expectedFee - totalVerified),
         latestPayment,
         pendingPayment,
+        otherDivisionPayment,
       };
     }
   );
