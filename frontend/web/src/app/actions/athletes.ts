@@ -7,6 +7,7 @@ import { rosterEditBlockReason } from '@/lib/roster-window';
 import { validateDateOfBirth } from '@/lib/eligibility';
 import { getEventsCatalogue, getEventsByCodes } from '@/lib/events-catalogue';
 import { validateAadhaar } from '@/lib/aadhaar';
+import { signAthletePhoto, signAthletePhotos } from '@/lib/photo-links';
 
 export interface AddAthleteResult {
   success: boolean;
@@ -329,7 +330,7 @@ export async function addAthleteAction(formData: FormData): Promise<AddAthleteRe
 
   try {
     // Ensure bucket exists
-    await ensureBucket('athlete-photos', true);
+    await ensureBucket('athlete-photos', false);
 
     if (photoFile && photoFile.size > 0 && typeof photoFile.arrayBuffer === 'function') {
       if (photoFile.size > MAX_FILE_SIZE) {
@@ -786,7 +787,7 @@ export async function updateAthleteAction(formData: FormData): Promise<UpdateAth
         aadhaar_number: aadhaarNumber,
         date_of_birth: dateOfBirth,
         phone,
-        photo_url: photoUrl || owned.photo_url || undefined,
+        photo_url: (await signAthletePhoto(photoUrl || owned.photo_url)) || undefined,
       },
     };
   } catch (err: any) {
@@ -907,8 +908,9 @@ export async function listSquadAthletesAction() {
   }
 
   if (error) throw new Error(error.message);
-  // No QR token here: ID badges are printed by the admin only, never by the college
-  return athletes || [];
+  // No QR token here: ID badges are printed by the admin only, never by the college.
+  // Photos are in a private bucket: hand the page short-lived signed links.
+  return signAthletePhotos((athletes || []) as any[]);
 }
 
 /**

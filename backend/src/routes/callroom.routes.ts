@@ -1,5 +1,6 @@
 import { Router, Response } from 'express';
 import { supabase } from '../config/supabase';
+import { signPhotoFieldsDeep, signPhotoUrl } from '../utils/photo-links';
 import { authenticate, requireRole, AuthenticatedRequest } from '../middleware/auth';
 import { resolveAthlete } from '../utils/athlete-resolve';
 import { assertEventScope, ProgressionError } from '../utils/progression';
@@ -160,6 +161,7 @@ callRoomRouter.get('/heats/:heatId', async (req: AuthenticatedRequest, res: Resp
       );
     }
 
+    await signPhotoFieldsDeep(athletes);
     return res.json({ heat, athletes: athletes || [], reserves });
   } catch (err: any) {
     return res.status(500).json({ error: err.message });
@@ -226,7 +228,7 @@ callRoomRouter.post('/scan', async (req: AuthenticatedRequest, res: Response) =>
       name: prof?.sslc_name || 'Athlete',
       bib: prof?.bid_number ?? null,
       college: (prof as any)?.squads?.colleges?.code || null,
-      photoUrl: prof?.photo_url || null,
+      photoUrl: await signPhotoUrl(prof?.photo_url),
     };
 
     if (!entry) {

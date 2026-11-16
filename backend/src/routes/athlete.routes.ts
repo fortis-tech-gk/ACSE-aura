@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import rateLimit from 'express-rate-limit';
 import { supabase } from '../config/supabase';
+import { signPhotoUrl } from '../utils/photo-links';
 import { authenticate, requireRole, generateToken, AuthenticatedRequest } from '../middleware/auth';
 import { makeAthleteQrToken, verifyAthleteQrToken } from '../utils/athlete-qr';
 import { isLoginThrottled, recordLoginFailure, clearLoginFailures, THROTTLE_MESSAGE } from '../utils/login-throttle';
@@ -304,7 +305,7 @@ athleteRouter.get('/me', authenticate, requireRole(['athlete']), async (req: Aut
         gender: squad?.gender || null,
         bloodGroup: profile.blood_group,
         semester: profile.semester,
-        photoUrl: profile.photo_url || null,
+        photoUrl: await signPhotoUrl(profile.photo_url),
         accreditationStatus: profile.accreditation_status,
         accreditedAt: profile.accredited_at,
         college: squad?.colleges || null,

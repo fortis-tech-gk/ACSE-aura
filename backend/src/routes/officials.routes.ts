@@ -1,5 +1,6 @@
 import { Router, Response } from 'express';
 import { supabase } from '../config/supabase';
+import { signPhotoUrls } from '../utils/photo-links';
 import { authenticate, requireRole, AuthenticatedRequest } from '../middleware/auth';
 import { fetchAll } from '../utils/fetch-all';
 
@@ -144,6 +145,8 @@ officialsRouter.get('/roster', async (_req: AuthenticatedRequest, res: Response)
     ]);
 
     const bySquad = new Map(allocations.map((a) => [a.squad_id, a]));
+    // Photos are in a private bucket: signed links, cached by the app with the roster
+    const signed = await signPhotoUrls(rows.map((p) => p.photo_url));
     const athletes = rows.map((p) => {
       const alloc = bySquad.get(p.squad_id);
       return {
@@ -151,7 +154,7 @@ officialsRouter.get('/roster', async (_req: AuthenticatedRequest, res: Response)
         name: p.sslc_name,
         usn: p.usn,
         bib: p.bid_number,
-        photoUrl: p.photo_url,
+        photoUrl: p.photo_url ? signed.get(p.photo_url) ?? p.photo_url : null,
         gender: p.squads?.gender ?? null,
         collegeCode: p.squads?.colleges?.code ?? null,
         collegeName: p.squads?.colleges?.name ?? null,

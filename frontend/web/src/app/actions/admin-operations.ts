@@ -8,6 +8,7 @@ import { fetchAllRows } from '@/lib/db-fetch-all';
 import { signPaymentProofLinks } from '@/lib/payment-proofs';
 import { normalizePaymentStatus, totalCredited } from '@/lib/payment-status';
 import { tryMakeAthleteQrToken } from '@/lib/athlete-qr';
+import { signAthletePhotos } from '@/lib/photo-links';
 import { OFFICIAL_UPI_ID, OFFICIAL_ACCOUNT_NAME } from '@/lib/payment-config';
 
 export interface AdminDashboardStats {
@@ -300,7 +301,8 @@ export async function listAllAthletesAction() {
     .order('id')
   );
 
-  return data.map((a: any) => ({ ...a, qr_token: tryMakeAthleteQrToken(a.id) }));
+  // Photos are in a private bucket: hand the admin pages short-lived signed links
+  return signAthletePhotos(data.map((a: any) => ({ ...a, qr_token: tryMakeAthleteQrToken(a.id) })));
 }
 
 /**
