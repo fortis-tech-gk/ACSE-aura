@@ -5,7 +5,7 @@ import { requireAdmin, forgetSquadStamp } from '@/lib/auth-guard';
 import { generateSquadPassphrase, hashPassphrase, hashPin } from '@/lib/passphrase';
 import bcrypt from 'bcryptjs';
 import { revalidatePath } from 'next/cache';
-import { calculateSquadFees } from '@/lib/payments';
+import { calculateCollegeFees, getCollegeSquadIds } from '@/lib/payments';
 import { normalizePaymentStatus, totalCredited, type SquadPaymentStatus } from '@/lib/payment-status';
 
 export interface CreateCollegeResult {
@@ -155,10 +155,12 @@ export async function toggleSquadRosterLockAction(
   if (squadErr) return { success: false, error: squadErr.message };
   if (!squad) return { success: false, error: 'Squad not found.' };
 
+  // One payment per college: payments of both divisions (Men + Women) count
+  const collegeSquadIds = await getCollegeSquadIds(squadId);
   const { data: payments, error: payErr } = await supabaseAdmin
     .from('payments')
     .select('*')
-    .eq('squad_id', squadId);
+    .in('squad_id', collegeSquadIds);
   if (payErr) return { success: false, error: payErr.message };
 
   const pendingCount = (payments || []).filter((p: any) => p.status === 'SUBMITTED').length;
@@ -168,7 +170,7 @@ export async function toggleSquadRosterLockAction(
     if (pendingCount > 0) {
       return {
         success: false,
-        error: 'This squad has a payment awaiting verification. Verify or reject it on the Payments desk before unlocking the roster.',
+        error: 'This college has a payment awaiting verification. Verify or reject it on the Payments desk before unlocking the roster.',
       };
     }
     if (!registrationOpen) {
@@ -184,7 +186,7 @@ export async function toggleSquadRosterLockAction(
   } else {
     if (hasLateEntryColumn) update.late_entry_open = false;
     const verifiedSum = totalCredited(payments as any[]);
-    const fees = await calculateSquadFees(squadId);
+    const { combined: fees } = await calculateCollegeFees(squadId);
 
     if (verifiedSum > 0 && verifiedSum >= fees.totalAmount) {
       update.payment_status = 'VERIFIED';

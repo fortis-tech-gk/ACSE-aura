@@ -1,4 +1,5 @@
-import { calculateSquadFees } from '@/lib/payments';
+import { calculateCollegeFees, splitCollegeFees } from '@/lib/payments';
+import OneCollegePaymentNotice from '../OneCollegePaymentNotice';
 import Link from 'next/link';
 import { requireSquad } from '@/lib/auth-guard';
 import { supabaseAdmin } from '@/lib/supabase';
@@ -20,7 +21,7 @@ export default async function SquadDashboardPage() {
 
   // Squad + college, meet settings, the roster, relay count and fees are independent reads:
   // fetch them all together instead of one after another.
-  const [{ data: squad }, { data: meetSettings }, athletes, relayCount, squadFees, collegeStrength] = await Promise.all([
+  const [{ data: squad }, { data: meetSettings }, athletes, relayCount, collegeFees, collegeStrength] = await Promise.all([
     supabaseAdmin
       .from('squads')
       .select('*, colleges(*)')
@@ -33,7 +34,7 @@ export default async function SquadDashboardPage() {
       .maybeSingle(),
     listSquadAthletesAction(),
     getSquadRelayCountAction(),
-    calculateSquadFees(session.squadId),
+    calculateCollegeFees(session.squadId),
     countCollegeAthletes(session.collegeId),
   ]);
 
@@ -78,7 +79,9 @@ export default async function SquadDashboardPage() {
 
   // Same fee calculation as the payment page: ₹100 per regular / Half Marathon entry and,
   // per relay team, ₹100 for each of the first 4 members (members 5 & 6 free).
-  const totalSquadFee = squadFees.totalAmount;
+  // One payment per college: dues shown are the college total (Men + Women)
+  const totalSquadFee = collegeFees.combined.totalAmount;
+  const feeSplit = splitCollegeFees(collegeFees, session.squadId, squad?.gender || session.gender || '');
 
   const billableEntries = formattedAthletes.reduce((acc: number, athlete: any) => {
     const billable = athlete.registrations.filter((r: any) => r.kind !== 'reserve').length;
@@ -197,6 +200,14 @@ export default async function SquadDashboardPage() {
         );
       })()}
 
+      {/* One payment per college notice */}
+      <OneCollegePaymentNotice
+        menFee={feeSplit.menFee}
+        womenFee={feeSplit.womenFee}
+        myGender={squad?.gender || session.gender || ''}
+        locked={squad?.roster_locked === true}
+      />
+
       {/* 3. EXECUTIVE KPI METRICS GRID */}
       <section className="squad-kpi-grid">
         {/* Card 1: Total Athletes */}
@@ -276,13 +287,13 @@ export default async function SquadDashboardPage() {
         {/* Card 4: Participation Fee */}
         <div className="squad-kpi-card squad-kpi-card-emerald">
           <div className="squad-kpi-top">
-            <span className="squad-kpi-label">Participation Dues</span>
+            <span className="squad-kpi-label">College Dues (Men + Women)</span>
             <div className="squad-kpi-icon-wrap squad-kpi-icon-emerald">💳</div>
           </div>
           <div>
             <div className="squad-kpi-metric">
               <span className="squad-kpi-number">₹{totalSquadFee}</span>
-              <span className="squad-kpi-sub">Total</span>
+              <span className="squad-kpi-sub">Men ₹{feeSplit.menFee} + Women ₹{feeSplit.womenFee}</span>
             </div>
             <div style={{ height: '6px', margin: '0.65rem 0' }} />
             <div className="squad-kpi-footer">
@@ -306,7 +317,7 @@ export default async function SquadDashboardPage() {
               {totalAthletes} {totalAthletes === 1 ? 'Athlete' : 'Athletes'} Registered
             </span>
             <span style={{ fontSize: '0.825rem', color: '#64748b' }}>
-              &bull; Total Participation Dues: <strong style={{ color: '#0f172a' }}>₹{totalSquadFee}</strong>
+              &bull; College Dues (Men + Women): <strong style={{ color: '#0f172a' }}>₹{totalSquadFee}</strong>
             </span>
           </div>
 

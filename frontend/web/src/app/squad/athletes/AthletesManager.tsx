@@ -746,7 +746,7 @@ export default function AthletesManager({
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <CardTitle>Registered Athletes Roster</CardTitle>
             <span style={{ fontSize: '0.875rem', color: 'var(--text-secondary)' }}>
-              Showing {athletes.length} athletes &bull; Total Dues: <strong style={{ color: 'var(--accent-primary)' }}>₹{totalSquadFee}</strong>
+              Showing {athletes.length} athletes &bull; College Dues (Men + Women): <strong style={{ color: 'var(--accent-primary)' }}>₹{totalSquadFee}</strong>
             </span>
           </div>
         </CardHeader>

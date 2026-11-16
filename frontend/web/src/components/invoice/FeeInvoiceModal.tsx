@@ -10,6 +10,8 @@ export interface InvoiceAthlete {
   id: string;
   sslc_name: string;
   usn: string;
+  /** 'men' | 'women': the invoice covers both divisions of the college */
+  gender?: string;
   registrations: {
     id: string;
     kind: string;
@@ -66,7 +68,9 @@ export default function FeeInvoiceModal({ isOpen, onClose, breakdown, payments, 
   const invoiceNumber = `INV-VTU2026-${squadCode.toUpperCase()}`;
   const issueDate = new Date().toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' });
   const genderLetter = breakdown.gender === 'women' ? 'F' : breakdown.gender === 'men' ? 'M' : '—';
-  const divisionLabel = breakdown.gender === 'women' ? 'Women' : breakdown.gender === 'men' ? 'Men' : 'Squad';
+  // One payment per college: the invoice covers both divisions
+  const divisionLabel = 'Men + Women';
+  const letterFor = (g?: string) => (g === 'women' ? 'F' : g === 'men' ? 'M' : genderLetter);
   const listedPayments = payments.filter((p) => p.status !== 'REJECTED');
   const isFullySettled = breakdown.balanceDue === 0 && breakdown.totalPaid > 0 && breakdown.squadPaymentStatus === 'VERIFIED';
 
@@ -115,7 +119,7 @@ export default function FeeInvoiceModal({ isOpen, onClose, breakdown, payments, 
                   <strong>{breakdown.collegeName || 'Participating College'}</strong>
                   {breakdown.district ? `, ${breakdown.district}` : ''}
                   <div className="kit-info-sub">
-                    College Code: <strong>{breakdown.collegeCode || squadCode.split('-')[0]}</strong> &bull; Squad: <strong>{squadCode}</strong> ({divisionLabel})
+                    College Code: <strong>{breakdown.collegeCode || squadCode.split('-')[0]}</strong> &bull; Paid from: <strong>{squadCode}</strong> ({divisionLabel})
                   </div>
                 </td>
                 <th>Name of the PED / Manager with Contact No.</th>
@@ -151,7 +155,7 @@ export default function FeeInvoiceModal({ isOpen, onClose, breakdown, payments, 
                       <td className="c">{idx + 1}</td>
                       <td className="name">{a.sslc_name}</td>
                       <td className="mono">{a.usn}</td>
-                      <td className="c">{genderLetter}</td>
+                      <td className="c">{letterFor(a.gender)}</td>
                       <td className="c b">{codesFor(a, ['regular', 'half_marathon'])}</td>
                       <td className="c b">{codesFor(a, ['relay'])}</td>
                       <td className="c">{codesFor(a, ['reserve'])}</td>

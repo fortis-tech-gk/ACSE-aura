@@ -92,6 +92,7 @@ Fees are calculated dynamically via `calculateSquadFees()` in `frontend/web/src/
 - **Total Amount Formula**:
   $$\text{Total Amount} = (\text{Regular Count} \times 100) + (\text{HM Count} \times 100) + (\sum_{\text{teams}} 100 \times \min(\text{members}, 4))$$
 - **Balance Due**: $\max(0, \text{Total Amount} - \text{Total Verified Payments})$
+- **ONE PAYMENT PER COLLEGE (16-11-2026)**: the Men's and Women's squads of a college share one fee account. Total Amount, verified payments and Balance Due are summed over **both** squads (`calculateCollegeFees()` / `getCollegeSquadIds()` in `src/lib/payments.ts`). Either PED pays the college balance once; submitting locks **both** squads, a pending receipt from either blocks a second one, and verification (`reviewPayment`) sets the same `payment_status` on both. Fees are still computed per squad first, then added up.
 
 ### 4. Payment Submission & Roster Lock Lifecycle
 - **UPI Offline Payment**: PED transfers fee to host UPI ID (`host_upi_id` from `meet_settings`) and submits:
@@ -102,7 +103,7 @@ Fees are calculated dynamically via `calculateSquadFees()` in `frontend/web/src/
   1. **Draft Phase (`roster_locked: false`, `payment_status: 'DRAFT'` / `'DrAFT'`)**:
      - PED freely adds/deletes athletes (relays are picked on the athlete form).
   2. **Payment Submission (`submitPaymentAction`)**:
-     - Submitting payment **automatically sets `roster_locked = true`** and `payment_status = 'SUBMITTED'`.
+     - Submitting payment **automatically sets `roster_locked = true`** and `payment_status = 'SUBMITTED'` on **both** squads of the college.
      - Squad entries are immediately **frozen** to prevent altering the roster while payment is verified.
   3. **Verification Desk (`verifyPaymentAction`)**:
      - **Approved (`VERIFIED`)**: `roster_locked` remains `true`, `payment_status` becomes `VERIFIED`. Official Registration Report and ID Cards are ready.

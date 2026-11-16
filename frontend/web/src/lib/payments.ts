@@ -266,11 +266,76 @@ function computeSquadFees(
   };
 }
 
+/**
+ * ONE PAYMENT PER COLLEGE: a college's Men's and Women's squads share a single fee account.
+ * Fees of both divisions are added up, payments from either login count for both, and paying
+ * locks both rosters. Every squad of the college that `squadId` belongs to, itself included.
+ */
+export async function getCollegeSquadIds(squadId: string): Promise<string[]> {
+  const { data: squad } = await supabaseAdmin.from('squads').select('college_id').eq('id', squadId).maybeSingle();
+  if (!squad?.college_id) return [squadId];
+  const { data: siblings } = await supabaseAdmin.from('squads').select('id').eq('college_id', squad.college_id);
+  const ids = (siblings || []).map((s: any) => s.id as string);
+  return ids.includes(squadId) ? ids : [squadId, ...ids];
+}
+
+/** Adds several squads' fee breakdowns into one; relay rows of the same event are merged. */
+export function sumSquadFees(list: SquadFeeBreakdown[]): SquadFeeBreakdown {
+  const total = emptySquadFees();
+  const relays = new Map<string, RelayTeamFee>();
+  for (const f of list) {
+    total.regularEventsCount += f.regularEventsCount;
+    total.reserveEventsCount += f.reserveEventsCount;
+    total.hmCount += f.hmCount;
+    total.relayMembersBilled += f.relayMembersBilled;
+    total.relayFeeTotal += f.relayFeeTotal;
+    total.totalAmount += f.totalAmount;
+    for (const t of f.relayTeams) {
+      const prev = relays.get(t.eventId);
+      relays.set(
+        t.eventId,
+        prev
+          ? { ...prev, members: prev.members + t.members, billedMembers: prev.billedMembers + t.billedMembers, fee: prev.fee + t.fee }
+          : { ...t }
+      );
+    }
+  }
+  total.relayTeams = Array.from(relays.values()).sort((a, b) => a.code.localeCompare(b.code));
+  total.relayTeamsCount = total.relayTeams.length;
+  return total;
+}
+
+/** College-wide fees (both divisions) for the college of `squadId`. */
+export async function calculateCollegeFees(squadId: string): Promise<{
+  squadIds: string[];
+  bySquad: Map<string, SquadFeeBreakdown>;
+  combined: SquadFeeBreakdown;
+}> {
+  const squadIds = await getCollegeSquadIds(squadId);
+  const bySquad = await calculateFeesForSquads(squadIds);
+  return { squadIds, bySquad, combined: sumSquadFees(squadIds.map((id) => bySquad.get(id) ?? emptySquadFees())) };
+}
+
+/** Men / Women shares of a college fee (every college has one squad per division). */
+export function splitCollegeFees(
+  college: { squadIds: string[]; bySquad: Map<string, SquadFeeBreakdown> },
+  mySquadId: string,
+  myGender: string
+): { menFee: number; womenFee: number; ownFee: number; otherFee: number } {
+  const ownFee = college.bySquad.get(mySquadId)?.totalAmount || 0;
+  const otherFee = college.squadIds
+    .filter((id) => id !== mySquadId)
+    .reduce((sum, id) => sum + (college.bySquad.get(id)?.totalAmount || 0), 0);
+  return myGender === 'men'
+    ? { menFee: ownFee, womenFee: otherFee, ownFee, otherFee }
+    : { menFee: otherFee, womenFee: ownFee, ownFee, otherFee };
+}
+
 export type PaymentDecision = 'VERIFIED' | 'REJECTED';
 
 /**
  * Applies a Finance/Admin decision to ONE payment that is still awaiting verification,
- * then synchronises the parent squad's payment_status and roster lock.
+ * then synchronises payment_status and roster lock of BOTH squads of the college.
  *
  * - Only payments in status 'SUBMITTED' can be processed: a payment that was already
  *   verified or rejected is refused (prevents double-verify / reject-after-verify).
@@ -337,10 +402,10 @@ export async function reviewPayment(
   const squadId: string = updated.squad_id;
   const now = new Date().toISOString();
 
-  const [{ data: allPayments }, fees] = await Promise.all([
-    supabaseAdmin.from('payments').select('*').eq('squad_id', squadId),
-    calculateSquadFees(squadId),
-  ]);
+  // One payment per college: fees and payments of BOTH divisions decide the status, and both
+  // squads always carry the same payment status and lock.
+  const { squadIds, combined: fees } = await calculateCollegeFees(squadId);
+  const { data: allPayments } = await supabaseAdmin.from('payments').select('*').in('squad_id', squadIds);
 
   const verifiedSum = totalCredited(allPayments as any[]);
   const pendingCount = (allPayments || []).filter((p: any) => p.status === 'SUBMITTED').length;
@@ -352,7 +417,7 @@ export async function reviewPayment(
     // Another receipt is still awaiting verification
     squadStatus = 'SUBMITTED';
   } else if (decision === 'REJECTED') {
-    // Let the squad see the rejection and re-upload a corrected receipt / UTR
+    // Let the college see the rejection and re-upload a corrected receipt / UTR
     squadStatus = 'REJECTED';
   } else {
     // Verified but under-paid: remains locked in the submitted phase with a balance due
@@ -362,7 +427,7 @@ export async function reviewPayment(
   const { error: sqErr } = await supabaseAdmin
     .from('squads')
     .update({ payment_status: squadStatus, roster_locked: true, updated_at: now })
-    .eq('id', squadId);
+    .in('id', squadIds);
 
   if (sqErr) return { success: false, error: sqErr.message };
   return { success: true, squadId };

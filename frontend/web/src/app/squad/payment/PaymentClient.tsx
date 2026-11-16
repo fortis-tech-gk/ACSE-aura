@@ -7,6 +7,7 @@ import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
 import FeeInvoiceModal, { type InvoiceAthlete } from '@/components/invoice/FeeInvoiceModal';
 import Link from 'next/link';
+import OneCollegePaymentNotice from '../OneCollegePaymentNotice';
 import { OFFICIAL_UPI_QR_SRC } from '@/lib/payment-config';
 import { creditedAmount } from '@/lib/payment-status';
 
@@ -158,7 +159,7 @@ export default function PaymentClient({ breakdown, payments, squadCode, athletes
 
     // Confirmation prompt
     const confirmed = window.confirm(
-      `Confirm submission of ₹${amount} with UTR "${utrClean}" for entry fee settlement?\n\n⚠️ Submitting payment will LOCK your squad roster. You will no longer be able to add or remove athletes or edit relay teams.`
+      `Confirm submission of ₹${amount} with UTR "${utrClean}" for entry fee settlement?\n\nThis ONE payment covers your whole college (Men + Women).\n\n⚠️ Submitting payment will LOCK BOTH divisions (Men and Women). Neither PED will be able to add or remove athletes afterwards.`
     );
 
     if (!confirmed) {
@@ -241,9 +242,16 @@ export default function PaymentClient({ breakdown, payments, squadCode, athletes
         </div>
       </div>
 
+      <OneCollegePaymentNotice
+        menFee={(breakdown.divisions || []).filter((d) => d.gender === 'men').reduce((s, d) => s + d.fee, 0)}
+        womenFee={(breakdown.divisions || []).filter((d) => d.gender !== 'men').reduce((s, d) => s + d.fee, 0)}
+        myGender={breakdown.gender || ''}
+        locked={breakdown.rosterLocked}
+      />
+
       {isZeroSquad && (
         <div style={{ padding: '1rem 1.25rem', borderRadius: 'var(--radius-sm)', background: 'rgba(245, 158, 11, 0.1)', border: '1px solid rgba(245, 158, 11, 0.25)', color: '#b45309', fontSize: '0.95rem' }}>
-          ℹ️ <strong>Roster Empty:</strong> You currently have 0 registered athletes. Please <Link href="/squad/dashboard" style={{ fontWeight: 700, textDecoration: 'underline' }}>register athletes</Link> into individual and relay disciplines before settling entry fees.
+          ℹ️ <strong>Roster Empty:</strong> Your college has 0 registered athletes in both divisions. Please <Link href="/squad/dashboard" style={{ fontWeight: 700, textDecoration: 'underline' }}>register athletes</Link> into individual and relay disciplines before settling entry fees.
         </div>
       )}
 
@@ -256,7 +264,7 @@ export default function PaymentClient({ breakdown, payments, squadCode, athletes
 
       {isAwaitingVerification && (
         <div id="banner-roster-locked-payment-submitted" style={{ padding: '1rem 1.25rem', borderRadius: 'var(--radius-sm)', background: 'rgba(37, 99, 235, 0.08)', border: '1px solid rgba(37, 99, 235, 0.3)', color: '#1e40af', fontSize: '0.95rem' }}>
-          🔒 <strong>Roster Locked &amp; Payment Submitted:</strong> Your receipt is awaiting Finance Desk verification. Athlete and relay changes are frozen. Contact the VTU Directorate if an emergency unlock is required.
+          🔒 <strong>Roster Locked &amp; Payment Submitted:</strong> Your college&apos;s receipt is awaiting Finance Desk verification. Athlete changes are frozen in both divisions (Men and Women). Contact the VTU Directorate if an emergency unlock is required.
         </div>
       )}
 
@@ -320,8 +328,17 @@ export default function PaymentClient({ breakdown, payments, squadCode, athletes
                 <span style={{ color: 'var(--success)', fontWeight: 700 }}>FREE (₹0)</span>
               </div>
 
+              {(breakdown.divisions || []).map((d) => (
+                <div key={d.squadId} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.9rem' }}>
+                  <span style={{ color: 'var(--text-secondary)' }}>
+                    {d.gender === 'men' ? "Men's" : "Women's"} division ({d.squadCode}, {d.athletes} athletes){d.isMine ? ' · you' : ''}
+                  </span>
+                  <span style={{ fontWeight: 700 }}>₹{d.fee}</span>
+                </div>
+              ))}
+
               <div style={{ display: 'flex', justifyContent: 'space-between', paddingTop: '0.5rem', alignItems: 'center' }}>
-                <span style={{ fontSize: '1rem', fontWeight: 600, color: 'var(--text-secondary)' }}>Total Roster Fee:</span>
+                <span style={{ fontSize: '1rem', fontWeight: 600, color: 'var(--text-secondary)' }}>Total College Fee (Men + Women):</span>
                 <span style={{ fontSize: '1.25rem', fontWeight: 700, color: 'var(--text-primary)' }}>
                   ₹{breakdown.totalAmount}
                 </span>

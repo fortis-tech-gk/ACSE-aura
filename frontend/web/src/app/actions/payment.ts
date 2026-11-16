@@ -3,7 +3,7 @@
 import { supabaseAdmin } from '@/lib/supabase';
 import { requireSquad, requireStaff } from '@/lib/auth-guard';
 import { revalidatePath } from 'next/cache';
-import { calculateSquadFees, reviewPayment } from '@/lib/payments';
+import { calculateCollegeFees, reviewPayment } from '@/lib/payments';
 import { resolveHostUpiId, resolveHostAccountName } from '@/lib/payment-config';
 import { normalizePaymentStatus, totalCredited, type SquadPaymentStatus } from '@/lib/payment-status';
 import { fetchAllRows } from '@/lib/db-fetch-all';
@@ -28,6 +28,8 @@ export interface FeeBreakdown {
   hostAccountName: string;
   squadPaymentStatus: SquadPaymentStatus;
   hasPendingPayment: boolean;
+  /** One payment per college: each division's share of the combined fee (Men + Women) */
+  divisions: { squadId: string; gender: string; squadCode: string; athletes: number; fee: number; isMine: boolean }[];
   registrationOpen: boolean;
   rosterLocked: boolean;
   collegeName?: string;
@@ -65,16 +67,16 @@ export async function getSquadFeeBreakdownAction(): Promise<{
 }> {
   const session = await requireSquad();
 
-  // Fees, relay readiness, meet settings, squad + college (for the invoice), athlete count and
-  // payment history are independent reads: fetch them together.
+  // ONE PAYMENT PER COLLEGE: fees, athletes and payments of both divisions (Men + Women) are
+  // combined, so whichever PED pays settles the whole college.
+  const { squadIds, bySquad, combined: feeCalc } = await calculateCollegeFees(session.squadId);
   const [
-    feeCalc,
     { data: settings },
     { data: squad },
-    { count: athletesCount },
+    { data: collegeSquads },
+    { data: athleteRows },
     { data: payments },
   ] = await Promise.all([
-    calculateSquadFees(session.squadId),
     supabaseAdmin
       .from('meet_settings')
       .select('host_upi_id, host_account_name, registration_open')
@@ -99,14 +101,12 @@ export async function getSquadFeeBreakdownAction(): Promise<{
       `)
       .eq('id', session.squadId)
       .single(),
-    supabaseAdmin
-      .from('profiles')
-      .select('id', { count: 'exact', head: true })
-      .eq('squad_id', session.squadId),
+    supabaseAdmin.from('squads').select('id, gender, squad_code').in('id', squadIds),
+    supabaseAdmin.from('profiles').select('squad_id').in('squad_id', squadIds),
     supabaseAdmin
       .from('payments')
       .select('*')
-      .eq('squad_id', session.squadId)
+      .in('squad_id', squadIds)
       .order('created_at', { ascending: false }),
   ]);
 
@@ -114,6 +114,20 @@ export async function getSquadFeeBreakdownAction(): Promise<{
 
   const totalAmount = feeCalc.totalAmount;
   const balanceDue = Math.max(0, totalAmount - totalPaid);
+
+  const athletesBySquad = new Map<string, number>();
+  for (const r of athleteRows || []) athletesBySquad.set(r.squad_id, (athletesBySquad.get(r.squad_id) || 0) + 1);
+  const divisions = (collegeSquads || [])
+    .map((sq: any) => ({
+      squadId: sq.id,
+      gender: sq.gender || '',
+      squadCode: sq.squad_code || '',
+      athletes: athletesBySquad.get(sq.id) || 0,
+      fee: bySquad.get(sq.id)?.totalAmount || 0,
+      isMine: sq.id === session.squadId,
+    }))
+    .sort((x, y) => (x.gender === 'men' ? -1 : 1) - (y.gender === 'men' ? -1 : 1));
+  const athletesCount = (athleteRows || []).length;
 
   const college = squad?.colleges as any;
 
@@ -136,6 +150,7 @@ export async function getSquadFeeBreakdownAction(): Promise<{
       hostAccountName: resolveHostAccountName(settings?.host_account_name),
       squadPaymentStatus: normalizePaymentStatus(squad?.payment_status),
       hasPendingPayment: (payments || []).some((p: any) => p.status === 'SUBMITTED'),
+      divisions,
       registrationOpen: settings?.registration_open !== false,
       rosterLocked: squad?.roster_locked === true,
       collegeName: college?.name || 'VTU Affiliated Institution',
@@ -179,9 +194,10 @@ export async function submitPaymentAction(formData: FormData): Promise<{ success
       return { success: false, error: 'Please upload the payment transaction screenshot or receipt.' };
     }
 
-    // Relays are picked on the athlete form only (no lineup step). All reads the checks below need are independent, so they are fetched together and the
-    // checks then run in their original order.
-    const [{ data: lockRow }, { count: pendingCount }, feeCalc, { data: pastPayments }] =
+    // ONE PAYMENT PER COLLEGE: the balance covers both divisions (Men + Women), a pending receipt
+    // from either division blocks a second one, and paying locks both rosters.
+    const { squadIds, combined: feeCalc } = await calculateCollegeFees(session.squadId);
+    const [{ data: lockRow }, { count: pendingCount }, { data: pastPayments }] =
       await Promise.all([
         supabaseAdmin
           .from('squads')
@@ -191,13 +207,12 @@ export async function submitPaymentAction(formData: FormData): Promise<{ success
         supabaseAdmin
           .from('payments')
           .select('id', { count: 'exact', head: true })
-          .eq('squad_id', session.squadId)
+          .in('squad_id', squadIds)
           .eq('status', 'SUBMITTED'),
-        calculateSquadFees(session.squadId),
         supabaseAdmin
           .from('payments')
           .select('*')
-          .eq('squad_id', session.squadId)
+          .in('squad_id', squadIds)
           .eq('status', 'VERIFIED'),
       ]);
 
@@ -215,7 +230,7 @@ export async function submitPaymentAction(formData: FormData): Promise<{ success
     if ((pendingCount || 0) > 0) {
       return {
         success: false,
-        error: 'Roster Locked & Payment Submitted: A payment is already awaiting Finance Desk verification. You can re-submit only if it is rejected.',
+        error: 'Roster Locked & Payment Submitted: A payment for your college (Men or Women division) is already awaiting Finance Desk verification. You can re-submit only if it is rejected.',
       };
     }
 
@@ -224,7 +239,7 @@ export async function submitPaymentAction(formData: FormData): Promise<{ success
     if (totalAmount <= 0) {
       return {
         success: false,
-        error: 'Cannot submit payment for an empty squad roster. Please register athletes before settling fees.',
+        error: 'Cannot submit payment for an empty roster. Please register athletes (Men and/or Women division) before settling fees.',
       };
     }
 
@@ -236,7 +251,7 @@ export async function submitPaymentAction(formData: FormData): Promise<{ success
     if (balanceDue === 0 && priorVerified > 0) {
       return {
         success: false,
-        error: 'All entry fees for your current roster have already been fully verified and settled.',
+        error: 'All entry fees for your college (both divisions) have already been fully verified and settled.',
       };
     }
 
@@ -245,7 +260,7 @@ export async function submitPaymentAction(formData: FormData): Promise<{ success
     if (amountSubmitted !== balanceDue) {
       return {
         success: false,
-        error: `The amount must equal your balance due of ₹${balanceDue}. Pay exactly ₹${balanceDue} and enter that amount.`,
+        error: `The amount must equal your college's balance due of ₹${balanceDue} (Men + Women). Pay exactly ₹${balanceDue} and enter that amount.`,
       };
     }
 
@@ -361,7 +376,7 @@ export async function submitPaymentAction(formData: FormData): Promise<{ success
       return { success: false, error: error.message };
     }
 
-    // Freeze the roster: once payment is submitted, athletes and relay teams can no longer change
+    // Freeze BOTH divisions of the college: one payment covers Men + Women
     const { error: lockErr } = await supabaseAdmin
       .from('squads')
       .update({
@@ -369,7 +384,7 @@ export async function submitPaymentAction(formData: FormData): Promise<{ success
         payment_status: 'SUBMITTED',
         updated_at: new Date().toISOString(),
       })
-      .eq('id', session.squadId);
+      .in('id', squadIds);
 
     if (lockErr) {
       console.error('submitPaymentAction roster lock error:', lockErr);
@@ -377,7 +392,7 @@ export async function submitPaymentAction(formData: FormData): Promise<{ success
     }
 
     // Paying closes any late-entry window the admin opened (best effort: column from migration 0017)
-    await supabaseAdmin.from('squads').update({ late_entry_open: false }).eq('id', session.squadId).eq('late_entry_open', true);
+    await supabaseAdmin.from('squads').update({ late_entry_open: false }).in('id', squadIds).eq('late_entry_open', true);
 
     revalidatePath('/squad/payment');
     revalidatePath('/squad/dashboard');

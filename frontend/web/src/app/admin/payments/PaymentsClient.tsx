@@ -148,7 +148,7 @@ export default function PaymentsClient({ squads }: Props) {
               <th style={{ width: '90px' }}>Division</th>
               <th>Physical Education Director</th>
               <th style={{ width: '100px' }}>Athletes</th>
-              <th>Expected Fee</th>
+              <th>College Fee (M+W)</th>
               <th>Submitted UTR & Amount</th>
               <th style={{ width: '130px' }}>Status</th>
               <th style={{ width: '120px', textAlign: 'right' }}>Action</th>
@@ -330,7 +330,7 @@ export default function PaymentsClient({ squads }: Props) {
                     Financial Computation
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.4rem 0', borderBottom: '1px solid #e2e8f0' }}>
-                    <span style={{ fontSize: '0.85rem', color: '#64748b' }}>Calculated Expected Fee:</span>
+                    <span style={{ fontSize: '0.85rem', color: '#64748b' }}>College Fee (Men + Women):</span>
                     <strong style={{ fontSize: '1.05rem', color: '#0f172a' }}>
                       ₹{selectedSquad.expectedFee.toLocaleString()}
                     </strong>

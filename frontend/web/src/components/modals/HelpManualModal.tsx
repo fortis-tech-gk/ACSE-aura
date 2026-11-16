@@ -85,7 +85,7 @@ const STEPS: Step[] = [
           <li><strong>Sign in</strong> with your college code, division (Men / Women) and passphrase.</li>
           <li><strong>Register every athlete</strong> with their events (and relay nomination, if any).</li>
           <li><strong>Check everything.</strong> The roster can&apos;t be changed after you pay.</li>
-          <li><strong>Pay the entry fee</strong> and upload the receipt with the UTR number.</li>
+          <li><strong>Pay the entry fee once for the whole college</strong> (Men + Women together) and upload the receipt with the UTR number.</li>
           <li><strong>Wait for verification</strong> by the Finance Desk. ID badges are printed by the organisers and handed to you at the accreditation desk.</li>
         </ol>
         <div style={danger}>
@@ -230,6 +230,11 @@ const STEPS: Step[] = [
     icon: '💳',
     body: (
       <>
+        <div style={box}>
+          💡 <strong>One payment per college.</strong> The Men&apos;s and Women&apos;s fees add up into one total
+          (e.g. Men ₹1000 + Women ₹600 = ₹1600). Register athletes in <strong>both</strong> divisions first, then pay
+          the total <strong>once</strong> from either login. Paying locks <strong>both</strong> divisions.
+        </div>
         <ol style={ol}>
           <li>Open <strong>Fee Settlement</strong>. Note the <strong>Net Balance Due</strong>.</li>
           <li><strong>Scan the QR code</strong> shown on the page with any UPI app (GPay, PhonePe, Paytm, BHIM or your bank app), or pay to the UPI ID <code>ACSCOLLEGEOFENGINEERING@icici</code>.</li>

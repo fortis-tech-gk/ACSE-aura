@@ -349,10 +349,21 @@ export async function listPaymentsForAdminAction() {
   // computed for every squad in a few bulk reads, not one set of queries per squad.
   const feesBySquad = await calculateFeesForSquads((squads || []).map((sq: any) => sq.id));
 
+  // ONE PAYMENT PER COLLEGE: expected fee, verified total and balance are the college's
+  // (Men + Women). Each squad row shows the college figures; its own share is in feeBreakdown.
+  const collegeKey = (sq: any) => sq.colleges?.id || sq.id;
+  const collegeFee = new Map<string, number>();
+  const collegePayments = new Map<string, any[]>();
+  for (const sq of squads || []) {
+    const k = collegeKey(sq);
+    collegeFee.set(k, (collegeFee.get(k) || 0) + (feesBySquad.get(sq.id) || emptySquadFees()).totalAmount);
+    collegePayments.set(k, [...(collegePayments.get(k) || []), ...(sq.payments || [])]);
+  }
+
   const enrichedSquads = (squads || []).map(
     (sq: any) => {
       const fees = feesBySquad.get(sq.id) || emptySquadFees();
-      const expectedFee = fees.totalAmount;
+      const expectedFee = collegeFee.get(collegeKey(sq)) || 0;
 
       // Latest payment submission (embedded rows are unordered, so sort explicitly)
       const sortedPayments = [...(sq.payments || [])].sort(
@@ -360,12 +371,13 @@ export async function listPaymentsForAdminAction() {
       );
       const latestPayment = sortedPayments[0] || null;
       const pendingPayment = sortedPayments.find((p: any) => p.status === 'SUBMITTED') || null;
-      const totalVerified = totalCredited(sortedPayments);
+      const totalVerified = totalCredited(collegePayments.get(collegeKey(sq)) || []);
 
       return {
         ...sq,
         payments: sortedPayments,
         expectedFee,
+        ownFee: fees.totalAmount,
         feeBreakdown: fees,
         totalVerified,
         balanceDue: Math.max(0, expectedFee - totalVerified),

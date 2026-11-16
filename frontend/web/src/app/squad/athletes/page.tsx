@@ -4,7 +4,8 @@ import { normalizePaymentStatus } from '@/lib/payment-status';
 import { listSquadAthletesAction, getAvailableEventsAction, getSquadRelayCountAction } from '@/app/actions/athletes';
 import AthletesManager from './AthletesManager';
 import { canEditRoster, isLateEntryWindow } from '@/lib/roster-window';
-import { calculateSquadFees, MIXED_RELAY_CODE } from '@/lib/payments';
+import { calculateCollegeFees, splitCollegeFees, MIXED_RELAY_CODE } from '@/lib/payments';
+import OneCollegePaymentNotice from '../OneCollegePaymentNotice';
 import { getEventsByCodes } from '@/lib/events-catalogue';
 import { countCollegeAthletes } from '@/lib/college-strength';
 
@@ -40,8 +41,8 @@ export default async function SquadAthletesPage() {
       listSquadAthletesAction(),
       getAvailableEventsAction(),
       getSquadRelayCountAction(),
-      // Total dues come from the same calculation as the payment page, so both always agree
-      calculateSquadFees(session.squadId),
+      // College dues (Men + Women) from the same calculation as the payment page: one payment per college
+      calculateCollegeFees(session.squadId),
       countSiblingMixedNominations(session.squadId, session.collegeId),
       countCollegeAthletes(session.collegeId),
     ]);
@@ -60,8 +61,18 @@ export default async function SquadAthletesPage() {
     })),
   }));
 
+  const split = splitCollegeFees(fees, session.squadId, squad?.gender || session.gender || '');
+
   return (
     <div id="squad-athletes-page" style={{ width: '100%', maxWidth: '100%' }}>
+      <div style={{ marginBottom: '1rem' }}>
+        <OneCollegePaymentNotice
+          menFee={split.menFee}
+          womenFee={split.womenFee}
+          myGender={squad?.gender || session.gender || ''}
+          locked={squad?.roster_locked === true}
+        />
+      </div>
       <AthletesManager
         initialAthletes={formattedAthletes}
         availableEvents={events}
@@ -72,7 +83,7 @@ export default async function SquadAthletesPage() {
         squadCode={squad?.squad_code || session.squadCode || ''}
         gender={session.gender as 'men' | 'women'}
         relayCount={relayCount}
-        totalDues={fees.totalAmount}
+        totalDues={fees.combined.totalAmount}
         siblingMixedCount={siblingMixedCount}
         siblingAthleteCount={Math.max(0, collegeStrength.total - athletes.length)}
       />
