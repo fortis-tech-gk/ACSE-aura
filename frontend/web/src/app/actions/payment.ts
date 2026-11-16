@@ -184,18 +184,16 @@ export async function submitPaymentAction(formData: FormData): Promise<{ success
       return { success: false, error: 'Please upload the payment transaction screenshot or receipt.' };
     }
 
-    // Relay readiness: payment freezes the roster, so every nominated relay must have a full lineup
-    // (Skipped when already locked — e.g. re-upload after rejection — since the PED cannot edit then.)
-    // All reads the checks below need are independent, so they are fetched together and the
+    // Relay lineups are NOT required before payment: an incomplete lineup is only a warning on the
+    // payment page (fees are billed from nominations either way). All reads the checks below need are independent, so they are fetched together and the
     // checks then run in their original order.
-    const [{ data: lockRow }, relayIssuesIfUnlocked, { count: pendingCount }, feeCalc, { data: pastPayments }] =
+    const [{ data: lockRow }, { count: pendingCount }, feeCalc, { data: pastPayments }] =
       await Promise.all([
         supabaseAdmin
           .from('squads')
           .select('roster_locked, ped_name, ped_phone')
           .eq('id', session.squadId)
           .maybeSingle(),
-        getRelayReadinessIssues(session.squadId),
         supabaseAdmin
           .from('payments')
           .select('id', { count: 'exact', head: true })
@@ -214,13 +212,6 @@ export async function submitPaymentAction(formData: FormData): Promise<{ success
       return {
         success: false,
         error: 'Please add the PED / Sports Director name and mobile number on the Contingent Overview page before submitting payment.',
-      };
-    }
-    const relayIssues = lockRow?.roster_locked === true ? [] : relayIssuesIfUnlocked;
-    if (relayIssues.length > 0) {
-      return {
-        success: false,
-        error: `Complete your relay teams before paying (the roster locks on payment): ${relayIssues.join(' ')}`,
       };
     }
 

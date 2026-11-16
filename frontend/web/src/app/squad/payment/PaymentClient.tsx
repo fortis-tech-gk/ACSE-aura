@@ -54,7 +54,7 @@ export default function PaymentClient({ breakdown, payments, squadCode, athletes
   const relayIssues = breakdown.relayIssues || [];
   const hasRelayBlockers = relayIssues.length > 0;
   const isPedMissing = !breakdown.pedName?.trim() || !breakdown.pedPhone?.trim();
-  const isFormDisabled = isZeroSquad || isFullySettled || isAwaitingVerification || hasRelayBlockers || isPedMissing;
+  const isFormDisabled = isZeroSquad || isFullySettled || isAwaitingVerification || isPedMissing;
   const statusLabel =
     breakdown.squadPaymentStatus === 'DRAFT'
       ? 'DRAFT'
@@ -258,7 +258,7 @@ export default function PaymentClient({ breakdown, payments, squadCode, athletes
 
       {hasRelayBlockers && !isAwaitingVerification && (
         <div id="banner-relay-incomplete" style={{ padding: '1rem 1.25rem', borderRadius: 'var(--radius-sm)', background: 'rgba(245, 158, 11, 0.1)', border: '1px solid rgba(245, 158, 11, 0.35)', color: '#92400e', fontSize: '0.92rem' }}>
-          ⚠️ <strong>Complete your relay teams before paying.</strong> Paying locks the roster, so relay lineups can&apos;t be changed afterwards:
+          ⚠️ <strong>Relay lineups are incomplete.</strong> You can still pay, but paying locks the roster, so relay lineups can&apos;t be changed afterwards without an admin unlock:
           <ul style={{ margin: '0.5rem 0 0.25rem', paddingLeft: '1.25rem', lineHeight: 1.6 }}>
             {relayIssues.map((issue) => (
               <li key={issue}>{issue}</li>
@@ -590,8 +590,6 @@ export default function PaymentClient({ breakdown, payments, squadCode, athletes
                     ? '🔒 Roster Locked & Payment Submitted'
                     : isPedMissing
                     ? '⚠️ Add PED Contact Details First'
-                    : hasRelayBlockers
-                    ? '⚠️ Complete Relay Teams First'
                     : isRejected
                     ? `Re-submit Payment Proof (₹${amount}) →`
                     : `Submit Payment for Verification (₹${amount}) →`}
