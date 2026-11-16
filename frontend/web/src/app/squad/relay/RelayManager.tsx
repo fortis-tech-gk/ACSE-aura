@@ -64,6 +64,9 @@ export default function RelayManager({
           <p style={{ color: 'var(--text-secondary)', fontSize: '0.95rem' }}>
             Pick exactly 4 runners + up to 2 reserves from the athletes nominated for each relay on the athlete registration form. Lineups can be edited until you submit your entry fee payment.
           </p>
+          <p style={{ color: 'var(--text-primary)', fontSize: '0.9rem', fontWeight: 600, marginTop: '0.5rem' }}>
+            💡 Fee counts members, not roles: in each relay team the first 4 members are paid (₹100 each) and members 5 &amp; 6 are free. Mixed Relay: your squad&apos;s first 2 members are paid, the rest are free. Choose any of them as runners or reserves below; it does not change the fee.
+          </p>
         </div>
 
         {rosterLocked ? (
