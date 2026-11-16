@@ -215,6 +215,11 @@ export default function DelegationsClient({ squads }: Props) {
                 </div>
                 <div className="deleg-sig">
                   <div className="deleg-sig-space" />
+                  <div className="deleg-sig-title">Principal</div>
+                  <div className="deleg-sig-sub">Signature &amp; Seal of {colName}</div>
+                </div>
+                <div className="deleg-sig">
+                  <div className="deleg-sig-space" />
                   <div className="deleg-sig-title">Registration Desk Official</div>
                   <div className="deleg-sig-sub">Dr. ACS College of Engineering</div>
                 </div>
@@ -341,15 +346,16 @@ export default function DelegationsClient({ squads }: Props) {
         }
         .deleg-signatures {
           display: grid;
-          grid-template-columns: 1fr 1fr;
-          gap: 2rem;
+          grid-template-columns: 1fr 1fr 1fr;
+          gap: 1.5rem;
           margin-top: 2.25rem;
         }
         .deleg-sig {
           text-align: center;
         }
         .deleg-sig-space {
-          height: 44px;
+          /* room for a signature plus the college seal */
+          height: 64px;
           border-bottom: 1px solid #000;
           margin: 0 1.5rem 0.3rem;
         }
