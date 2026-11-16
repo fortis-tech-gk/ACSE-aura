@@ -264,7 +264,6 @@ export async function generateBibNumbersAction(): Promise<{
   revalidatePath('/admin/id-cards');
   revalidatePath('/admin/bids');
   revalidatePath('/admin/amendments');
-  revalidatePath('/squad/cards');
 
   return {
     success: true,

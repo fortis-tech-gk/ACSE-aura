@@ -87,7 +87,7 @@ const STEPS: Step[] = [
           <li><strong>Build your relay teams</strong> on the Relay Teams page, if you nominated anyone for a relay.</li>
           <li><strong>Check everything.</strong> The roster can&apos;t be changed after you pay.</li>
           <li><strong>Pay the entry fee</strong> and upload the receipt with the UTR number.</li>
-          <li><strong>Wait for verification</strong> by the Finance Desk, then print ID badges.</li>
+          <li><strong>Wait for verification</strong> by the Finance Desk. ID badges are printed by the organisers and handed to you at the accreditation desk.</li>
         </ol>
         <div style={danger}>
           🔒 <strong>Most important rule:</strong> once you submit a payment, your roster is <strong>LOCKED</strong>. You
@@ -307,11 +307,11 @@ const STEPS: Step[] = [
             <tr><td style={td}><strong>SUBMITTED</strong> 🔒</td><td style={td}>Receipt sent, waiting for the Finance Desk. Roster locked</td><td style={td}>Wait. Check this page again later</td></tr>
             <tr><td style={td}><strong>SUBMITTED</strong> with balance due</td><td style={td}>Payment verified, but it was less than the total</td><td style={td}>Pay the remaining balance and submit a new receipt</td></tr>
             <tr><td style={td}><strong>REJECTED</strong></td><td style={td}>Receipt/UTR didn&apos;t match. The reason is shown on the page</td><td style={td}>Submit again with the correct UTR and receipt. The roster stays locked</td></tr>
-            <tr><td style={td}><strong>VERIFIED</strong> 🔒</td><td style={td}>Fee fully received. Registration complete</td><td style={td}>Nothing more. Print ID badges</td></tr>
+            <tr><td style={td}><strong>VERIFIED</strong> 🔒</td><td style={td}>Fee fully received. Registration complete</td><td style={td}>Nothing more. Collect ID badges at the accreditation desk</td></tr>
           </tbody>
         </table>
         <div style={box}>
-          🪪 <strong>ID Badges:</strong> open <strong>ID Badges</strong> in the top menu to print accreditation cards. Chest/bib
+          🪪 <strong>ID Badges:</strong> printed by the organisers and handed to the PED at the accreditation desk. Chest/bib
           numbers are given after VTU officially closes registration.
         </div>
       </>

@@ -5,7 +5,6 @@ import { requireSquad } from '@/lib/auth-guard';
 import { revalidatePath } from 'next/cache';
 import { rosterEditBlockReason } from '@/lib/roster-window';
 import { validateDateOfBirth } from '@/lib/eligibility';
-import { tryMakeAthleteQrToken } from '@/lib/athlete-qr';
 import { getEventsCatalogue, getEventsByCodes } from '@/lib/events-catalogue';
 import { validateAadhaar } from '@/lib/aadhaar';
 
@@ -775,7 +774,6 @@ export async function updateAthleteAction(formData: FormData): Promise<UpdateAth
     revalidatePath('/squad/athletes');
     revalidatePath('/squad/dashboard');
     revalidatePath('/squad/relay');
-    revalidatePath('/squad/cards');
 
     return {
       success: true,
@@ -911,8 +909,8 @@ export async function listSquadAthletesAction() {
   }
 
   if (error) throw new Error(error.message);
-  // Signed QR for ID cards / AURA apps (secret stays on the server)
-  return (athletes || []).map((a: any) => ({ ...a, qr_token: tryMakeAthleteQrToken(a.id) }));
+  // No QR token here: ID badges are printed by the admin only, never by the college
+  return athletes || [];
 }
 
 /**

@@ -21,7 +21,6 @@ export function SquadNav({ collegeName, collegeCode, gender }: SquadNavProps) {
     { href: '/squad/athletes', label: 'Athlete Roster & Events', icon: '🏃' },
     { href: '/squad/relay', label: 'Relay Teams', icon: '🎽' },
     { href: '/squad/payment', label: 'Fee Settlement', icon: '💳' },
-    { href: '/squad/cards', label: 'ID Badges', icon: '🪪' },
     { href: '/squad/certificate', label: 'Attendance Certificate', icon: '📜' },
   ];
 

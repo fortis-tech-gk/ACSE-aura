@@ -104,7 +104,7 @@ export const Navbar: React.FC = () => {
           <div className="univ-ticker-track">
             <span>&bull; Online student registration portal is now active for all VTU affiliated institutions across Karnataka.</span>
             <span>&bull; Physical Education Directors must complete roster entry, event nominations, and fee verification before the deadline.</span>
-            <span>&bull; Serialized bib numbers and official accreditation QR badges will be generated once registrations are locked and college payments verified.</span>
+            <span>&bull; Serialized bib numbers and official accreditation ID badges are printed by the organisers and issued at the accreditation desk after college payments are verified.</span>
             <span>&bull; Relay &amp; 21km Half Marathon quotas are strictly enforced per Directorate competition regulations.</span>
           </div>
         </div>
