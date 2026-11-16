@@ -157,7 +157,7 @@ export default function AthletesManager({
       .filter(
         (e) =>
           !e.category?.toLowerCase().includes('relay') &&
-          e.category?.toLowerCase() !== 'road' &&
+          (e.category?.toLowerCase() !== 'road' || e.code?.toUpperCase().startsWith('20KM-W')) &&
           !e.code?.includes('4X100') &&
           !e.code?.includes('4X400') &&
           !e.code?.toUpperCase().startsWith('HM-')

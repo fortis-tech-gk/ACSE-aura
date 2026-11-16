@@ -275,6 +275,7 @@ The App Store listing text and the reviewer notes are in `docs/app-store/athlete
 | 0037 reserve substitution | ✅ | ✅ |
 | 0038 result change log | ✅ | ✅ |
 | 0039 function privileges | ✅ | ✅ |
+| 0040 20 km walk, decathlon, heptathlon events | ✅ | ✅ rows already present, not run |
 
 ## Deploy log
 

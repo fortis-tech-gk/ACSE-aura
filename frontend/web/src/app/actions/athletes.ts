@@ -245,7 +245,7 @@ export async function addAthleteAction(formData: FormData): Promise<AddAthleteRe
       !ev ||
       ev.gender !== session.gender ||
       ev.category === 'relay' ||
-      ev.category === 'road' ||
+      (ev.category === 'road' && !code.startsWith('20KM-W')) ||
       code.startsWith('4X') ||
       code.startsWith('HM-');
     if (invalid) {
@@ -951,7 +951,7 @@ export async function getAvailableEventsAction() {
         e.gender === session.gender &&
         e.category != null &&
         e.category !== 'relay' &&
-        e.category !== 'road' &&
+        (e.category !== 'road' || code.startsWith('20KM-W')) &&
         !code.startsWith('4X') &&
         !code.startsWith('HM-')
       );
