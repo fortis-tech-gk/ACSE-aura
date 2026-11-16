@@ -16,6 +16,12 @@ const nextConfig: NextConfig = {
     serverActions: {
       bodySizeLimit: '10mb',
     },
+    // Keep visited dynamic pages in the browser's router cache for 30s, so switching back to an
+    // admin / squad page is instant. Server actions that call revalidatePath() still clear it,
+    // so a page you just changed always shows fresh data.
+    staleTimes: {
+      dynamic: 30,
+    },
   },
 };
 
