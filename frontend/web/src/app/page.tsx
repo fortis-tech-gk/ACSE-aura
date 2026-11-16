@@ -648,10 +648,6 @@ export default function HomePage() {
                   </li>
                   <li>
                     <span className="check" aria-hidden="true">&bull;</span>
-                    <span>Batch printable PDF ID badges with encrypted security QR tags</span>
-                  </li>
-                  <li>
-                    <span className="check" aria-hidden="true">&bull;</span>
                     <span>Event-wise heat sheets &amp; lane draw exports for technical judges</span>
                   </li>
                 </ul>
