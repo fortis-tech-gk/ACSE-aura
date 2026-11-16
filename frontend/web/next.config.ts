@@ -19,8 +19,11 @@ const nextConfig: NextConfig = {
     // Keep visited dynamic pages in the browser's router cache for 30s, so switching back to an
     // admin / squad page is instant. Server actions that call revalidatePath() still clear it,
     // so a page you just changed always shows fresh data.
+    // `static` also covers fully prefetched links (the admin nav uses prefetch={true}): those
+    // pages load in the background and stay usable for 60s (default is 5 minutes).
     staleTimes: {
       dynamic: 30,
+      static: 60,
     },
   },
 };

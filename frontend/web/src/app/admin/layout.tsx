@@ -28,31 +28,31 @@ export default async function AdminLayout({
       <nav className="univ-main-nav">
         <div className="univ-nav-inner">
           <div className="univ-nav-menu">
-            <Link href="/admin" className="univ-nav-link">
+            <Link href="/admin" prefetch={true} className="univ-nav-link">
               <span>📊 Dashboard</span>
             </Link>
-            <Link href="/admin/colleges" className="univ-nav-link">
+            <Link href="/admin/colleges" prefetch={true} className="univ-nav-link">
               <span>🏛️ Colleges &amp; Squads</span>
             </Link>
-            <Link href="/admin/athletes" className="univ-nav-link">
+            <Link href="/admin/athletes" prefetch={true} className="univ-nav-link">
               <span>🏃 Athletes Management</span>
             </Link>
-            <Link href="/admin/payments" className="univ-nav-link">
+            <Link href="/admin/payments" prefetch={true} className="univ-nav-link">
               <span>💳 Payment Verification</span>
             </Link>
-            <Link href="/admin/id-cards" className="univ-nav-link">
+            <Link href="/admin/id-cards" prefetch={true} className="univ-nav-link">
               <span>🪪 ID Cards Studio</span>
             </Link>
-            <Link href="/admin/heats" className="univ-nav-link">
+            <Link href="/admin/heats" prefetch={true} className="univ-nav-link">
               <span>⏱️ Track Heats</span>
             </Link>
-            <Link href="/admin/delegations" className="univ-nav-link">
+            <Link href="/admin/delegations" prefetch={true} className="univ-nav-link">
               <span>📋 Delegations</span>
             </Link>
             <Link href="/registration-desk" className="univ-nav-link">
               <span>✅ Registration Desk</span>
             </Link>
-            <Link href="/admin/audit" className="univ-nav-link">
+            <Link href="/admin/audit" prefetch={true} className="univ-nav-link">
               <span>📜 Audit Log</span>
             </Link>
           </div>
