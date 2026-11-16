@@ -432,10 +432,21 @@ export default function DelegationsClient({ squads }: Props) {
         }
       `}</style>
       <style jsx global>{`
+        /* Delegation sheets ALWAYS print on A4 landscape. admin.css sets '@page { size: auto }'
+           for every admin page, and Chrome lets a later stylesheet's size win even over a named
+           page — so the size is !important (tested: later 'size: auto' no longer overrides it).
+           With a fixed size the print dialog does not offer a portrait option. */
+        @page delegation-sheet {
+          size: A4 landscape !important;
+          margin: 10mm;
+        }
         @media print {
           @page {
-            size: A4 portrait;
+            size: A4 landscape !important;
             margin: 10mm;
+          }
+          .deleg-sheet {
+            page: delegation-sheet;
           }
         }
       `}</style>
