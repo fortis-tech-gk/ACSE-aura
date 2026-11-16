@@ -91,7 +91,7 @@ export default async function SquadDashboardPage() {
   );
 
   const registeredRelayMembers = formattedAthletes.filter((a: any) =>
-    a.registrations.some((r: any) => r.kind === 'relay' || r.events?.code?.includes('4X100'))
+    a.registrations.some((r: any) => r.kind === 'relay')
   ).length;
 
   return (
@@ -253,34 +253,20 @@ export default async function SquadDashboardPage() {
           </div>
         </div>
 
-        {/* Card 3: 4x100m Baton Relay Squad */}
+        {/* Card 3: Relay nominations (picked on the athlete form) */}
         <div className="squad-kpi-card squad-kpi-card-amber">
           <div className="squad-kpi-top">
-            <span className="squad-kpi-label">4x100m Relay Lineup</span>
+            <span className="squad-kpi-label">Relay Entries</span>
             <div className="squad-kpi-icon-wrap squad-kpi-icon-amber">🎽</div>
           </div>
           <div>
             <div className="squad-kpi-metric">
               <span className="squad-kpi-number">{registeredRelayMembers}</span>
-              <span className="squad-kpi-sub">/ 4 Runners</span>
-            </div>
-            <div style={{ width: '100%', height: '6px', background: '#f1f5f9', borderRadius: '9999px', overflow: 'hidden', margin: '0.65rem 0' }}>
-              <div
-                style={{
-                  width: `${(registeredRelayMembers / 4) * 100}%`,
-                  height: '100%',
-                  background: registeredRelayMembers === 4 ? '#10b981' : '#f59e0b',
-                  borderRadius: '9999px',
-                }}
-              />
+              <span className="squad-kpi-sub">Athletes</span>
             </div>
             <div className="squad-kpi-footer">
-              <span>
-                {registeredRelayMembers === 4
-                  ? '✅ Complete baton team'
-                  : `${4 - registeredRelayMembers} slots remaining`}
-              </span>
-              <Link href="/squad/relay" style={{ color: '#b45309', fontWeight: 700 }}>
+              <span>Chosen on each athlete&apos;s form</span>
+              <Link href="/squad/athletes" style={{ color: '#b45309', fontWeight: 700 }}>
                 Manage &rarr;
               </Link>
             </div>
@@ -523,22 +509,6 @@ export default async function SquadDashboardPage() {
           </div>
           <Link href="/squad/payment" className="squad-op-btn">
             {isPaymentVerified ? 'View Payment Receipt & QR &rarr;' : 'Settle Participation Dues &rarr;'}
-          </Link>
-        </div>
-
-        {/* Ops Card 2: 4x100m Relay Board */}
-        <div className="squad-op-card">
-          <div>
-            <div className="squad-op-header">
-              <h3 className="squad-op-title">🎽 4x100m Baton Relay Desk</h3>
-              <span className="squad-op-badge">{registeredRelayMembers}/4 Slots</span>
-            </div>
-            <p className="squad-op-desc">
-              Review and configure your college division&apos;s 4 running baton team members and assigned reserve runner for the 4x100m championship heats.
-            </p>
-          </div>
-          <Link href="/squad/relay" className="squad-op-btn">
-            Configure Relay Baton Squad &rarr;
           </Link>
         </div>
 

@@ -74,7 +74,7 @@ const ol: React.CSSProperties = { margin: '0.4rem 0', paddingLeft: '1.3rem', lin
 const STEPS: Step[] = [
   {
     id: 'overview',
-    title: 'Overview: the 6 stages',
+    title: 'Overview: the 5 stages',
     icon: '🧭',
     body: (
       <>
@@ -84,14 +84,13 @@ const STEPS: Step[] = [
         <ol style={ol}>
           <li><strong>Sign in</strong> with your college code, division (Men / Women) and passphrase.</li>
           <li><strong>Register every athlete</strong> with their events (and relay nomination, if any).</li>
-          <li><strong>Build your relay teams</strong> on the Relay Teams page, if you nominated anyone for a relay.</li>
           <li><strong>Check everything.</strong> The roster can&apos;t be changed after you pay.</li>
           <li><strong>Pay the entry fee</strong> and upload the receipt with the UTR number.</li>
           <li><strong>Wait for verification</strong> by the Finance Desk. ID badges are printed by the organisers and handed to you at the accreditation desk.</li>
         </ol>
         <div style={danger}>
           🔒 <strong>Most important rule:</strong> once you submit a payment, your roster is <strong>LOCKED</strong>. You
-          can&apos;t add or remove athletes or change relay teams after that. Finish stages 2–4 completely
+          can&apos;t add or remove athletes or change relay entries after that. Finish stages 2–3 completely
           before paying.
         </div>
       </>
@@ -186,59 +185,22 @@ const STEPS: Step[] = [
         <div style={warn}>
           ✏️ <strong>Made a mistake?</strong> Athlete details can&apos;t be edited. Click <strong>✕ Remove</strong> on that
           athlete and register them again. You can only do this <strong>before payment</strong>. Removing an athlete also removes them
-          from all events and relay teams.
-        </div>
-      </>
-    ),
-  },
-  {
-    id: 'relay',
-    title: 'Stage 3: Build relay teams',
-    icon: '🎽',
-    body: (
-      <>
-        <p style={{ margin: '0 0 0.4rem', fontSize: '0.88rem', lineHeight: 1.6 }}>
-          Do this only if you nominated athletes for a relay in stage 2. <strong>Only nominated athletes appear here.</strong>
-          Example: if 6 athletes chose 4×100m, you pick the 4 runners and up to 2 reserves from those 6. Nobody else can be added.
-        </p>
-        <ol style={ol}>
-          <li>Open <strong>Relay Teams</strong> from the top menu.</li>
-          <li>For each relay card, select a runner for <strong>all 4 legs</strong> (Leg 1 to Leg 4).</li>
-          <li>Optionally select up to <strong>2 reserves</strong>.</li>
-          <li>Click <strong>Save Relay Roster</strong> on that card and wait for the green &quot;saved&quot; message.</li>
-        </ol>
-        <table style={table}>
-          <thead>
-            <tr><th style={th}>Rule</th><th style={th}>Details</th></tr>
-          </thead>
-          <tbody>
-            <tr><td style={td}>Team size</td><td style={td}>Exactly 4 runners + up to 2 reserves (max 6). A team needs at least 4 nominated athletes</td></tr>
-            <tr><td style={td}>One divisional relay</td><td style={td}>An athlete can run 4×100m <strong>or</strong> 4×400m, not both</td></tr>
-            <tr><td style={td}>Mixed relay order</td><td style={td}><strong>Leg 1: Girl → Leg 2: Boy → Leg 3: Girl → Leg 4: Boy</strong></td></tr>
-            <tr><td style={td}>Mixed relay team</td><td style={td}>Shared by the college; women come from the Women squad and men from the Men squad. Either PED can edit it</td></tr>
-          </tbody>
-        </table>
-        <div style={danger}>
-          🔒 <strong>The mixed relay locks when EITHER squad pays.</strong> Agree on the mixed team with the other division&apos;s
-          PED and save it <strong>before either of you pays</strong>.
-        </div>
-        <div style={box}>
-          ℹ️ The payment page won&apos;t let you pay until every relay you nominated athletes for has all 4 legs saved.
+          from all events and relays.
         </div>
       </>
     ),
   },
   {
     id: 'review',
-    title: 'Stage 4: Review before paying',
+    title: 'Stage 3: Review before paying',
     icon: '🔍',
     body: (
       <>
         <p style={{ margin: '0 0 0.4rem', fontSize: '0.88rem' }}>Before you pay, check:</p>
         <ul style={ol}>
           <li>☐ Every athlete who will compete is registered (names, USN and photos correct).</li>
-          <li>☐ Each athlete&apos;s events are correct (max 2 events, reserve only with 1 event).</li>
-          <li>☐ All relay teams have 4 legs saved; the mixed relay is agreed with the other division.</li>
+          <li>☐ Each athlete&apos;s events are correct (max 2 events + 1 reserve).</li>
+          <li>☐ Relay entries are ticked for the right athletes; the mixed relay is agreed with the other division.</li>
           <li>☐ You downloaded the <strong>Registration Report (PDF)</strong> from the Athlete Roster page for your records.</li>
         </ul>
         <h4 style={{ margin: '1rem 0 0.25rem', fontSize: '0.95rem' }}>How the fee is calculated</h4>
@@ -250,8 +212,8 @@ const STEPS: Step[] = [
             <tr><td style={td}>Each individual event entry (Event 1 / Event 2)</td><td style={td}>₹100</td></tr>
             <tr><td style={td}>Reserve event</td><td style={td}>Free</td></tr>
             <tr><td style={td}>Half Marathon (per athlete)</td><td style={td}>₹100</td></tr>
-            <tr><td style={td}>Relay team: each of the first 4 members</td><td style={td}>₹100 each (max ₹400 per team)</td></tr>
-            <tr><td style={td}>Relay team: members 5 and 6</td><td style={td}>Free</td></tr>
+            <tr><td style={td}>Relay: each of the first 4 athletes</td><td style={td}>₹100 each (max ₹400 per team)</td></tr>
+            <tr><td style={td}>Relay: athletes 5 and 6</td><td style={td}>Free</td></tr>
             <tr><td style={td}>Mixed relay: each of your squad&apos;s first 2 members</td><td style={td}>₹100 each (max ₹200 per squad); more members free</td></tr>
           </tbody>
         </table>
@@ -264,7 +226,7 @@ const STEPS: Step[] = [
   },
   {
     id: 'pay',
-    title: 'Stage 5: Pay the entry fee',
+    title: 'Stage 4: Pay the entry fee',
     icon: '💳',
     body: (
       <>
@@ -295,7 +257,7 @@ const STEPS: Step[] = [
   },
   {
     id: 'after',
-    title: 'Stage 6: After paying (status meanings)',
+    title: 'Stage 5: After paying (status meanings)',
     icon: '✅',
     body: (
       <>
@@ -350,8 +312,6 @@ const STEPS: Step[] = [
           <tr><td style={td}>&quot;…USN / Aadhaar is already registered&quot;</td><td style={td}>This student is already registered (possibly by another college). Check the number; contact the Directorate if it&apos;s wrong</td></tr>
           <tr><td style={td}>&quot;VTU Quota Exceeded … maximum of 2 athletes&quot;</td><td style={td}>Your college already has 2 athletes in that event. Choose another event</td></tr>
           <tr><td style={td}>&quot;Quota full (6/6)&quot; on a relay</td><td style={td}>6 athletes are already nominated for that relay</td></tr>
-          <tr><td style={td}>&quot;Not nominated for … Relay&quot;</td><td style={td}>Only athletes who chose that relay at registration can be placed in the team</td></tr>
-          <tr><td style={td}>&quot;Complete your relay teams before paying&quot;</td><td style={td}>Go to Relay Teams and save all 4 legs for each listed relay (or remove the nominations)</td></tr>
           <tr><td style={td}>&quot;Roster Locked &amp; Payment Submitted&quot;</td><td style={td}>You already paid. Changes need an emergency unlock from the Directorate</td></tr>
           <tr><td style={td}>&quot;UTR … has already been submitted&quot;</td><td style={td}>That UTR was already used. Check you copied the correct number from <em>this</em> payment</td></tr>
           <tr><td style={td}>&quot;Invalid photo format&quot;</td><td style={td}>Convert the photo to JPG/PNG (iPhone: share the photo as JPG) and keep it under 4 MB</td></tr>

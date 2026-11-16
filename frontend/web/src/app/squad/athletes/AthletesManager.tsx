@@ -735,7 +735,7 @@ export default function AthletesManager({
             Up to 6 members/relay &bull; ₹100 each for the first 4 members, members 5 &amp; 6 free (max ₹400/team)
           </span>
           <span style={{ fontSize: '0.75rem', color: 'var(--text-primary)', fontWeight: 600, marginTop: '0.25rem' }}>
-            💡 Fee counts members, not roles: in each relay team the first 4 members are paid (₹100 each) and members 5 &amp; 6 are free. Mixed Relay: your squad&apos;s first 2 members are paid, the rest are free. You can still pick any of them as runners or reserves on the Relay page.
+            💡 Fee counts members, not roles: in each relay team the first 4 members are paid (₹100 each) and members 5 &amp; 6 are free. Mixed Relay: your squad&apos;s first 2 members are paid, the rest are free.
           </span>
         </div>
       </div>

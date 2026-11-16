@@ -213,7 +213,6 @@ export async function toggleSquadRosterLockAction(
   revalidatePath('/admin/payments');
   revalidatePath('/squad/dashboard');
   revalidatePath('/squad/athletes');
-  revalidatePath('/squad/relay');
   revalidatePath('/squad/payment');
   return {
     success: true,

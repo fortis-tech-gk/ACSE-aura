@@ -25,7 +25,6 @@ frontend/web/
 │   │   ├── actions/
 │   │   │   ├── auth.ts              # Squad & admin authentication actions
 │   │   │   ├── athletes.ts          # Add/delete athlete, quota validations, photo upload
-│   │   │   ├── relay.ts             # Relay team formation, 4x100/4x400/Mixed rules
 │   │   │   └── payment.ts           # calculateSquadFees, submitPaymentAction, invoice
 │   │   ├── login/
 │   │   │   └── squad/page.tsx       # College PED passphrase login portal
@@ -36,9 +35,6 @@ frontend/web/
 │   │   │   ├── athletes/
 │   │   │   │   ├── page.tsx         # Server component fetching squad athletes & events
 │   │   │   │   └── AthletesManager.tsx # Client modal: Bio-data, photos, event selection
-│   │   │   ├── relay/
-│   │   │   │   ├── page.tsx         # Server component fetching relay events & teams
-│   │   │   │   └── RelayManager.tsx # 4 legs + 2 reserves assignment desk
 │   │   │   ├── payment/
 │   │   │   │   ├── page.tsx         # Server component fetching fee breakdown
 │   │   │   │   └── PaymentClient.tsx# UPI QR, UTR submission, payment receipt modal
@@ -79,13 +75,9 @@ frontend/web/
   - Maximum **2 athletes** from the same college squad in any single regular individual discipline.
 - **Relay Events**:
   - **Rule 3 & 24**: Mutual exclusivity between divisional relays — an athlete can participate in **at most one** divisional relay (either `4x100m` OR `4x400m`, never both).
-  - **Team Composition**: 4 active runners + up to 2 reserve runners (max 6 athletes registered per relay team).
-  - **Rule 27 (4x400m Mixed Relay)**: Unrestricted across individual events. Running order is strictly:
-    - **Leg 1**: Woman (Female athlete)
-    - **Leg 2**: Man (Male athlete)
-    - **Leg 3**: Woman (Female athlete)
-    - **Leg 4**: Man (Male athlete)
-    - Reserves: 1 Man and 1 Woman.
+  - **No relay team building (removed 16-11-2026)**: PEDs only tick on the athlete form whether an athlete runs a relay (4x100m / 4x400m / Mixed). There is no Relay Teams page, no leg/reserve assignment, and incomplete relays never block payment. Do not re-add a lineup step or a relay-readiness gate.
+  - **Cap**: max 6 athletes nominated per divisional relay per squad; max 6 per college for the Mixed Relay.
+  - **Rule 27 (4x400m Mixed Relay)**: Unrestricted across individual events; the W-M-W-M running order is settled on the day, not in registration.
 - **Half Marathon (21km)**:
   - Code `HM-M` (Men) or `HM-W` (Women).
   - Can be registered standalone.
@@ -95,7 +87,7 @@ Fees are calculated dynamically via `calculateSquadFees()` in `frontend/web/src/
 - **Regular Individual Event**: ₹100 per entry
 - **Reserve Event**: **₹0 (Free)**
 - **Half Marathon**: ₹100 per entry
-- **Relay Team**: **₹100 for each of the first 4 members**, members 5 & 6 free → ₹100 × min(members, 4), max ₹400 per team. Members = athletes nominated to that relay (athlete form tick-box) ∪ Relay-page lineup, counted once.
+- **Relay Team**: **₹100 for each of the first 4 members**, members 5 & 6 free → ₹100 × min(members, 4), max ₹400 per team. Members = athletes nominated to that relay on the athlete form.
 - **Mixed Relay (4x400m Mixed)**: the team is shared by the college, but each squad pays only for its **own** members: ₹100 × min(own members, 2), so ₹200 max per squad and ₹400 per college.
 - **Total Amount Formula**:
   $$\text{Total Amount} = (\text{Regular Count} \times 100) + (\text{HM Count} \times 100) + (\sum_{\text{teams}} 100 \times \min(\text{members}, 4))$$
@@ -108,7 +100,7 @@ Fees are calculated dynamically via `calculateSquadFees()` in `frontend/web/src/
   - Transaction screenshot/receipt (JPG, PNG, PDF ≤ 5MB) uploaded to bucket `payment-proofs`.
 - **Roster Lock State Transitions**:
   1. **Draft Phase (`roster_locked: false`, `payment_status: 'DRAFT'` / `'DrAFT'`)**:
-     - PED freely adds/deletes athletes and configures relay teams.
+     - PED freely adds/deletes athletes (relays are picked on the athlete form).
   2. **Payment Submission (`submitPaymentAction`)**:
      - Submitting payment **automatically sets `roster_locked = true`** and `payment_status = 'SUBMITTED'`.
      - Squad entries are immediately **frozen** to prevent altering the roster while payment is verified.
@@ -118,7 +110,7 @@ Fees are calculated dynamically via `calculateSquadFees()` in `frontend/web/src/
   4. **Emergency Unlocking**:
      - Only an Admin can unlock a locked squad via `/admin/colleges` (`toggleSquadRosterLockAction`) if the college requests permission for an emergency roster adjustment.
 - **Enforcement Across All Server Actions**:
-  - `addAthleteAction`, `deleteAthleteAction`, and relay mutations in `relay.ts` **MUST check both** `meet_settings.registration_open !== false` AND `squad.roster_locked !== true`. If locked, return error immediately.
+  - `addAthleteAction` and `deleteAthleteAction` **MUST check both** `meet_settings.registration_open !== false` AND `squad.roster_locked !== true`. If locked, return error immediately.
 
 ---
 

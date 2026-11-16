@@ -8,7 +8,7 @@ export const metadata = {
   // Private portal: keep out of search results
   robots: { index: false, follow: false },
   title: 'VTU Athletics — Institution Delegation Portal',
-  description: 'Affiliated Institution Squad Registration, Athletes Roster, Relay Teams & Fee Settlement',
+  description: 'Affiliated Institution Squad Registration, Athletes Roster & Fee Settlement',
 };
 
 export default async function SquadLayout({

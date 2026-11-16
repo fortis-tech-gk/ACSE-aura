@@ -6,7 +6,7 @@
  */
 import { supabaseAdmin } from '@/lib/supabase';
 import { totalCredited } from '@/lib/payment-status';
-import { getEventsByCodes, getEventsCatalogue } from '@/lib/events-catalogue';
+import { getEventsCatalogue } from '@/lib/events-catalogue';
 import { fetchAllRows, fetchInChunks } from '@/lib/db-fetch-all';
 
 /**
@@ -366,96 +366,4 @@ export async function reviewPayment(
 
   if (sqErr) return { success: false, error: sqErr.message };
   return { success: true, squadId };
-}
-
-/**
- * Pre-payment readiness check for relays. Submitting payment FREEZES the roster, so any relay
- * with nominations must already have a complete lineup — otherwise it could never be completed.
- *
- * - Divisional (4x100m / 4x400m of this squad): if anyone is nominated, ≥ 4 must be nominated
- *   and the team must have all 4 legs assigned on the Relay page.
- * - 4x400m Mixed (shared by the college): if anyone in the college is nominated, ≥ 2 women and
- *   ≥ 2 men must be nominated and all 4 legs assigned (W, M, W, M).
- *
- * Returns human-readable blockers; an empty array means the squad may pay.
- */
-export async function getRelayReadinessIssues(squadId: string): Promise<string[]> {
-  const issues: string[] = [];
-
-  const { data: squad } = await supabaseAdmin
-    .from('squads')
-    .select('id, college_id, gender, colleges(squads(id, gender))')
-    .eq('id', squadId)
-    .maybeSingle();
-  if (!squad) return ['Squad not found.'];
-
-  const divisionalCodes = squad.gender === 'men' ? ['4X100M-M', '4X400M-M'] : ['4X100M-W', '4X400M-W'];
-  const relayEvents = await getEventsByCodes([...divisionalCodes, MIXED_RELAY_CODE]);
-  if (relayEvents.length === 0) return issues;
-  const relayEventIds = relayEvents.map((e) => e.id);
-
-  const college: any = Array.isArray((squad as any).colleges) ? (squad as any).colleges[0] : (squad as any).colleges;
-  const collegeSquads: any[] = college?.squads?.length ? college.squads : [{ id: squad.id, gender: squad.gender }];
-  const squadGender = new Map(collegeSquads.map((s: any) => [s.id, s.gender]));
-  const collegeSquadIds = Array.from(squadGender.keys());
-
-  // Nominations of the whole college (joined through profiles) and every relay team of the
-  // college for these events, fetched together instead of one query per event.
-  const [{ data: nominationRows }, { data: collegeTeams }] = await Promise.all([
-    supabaseAdmin
-      .from('registrations')
-      .select('profile_id, event_id, profiles!inner(squad_id)')
-      .eq('kind', 'relay')
-      .in('event_id', relayEventIds)
-      .in('profiles.squad_id', collegeSquadIds),
-    supabaseAdmin
-      .from('relay_teams')
-      .select('id, event_id, squad_id, relay_members(leg_order, is_reserve)')
-      .in('event_id', relayEventIds)
-      .in('squad_id', collegeSquadIds),
-  ]);
-  const profileSquad = new Map(
-    (nominationRows || []).map((n: any) => {
-      const prof = Array.isArray(n.profiles) ? n.profiles[0] : n.profiles;
-      return [n.profile_id, prof?.squad_id];
-    })
-  );
-  const nominations = nominationRows || [];
-
-  for (const ev of relayEvents as any[]) {
-    const isMixed = ev.code === MIXED_RELAY_CODE;
-    const evNoms = nominations.filter(
-      (n: any) => n.event_id === ev.id && (isMixed || profileSquad.get(n.profile_id) === squadId)
-    );
-    if (evNoms.length === 0) continue;
-
-    // Find the team: own squad for divisional; any college squad for mixed
-    const teams = (collegeTeams || []).filter(
-      (t: any) => t.event_id === ev.id && (isMixed || t.squad_id === squadId)
-    );
-    const members: any[] = (teams || []).flatMap((t: any) => t.relay_members || []);
-    const legs = members.filter((m) => !m.is_reserve && m.leg_order).length;
-
-    if (isMixed) {
-      const women = evNoms.filter((n: any) => squadGender.get(profileSquad.get(n.profile_id)) === 'women').length;
-      const men = evNoms.length - women;
-      if (women < 2 || men < 2) {
-        issues.push(
-          `${ev.name}: needs at least 2 women and 2 men nominated across your college (currently ${women} women, ${men} men). Nominate more athletes, or remove the mixed relay nominations.`
-        );
-        continue;
-      }
-    } else if (evNoms.length < 4) {
-      issues.push(
-        `${ev.name}: only ${evNoms.length} athlete(s) nominated — a team needs at least 4. Nominate more athletes, or remove these nominations.`
-      );
-      continue;
-    }
-
-    if (legs < 4) {
-      issues.push(`${ev.name}: lineup incomplete (${legs}/4 legs assigned). Assign all 4 legs on the Relay Teams page.`);
-    }
-  }
-
-  return issues;
 }

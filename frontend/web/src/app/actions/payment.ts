@@ -3,7 +3,7 @@
 import { supabaseAdmin } from '@/lib/supabase';
 import { requireSquad, requireStaff } from '@/lib/auth-guard';
 import { revalidatePath } from 'next/cache';
-import { calculateSquadFees, reviewPayment, getRelayReadinessIssues } from '@/lib/payments';
+import { calculateSquadFees, reviewPayment } from '@/lib/payments';
 import { resolveHostUpiId, resolveHostAccountName } from '@/lib/payment-config';
 import { normalizePaymentStatus, totalCredited, type SquadPaymentStatus } from '@/lib/payment-status';
 import { fetchAllRows } from '@/lib/db-fetch-all';
@@ -28,8 +28,6 @@ export interface FeeBreakdown {
   hostAccountName: string;
   squadPaymentStatus: SquadPaymentStatus;
   hasPendingPayment: boolean;
-  /** Relay lineups that must be completed before payment (roster freezes on payment) */
-  relayIssues: string[];
   registrationOpen: boolean;
   rosterLocked: boolean;
   collegeName?: string;
@@ -71,14 +69,12 @@ export async function getSquadFeeBreakdownAction(): Promise<{
   // payment history are independent reads: fetch them together.
   const [
     feeCalc,
-    relayIssues,
     { data: settings },
     { data: squad },
     { count: athletesCount },
     { data: payments },
   ] = await Promise.all([
     calculateSquadFees(session.squadId),
-    getRelayReadinessIssues(session.squadId),
     supabaseAdmin
       .from('meet_settings')
       .select('host_upi_id, host_account_name, registration_open')
@@ -140,7 +136,6 @@ export async function getSquadFeeBreakdownAction(): Promise<{
       hostAccountName: resolveHostAccountName(settings?.host_account_name),
       squadPaymentStatus: normalizePaymentStatus(squad?.payment_status),
       hasPendingPayment: (payments || []).some((p: any) => p.status === 'SUBMITTED'),
-      relayIssues: squad?.roster_locked === true ? [] : relayIssues,
       registrationOpen: settings?.registration_open !== false,
       rosterLocked: squad?.roster_locked === true,
       collegeName: college?.name || 'VTU Affiliated Institution',
@@ -184,8 +179,7 @@ export async function submitPaymentAction(formData: FormData): Promise<{ success
       return { success: false, error: 'Please upload the payment transaction screenshot or receipt.' };
     }
 
-    // Relay lineups are NOT required before payment: an incomplete lineup is only a warning on the
-    // payment page (fees are billed from nominations either way). All reads the checks below need are independent, so they are fetched together and the
+    // Relays are picked on the athlete form only (no lineup step). All reads the checks below need are independent, so they are fetched together and the
     // checks then run in their original order.
     const [{ data: lockRow }, { count: pendingCount }, feeCalc, { data: pastPayments }] =
       await Promise.all([
@@ -388,7 +382,6 @@ export async function submitPaymentAction(formData: FormData): Promise<{ success
     revalidatePath('/squad/payment');
     revalidatePath('/squad/dashboard');
     revalidatePath('/squad/athletes');
-    revalidatePath('/squad/relay');
     revalidatePath('/finance');
 
     return { success: true };

@@ -607,7 +607,6 @@ export async function deleteAthleteAction(profileId: string): Promise<{ success:
 
   if (error) return { success: false, error: error.message };
 
-  revalidatePath('/squad/relay');
 
   revalidatePath('/squad/athletes');
   revalidatePath('/squad/dashboard');
@@ -773,7 +772,6 @@ export async function updateAthleteAction(formData: FormData): Promise<UpdateAth
 
     revalidatePath('/squad/athletes');
     revalidatePath('/squad/dashboard');
-    revalidatePath('/squad/relay');
 
     return {
       success: true,

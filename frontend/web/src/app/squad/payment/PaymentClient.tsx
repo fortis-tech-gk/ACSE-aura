@@ -51,8 +51,6 @@ export default function PaymentClient({ breakdown, payments, squadCode, athletes
   const isAwaitingVerification = breakdown.hasPendingPayment;
   const isRejected = breakdown.squadPaymentStatus === 'REJECTED' && !breakdown.hasPendingPayment;
   const latestRejection = payments.find((p) => p.status === 'REJECTED');
-  const relayIssues = breakdown.relayIssues || [];
-  const hasRelayBlockers = relayIssues.length > 0;
   const isPedMissing = !breakdown.pedName?.trim() || !breakdown.pedPhone?.trim();
   const isFormDisabled = isZeroSquad || isFullySettled || isAwaitingVerification || isPedMissing;
   const statusLabel =
@@ -253,18 +251,6 @@ export default function PaymentClient({ breakdown, payments, squadCode, athletes
         <div id="banner-ped-missing" style={{ padding: '1rem 1.25rem', borderRadius: 'var(--radius-sm)', background: 'rgba(245, 158, 11, 0.1)', border: '1px solid rgba(245, 158, 11, 0.35)', color: '#92400e', fontSize: '0.92rem' }}>
           ⚠️ <strong>Add your PED / Sports Director contact before paying.</strong> The name and mobile number appear on your invoice and are used by the Finance Desk to reach you.{' '}
           <Link href="/squad/dashboard#ped-contact-card" style={{ fontWeight: 700, textDecoration: 'underline', color: '#92400e' }}>Add contact details &rarr;</Link>
-        </div>
-      )}
-
-      {hasRelayBlockers && !isAwaitingVerification && (
-        <div id="banner-relay-incomplete" style={{ padding: '1rem 1.25rem', borderRadius: 'var(--radius-sm)', background: 'rgba(245, 158, 11, 0.1)', border: '1px solid rgba(245, 158, 11, 0.35)', color: '#92400e', fontSize: '0.92rem' }}>
-          ⚠️ <strong>Relay lineups are incomplete.</strong> You can still pay, but paying locks the roster, so relay lineups can&apos;t be changed afterwards without an admin unlock:
-          <ul style={{ margin: '0.5rem 0 0.25rem', paddingLeft: '1.25rem', lineHeight: 1.6 }}>
-            {relayIssues.map((issue) => (
-              <li key={issue}>{issue}</li>
-            ))}
-          </ul>
-          <Link href="/squad/relay" style={{ fontWeight: 700, textDecoration: 'underline', color: '#92400e' }}>Go to Relay Teams &rarr;</Link>
         </div>
       )}
 
@@ -476,7 +462,7 @@ export default function PaymentClient({ breakdown, payments, squadCode, athletes
                   <strong style={{ display: 'block', marginBottom: '0.2rem', color: '#1e3a8a', fontSize: '0.925rem' }}>
                     Roster Lock Policy
                   </strong>
-                  Submitting a payment <strong>locks your squad roster</strong>. Finalise all athletes, events and relay teams before you pay — after submission, no athletes can be added or removed and relay teams cannot be edited. If a receipt is rejected you may re-upload it; the roster stays locked.
+                  Submitting a payment <strong>locks your squad roster</strong>. Finalise all athletes and events (including relays) before you pay — after submission, no athletes can be added or removed. If a receipt is rejected you may re-upload it; the roster stays locked.
                   {!breakdown.rosterLocked && (
                     <div style={{ marginTop: '0.45rem', fontSize: '0.8rem', color: '#2563eb' }}>
                       Still need to nominate athletes? <Link href="/squad/athletes" style={{ color: '#1d4ed8', fontWeight: 700, textDecoration: 'underline' }}>Go to Athlete Nominations &rarr;</Link>
