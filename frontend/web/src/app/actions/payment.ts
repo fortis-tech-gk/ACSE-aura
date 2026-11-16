@@ -6,6 +6,7 @@ import { revalidatePath } from 'next/cache';
 import { calculateSquadFees, reviewPayment, getRelayReadinessIssues } from '@/lib/payments';
 import { resolveHostUpiId, resolveHostAccountName } from '@/lib/payment-config';
 import { normalizePaymentStatus, totalCredited, type SquadPaymentStatus } from '@/lib/payment-status';
+import { fetchAllRows } from '@/lib/db-fetch-all';
 
 export interface FeeBreakdown {
   regularEventsCount: number;
@@ -412,7 +413,9 @@ export async function submitPaymentAction(formData: FormData): Promise<{ success
 export async function listPaymentsForFinanceAction() {
   await requireStaff(['meet_admin', 'finance_desk']);
 
-  const { data: payments, error } = await supabaseAdmin
+  // Paged: a single request returns at most 1,000 rows
+  const payments = await fetchAllRows<any>(() =>
+    supabaseAdmin
     .from('payments')
     .select(`
       id,
@@ -436,10 +439,11 @@ export async function listPaymentsForFinanceAction() {
         )
       )
     `)
-    .order('created_at', { ascending: false });
+    .order('created_at', { ascending: false })
+    .order('id')
+  );
 
-  if (error) throw new Error(error.message);
-  return payments || [];
+  return payments;
 }
 
 /**

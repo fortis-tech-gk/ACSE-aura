@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
+import { unstable_cache } from 'next/cache';
 import { supabaseAdmin } from '@/lib/supabase';
 import { Navbar } from '@/components/layout/Navbar';
 import AutoRefresh from './AutoRefresh';
@@ -79,8 +80,12 @@ async function load() {
   return { heats: heatsRes.data || [], standings: (standingsRes.data || {}) as any, error: heatsRes.error?.message || null };
 }
 
+// Every spectator's tab re-renders this page every 15 s. During the meet that is hundreds of
+// viewers, so the (heavy) results read is shared: one database read per 10 s for everyone.
+const loadShared = unstable_cache(load, ['public-results-v1'], { revalidate: 10 });
+
 export default async function ResultsPage() {
-  const { heats, standings, error } = await load();
+  const { heats, standings, error } = await loadShared();
 
   // Group heats by event; finals first, then by event name
   const byEvent = new Map<string, { ev: any; heats: any[] }>();

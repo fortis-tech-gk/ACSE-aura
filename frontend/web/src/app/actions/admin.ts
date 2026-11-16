@@ -47,6 +47,11 @@ export async function createCollegeAction(formData: FormData): Promise<CreateCol
   if (!name || !code) {
     return { success: false, error: 'College Name and Code (e.g. MITM) are required.' };
   }
+  // PEDs log in with this code, and the login form keeps only letters, digits and hyphens —
+  // a code with a space or a dot could never be entered.
+  if (!/^[A-Z0-9-]{2,30}$/.test(code)) {
+    return { success: false, error: 'College Code must be 2–30 letters, digits or hyphens with no spaces (e.g. BMSCE, RVCE, ACS-CE).' };
+  }
 
   // Generate plain passphrases for both squads
   const menPassphrasePlain = generateSquadPassphrase();
@@ -103,13 +108,18 @@ export async function resetSquadPassphraseAction(squadId: string): Promise<{ suc
   const newPassphrasePlain = generateSquadPassphrase();
   const newHash = await hashPassphrase(newPassphrasePlain);
 
-  const { error } = await supabaseAdmin
+  const { data: updated, error } = await supabaseAdmin
     .from('squads')
     .update({ passphrase_hash: newHash })
-    .eq('id', squadId);
+    .eq('id', squadId)
+    .select('id')
+    .maybeSingle();
 
   if (error) {
     return { success: false, error: error.message };
+  }
+  if (!updated) {
+    return { success: false, error: 'Squad not found — the passphrase was not changed.' };
   }
   // Anyone still logged in with the old password is signed out on their next click
   forgetSquadStamp(squadId);
@@ -133,7 +143,7 @@ export async function toggleSquadRosterLockAction(
   squadId: string,
   locked: boolean
 ): Promise<{ success: boolean; error?: string; paymentStatus?: SquadPaymentStatus; lateEntryOpen?: boolean }> {
-  await requireAdmin();
+  const admin = await requireAdmin();
 
   // select('*') so this works before migration 0017 adds late_entry_open
   const [{ data: squad, error: squadErr }, { data: meetSettings }] = await Promise.all([
@@ -192,7 +202,7 @@ export async function toggleSquadRosterLockAction(
     const { error: auditErr } = await supabaseAdmin.from('admin_audit_logs').insert({
       action: locked ? 'ROSTER_LOCKED' : update.late_entry_open ? 'LATE_ENTRY_WINDOW_OPENED' : 'ROSTER_EMERGENCY_UNLOCK',
       details: { squadId, previousStatus: squad.payment_status, newStatus: update.payment_status || squad.payment_status },
-      performed_by: 'Administrator',
+      performed_by: admin.displayName || 'Administrator',
     });
     if (auditErr) console.warn('Audit log not written:', auditErr.message);
   } catch (err) {

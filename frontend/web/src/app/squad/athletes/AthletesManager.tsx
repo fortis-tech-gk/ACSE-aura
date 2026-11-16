@@ -58,6 +58,8 @@ interface Props {
   totalDues?: number;
   /** Mixed-relay nominations from the other division of this college */
   siblingMixedCount?: number;
+  /** Athletes registered by the other division of this college (Rule 23 counts the whole college) */
+  siblingAthleteCount?: number;
   collegeName?: string;
   paymentStatus?: string;
   registrationClosed?: boolean;
@@ -106,6 +108,7 @@ export default function AthletesManager({
   relayCount: initialRelayCount = 0,
   totalDues,
   siblingMixedCount = 0,
+  siblingAthleteCount = 0,
   collegeName = 'Affiliated Institution',
   paymentStatus = 'DRAFT',
   registrationClosed = false,
@@ -1790,6 +1793,7 @@ export default function AthletesManager({
           gender,
         }}
         athletes={athletes}
+        siblingAthleteCount={siblingAthleteCount}
       />
 
     </div>

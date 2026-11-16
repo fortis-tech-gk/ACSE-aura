@@ -3,7 +3,8 @@
 import { supabaseAdmin } from '@/lib/supabase';
 import { requireAdmin } from '@/lib/auth-guard';
 import { revalidatePath } from 'next/cache';
-import { calculateSquadFees, reviewPayment } from '@/lib/payments';
+import { calculateFeesForSquads, emptySquadFees, reviewPayment } from '@/lib/payments';
+import { fetchAllRows } from '@/lib/db-fetch-all';
 import { signPaymentProofLinks } from '@/lib/payment-proofs';
 import { normalizePaymentStatus, totalCredited } from '@/lib/payment-status';
 import { tryMakeAthleteQrToken } from '@/lib/athlete-qr';
@@ -46,39 +47,21 @@ async function logAudit(action: string, details: Record<string, any> = {}, perfo
 export async function getAdminDashboardStatsAction(): Promise<AdminDashboardStats> {
   await requireAdmin();
 
-  // Meet Settings
-  const { data: settings } = await supabaseAdmin
-    .from('meet_settings')
-    .select('registration_open, registration_closed_at')
-    .limit(1)
-    .maybeSingle();
-
-  // Total Athletes
-  const { count: totalAthletes } = await supabaseAdmin
-    .from('profiles')
-    .select('id', { count: 'exact', head: true });
-
-  // Total Colleges
-  const { count: totalColleges } = await supabaseAdmin
-    .from('colleges')
-    .select('id', { count: 'exact', head: true });
-
-  // Squads breakdown
-  const { data: squads } = await supabaseAdmin
-    .from('squads')
-    .select('id, payment_status, roster_locked');
+  // Five independent reads (settings, athlete / college counts, squads, bibs): fetched together
+  const [{ data: settings }, { count: totalAthletes }, { count: totalColleges }, { data: squads }, { count: totalBibsGenerated }] =
+    await Promise.all([
+      supabaseAdmin.from('meet_settings').select('registration_open, registration_closed_at').limit(1).maybeSingle(),
+      supabaseAdmin.from('profiles').select('id', { count: 'exact', head: true }),
+      supabaseAdmin.from('colleges').select('id', { count: 'exact', head: true }),
+      supabaseAdmin.from('squads').select('id, payment_status, roster_locked'),
+      supabaseAdmin.from('profiles').select('id', { count: 'exact', head: true }).not('bid_number', 'is', null),
+    ]);
 
   const totalSquads = squads?.length || 0;
   const verifiedSquadsCount = squads?.filter((s) => s.payment_status === 'VERIFIED').length || 0;
   const pendingSquadsCount = squads?.filter((s) => s.payment_status === 'SUBMITTED').length || 0;
   const rejectedSquadsCount = squads?.filter((s) => s.payment_status === 'REJECTED').length || 0;
   const draftSquadsCount = squads?.filter((s) => normalizePaymentStatus(s.payment_status) === 'DRAFT').length || 0;
-
-  // Bibs Generated Count
-  const { count: totalBibsGenerated } = await supabaseAdmin
-    .from('profiles')
-    .select('id', { count: 'exact', head: true })
-    .not('bid_number', 'is', null);
 
   return {
     registrationOpen: settings?.registration_open ?? true,
@@ -102,7 +85,7 @@ export async function toggleRegistrationStatusAction(): Promise<{
   isOpen: boolean;
   error?: string;
 }> {
-  await requireAdmin();
+  const admin = await requireAdmin();
 
   const { data: currentSettings } = await supabaseAdmin
     .from('meet_settings')
@@ -199,7 +182,8 @@ export async function toggleRegistrationStatusAction(): Promise<{
       previousStatus: currentOpen ? 'OPEN' : 'CLOSED',
       newStatus: newStatus ? 'OPEN' : 'CLOSED',
       ...(newStatus ? { unpaidSquadsUnlocked: reopenedSquads } : {}),
-    }
+    },
+    admin.displayName || 'Administrator'
   );
 
   revalidatePath('/admin');
@@ -223,7 +207,7 @@ export async function generateBibNumbersAction(): Promise<{
   error?: string;
   unverifiedSquads?: string[];
 }> {
-  await requireAdmin();
+  const admin = await requireAdmin();
 
   const { data: settings } = await supabaseAdmin
     .from('meet_settings')
@@ -257,7 +241,7 @@ export async function generateBibNumbersAction(): Promise<{
     womenAssigned: result.total_women_bids_assigned || 0,
     lateEntries: result.late_entries_numbered || 0,
     pendingSquads: pending.length,
-  });
+  }, admin.displayName || 'Administrator');
 
   revalidatePath('/admin');
   revalidatePath('/admin/athletes');
@@ -279,8 +263,10 @@ export async function generateBibNumbersAction(): Promise<{
 export async function listAllAthletesAction() {
   await requireAdmin();
 
-  // profiles.* so newer columns (date_of_birth, phone) are included when present
-  const { data, error } = await supabaseAdmin
+  // profiles.* so newer columns (date_of_birth, phone) are included when present.
+  // Paged: a single request returns at most 1,000 athletes.
+  const data = await fetchAllRows<any>(() =>
+    supabaseAdmin
     .from('profiles')
     .select(`
       *,
@@ -310,37 +296,11 @@ export async function listAllAthletesAction() {
         )
       )
     `)
-    .order('created_at', { ascending: false });
+    .order('created_at', { ascending: false })
+    .order('id')
+  );
 
-  if (error) throw new Error(error.message);
-  return (data || []).map((a: any) => ({ ...a, qr_token: tryMakeAthleteQrToken(a.id) }));
-}
-
-const EMPTY_FEES: Awaited<ReturnType<typeof calculateSquadFees>> = {
-  regularEventsCount: 0,
-  regularFeeRate: 100,
-  reserveEventsCount: 0,
-  hmCount: 0,
-  hmFeeRate: 100,
-  relayTeamsCount: 0,
-  relayFeeRate: 100,
-  relayMembersBilled: 0,
-  relayFeeTotal: 0,
-  relayTeams: [],
-  totalAmount: 0,
-};
-
-async function mapWithConcurrency<T, R>(items: T[], limit: number, fn: (item: T) => Promise<R>): Promise<R[]> {
-  const results = new Array<R>(items.length);
-  let next = 0;
-  const worker = async () => {
-    while (next < items.length) {
-      const i = next++;
-      results[i] = await fn(items[i]);
-    }
-  };
-  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
-  return results;
+  return data.map((a: any) => ({ ...a, qr_token: tryMakeAthleteQrToken(a.id) }));
 }
 
 /**
@@ -384,22 +344,14 @@ export async function listPaymentsForAdminAction() {
 
   if (sqErr) throw new Error(sqErr.message);
 
-  // Compute expected fee for each squad
-  // A few squads at a time: firing every squad's fee queries at once (~500 squads) floods the
-  // database connection pool and makes the page take a minute to load.
-  // Colleges with at least one athlete (in either squad). A college with no athletes owes nothing:
-  // every fee — events and relay members alike — comes from an athlete, so skip the fee engine.
-  const collegesWithAthletes = new Set(
-    (squads || []).filter((sq: any) => (sq.profiles || []).length > 0).map((sq: any) => sq.colleges?.id)
-  );
+  // Same fee engine as the squad's Fee Settlement page (₹100 per relay member, first 4 per team,
+  // reserves free, mixed relay ₹100 per squad member up to 2) so Finance and PED see one number —
+  // computed for every squad in a few bulk reads, not one set of queries per squad.
+  const feesBySquad = await calculateFeesForSquads((squads || []).map((sq: any) => sq.id));
 
-  const enrichedSquads = await mapWithConcurrency(
-    squads || [],
-    12,
-    async (sq: any) => {
-      // Same fee engine as the squad's Fee Settlement page (₹100 per relay member, first 4 per team,
-      // reserves free, mixed relay billed once per college) so Finance and PED see one number.
-      const fees = collegesWithAthletes.has(sq.colleges?.id) ? await calculateSquadFees(sq.id) : EMPTY_FEES;
+  const enrichedSquads = (squads || []).map(
+    (sq: any) => {
+      const fees = feesBySquad.get(sq.id) || emptySquadFees();
       const expectedFee = fees.totalAmount;
 
       // Latest payment submission (embedded rows are unordered, so sort explicitly)
@@ -471,7 +423,8 @@ export async function verifySquadPaymentAction(
       amountReceived: status === 'VERIFIED' ? amountReceived : null,
       mismatch: status === 'VERIFIED' && amountReceived !== pendingPayment.amount_submitted,
       rejectionReason: rejectionReason || 'None',
-    }
+    },
+    adminSession.displayName || 'Administrator'
   );
 
   revalidatePath('/admin/payments');
@@ -495,7 +448,7 @@ export async function generateTrackHeatsAction(): Promise<{
   skipped?: string[];
   error?: string;
 }> {
-  await requireAdmin();
+  const admin = await requireAdmin();
 
   const { data: trackEvents, error: evErr } = await supabaseAdmin
     .from('events')
@@ -544,7 +497,7 @@ export async function generateTrackHeatsAction(): Promise<{
     totalAthletesSeeded += Number((data as any)?.total_athletes) || 0;
   }
 
-  await logAudit('GENERATED_TRACK_HEATS', { totalHeatsCreated, totalAthletesSeeded, skipped });
+  await logAudit('GENERATED_TRACK_HEATS', { totalHeatsCreated, totalAthletesSeeded, skipped }, admin.displayName || 'Administrator');
 
   revalidatePath('/admin/heats');
   revalidatePath('/admin/schedule');

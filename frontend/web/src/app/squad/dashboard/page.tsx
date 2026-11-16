@@ -8,6 +8,7 @@ import './dashboard.css';
 import PedContactCard from './PedContactCard';
 import CollegeDetailsCard from './CollegeDetailsCard';
 import { canEditRoster, isLateEntryWindow } from '@/lib/roster-window';
+import { countCollegeAthletes, COLLEGE_MAX_ATHLETES, COLLEGE_MIN_ATHLETES } from '@/lib/college-strength';
 
 export const metadata = {
   title: 'Contingent Overview — VTU SportsOS',
@@ -19,7 +20,7 @@ export default async function SquadDashboardPage() {
 
   // Squad + college, meet settings, the roster, relay count and fees are independent reads:
   // fetch them all together instead of one after another.
-  const [{ data: squad }, { data: meetSettings }, athletes, relayCount, squadFees] = await Promise.all([
+  const [{ data: squad }, { data: meetSettings }, athletes, relayCount, squadFees, collegeStrength] = await Promise.all([
     supabaseAdmin
       .from('squads')
       .select('*, colleges(*)')
@@ -33,6 +34,7 @@ export default async function SquadDashboardPage() {
     listSquadAthletesAction(),
     getSquadRelayCountAction(),
     calculateSquadFees(session.squadId),
+    countCollegeAthletes(session.collegeId),
   ]);
 
   const college = Array.isArray(squad?.colleges) ? squad.colleges[0] : squad?.colleges;
@@ -66,8 +68,13 @@ export default async function SquadDashboardPage() {
 
   // Calculations
   const totalAthletes = formattedAthletes.length;
-  const maxQuota = 25;
-  const quotaPercent = Math.min(100, Math.round((totalAthletes / maxQuota) * 100));
+  // Rule 23 (min 8) and the 25-athlete cap apply to the whole college: both squads together.
+  const maxQuota = COLLEGE_MAX_ATHLETES;
+  const minQuota = COLLEGE_MIN_ATHLETES;
+  const collegeTotal = Math.max(collegeStrength.total, totalAthletes);
+  const siblingAthletes = Math.max(0, collegeTotal - totalAthletes);
+  const siblingLabel = isMen ? 'women' : 'men';
+  const quotaPercent = Math.min(100, Math.round((collegeTotal / maxQuota) * 100));
 
   // Same fee calculation as the payment page: ₹100 per regular / Half Marathon entry and,
   // per relay team, ₹100 for each of the first 4 members (members 5 & 6 free).
@@ -200,8 +207,8 @@ export default async function SquadDashboardPage() {
           </div>
           <div>
             <div className="squad-kpi-metric">
-              <span className="squad-kpi-number">{totalAthletes}</span>
-              <span className="squad-kpi-sub">/ {maxQuota} Max</span>
+              <span className="squad-kpi-number">{collegeTotal}</span>
+              <span className="squad-kpi-sub">/ {maxQuota} Max (college)</span>
             </div>
             <div style={{ width: '100%', height: '6px', background: '#f1f5f9', borderRadius: '9999px', overflow: 'hidden', margin: '0.65rem 0' }}>
               <div
@@ -214,14 +221,16 @@ export default async function SquadDashboardPage() {
               />
             </div>
             <div className="squad-kpi-footer">
-              <span>{quotaPercent}% quota utilized</span>
-              <span style={{ color: '#2563eb', fontWeight: 700 }}>{maxQuota - totalAthletes} slots open</span>
+              <span>{totalAthletes} this squad · {siblingAthletes} {siblingLabel}</span>
+              <span style={{ color: '#2563eb', fontWeight: 700 }}>{Math.max(0, maxQuota - collegeTotal)} slots open</span>
             </div>
             <div style={{ marginTop: '0.45rem', paddingTop: '0.35rem', borderTop: '1px dashed #e2e8f0', fontSize: '0.72rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <span style={{ color: totalAthletes >= 8 ? '#16a34a' : '#d97706', fontWeight: 600 }}>
-                {totalAthletes >= 8 ? '✓ Rule 23: Min 8 athletes met' : `⚠️ Rule 23: Min 8 required (${8 - totalAthletes} needed)`}
+              <span style={{ color: collegeTotal >= minQuota ? '#16a34a' : '#d97706', fontWeight: 600 }}>
+                {collegeTotal >= minQuota
+                  ? `✓ Rule 23: Min ${minQuota} athletes per college met`
+                  : `⚠️ Rule 23: Min ${minQuota} per college (${minQuota - collegeTotal} more needed)`}
               </span>
-              <span style={{ color: '#94a3b8' }}>Meet Entry Rule</span>
+              <span style={{ color: '#94a3b8' }}>Men + Women together</span>
             </div>
           </div>
         </div>

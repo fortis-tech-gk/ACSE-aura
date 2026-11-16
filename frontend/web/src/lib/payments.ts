@@ -7,6 +7,7 @@
 import { supabaseAdmin } from '@/lib/supabase';
 import { totalCredited } from '@/lib/payment-status';
 import { getEventsByCodes, getEventsCatalogue } from '@/lib/events-catalogue';
+import { fetchAllRows, fetchInChunks } from '@/lib/db-fetch-all';
 
 /**
  * Accurately calculates squad fees:
@@ -32,6 +33,42 @@ export interface RelayTeamFee {
   fee: number;
 }
 
+/** One squad's entry-fee breakdown (see calculateSquadFees for the rules). */
+export interface SquadFeeBreakdown {
+  regularEventsCount: number;
+  regularFeeRate: number;
+  reserveEventsCount: number;
+  hmCount: number;
+  hmFeeRate: number;
+  relayTeamsCount: number;
+  relayFeeRate: number;
+  relayMembersBilled: number;
+  relayFeeTotal: number;
+  relayTeams: RelayTeamFee[];
+  totalAmount: number;
+}
+
+export const REGULAR_EVENT_FEE = 100;
+export const HALF_MARATHON_FEE = 100;
+
+export function emptySquadFees(): SquadFeeBreakdown {
+  return {
+    regularEventsCount: 0,
+    regularFeeRate: REGULAR_EVENT_FEE,
+    reserveEventsCount: 0,
+    hmCount: 0,
+    hmFeeRate: HALF_MARATHON_FEE,
+    relayTeamsCount: 0,
+    relayFeeRate: RELAY_FEE_PER_MEMBER,
+    relayMembersBilled: 0,
+    relayFeeTotal: 0,
+    relayTeams: [],
+    totalAmount: 0,
+  };
+}
+
+const one = (v: any) => (Array.isArray(v) ? v[0] : v);
+
 /**
  * Entry fees for a squad, computed live from the current roster:
  *  - Event 1 / Event 2 / Half Marathon: ₹100 per entry. Reserve events: ₹0.
@@ -41,105 +78,169 @@ export interface RelayTeamFee {
  *  - The 4x400m Mixed Relay team is shared by the college's Men's and Women's squads. Each squad
  *    pays ₹100 for each of its OWN members, counting at most 2 (₹100 for 1, ₹200 for 2 or more).
  */
-export async function calculateSquadFees(squadId: string) {
-  let regularEventsCount = 0;
-  let reserveEventsCount = 0;
-  let hmCount = 0;
-  const relayEventIds = new Set<string>();
-  // event_id -> athletes nominated to it from THIS squad
-  const nominations = new Map<string, Set<string>>();
-  const addMember = (map: Map<string, Set<string>>, eventId: string, profileId: string) => {
-    if (!map.has(eventId)) map.set(eventId, new Set());
-    map.get(eventId)!.add(profileId);
-  };
+export async function calculateSquadFees(squadId: string): Promise<SquadFeeBreakdown> {
+  return (await calculateFeesForSquads([squadId])).get(squadId) ?? emptySquadFees();
+}
 
-  // Independent reads run together (one round trip instead of five in a row):
-  //  - this squad's registrations (joined through profiles, so no separate profile-id lookup)
-  //  - the squad's college and every squad of that college (for the shared mixed relay)
-  //  - relay teams owned by this squad, with their members
-  //  - the events catalogue (cached, same for everyone)
-  const [{ data: regs }, { data: squadRow }, { data: ownedTeams }, catalogue] = await Promise.all([
-    supabaseAdmin
-      .from('registrations')
-      .select('id, kind, event_id, profile_id, profiles!inner(squad_id)')
-      .eq('profiles.squad_id', squadId),
-    supabaseAdmin
-      .from('squads')
-      .select('college_id, colleges(squads(id))')
-      .eq('id', squadId)
-      .maybeSingle(),
-    supabaseAdmin
-      .from('relay_teams')
-      .select('id, event_id, relay_members(profile_id)')
-      .eq('squad_id', squadId),
+/**
+ * The same fees for MANY squads at once, from four bulk reads instead of five reads per squad.
+ * The Payment Verification and Delegations desks list every squad of the meet (~500): one fee
+ * query per squad made those pages take a minute and flooded the database connection pool.
+ * Squads that do not exist are left out of the map.
+ */
+export async function calculateFeesForSquads(squadIds: string[]): Promise<Map<string, SquadFeeBreakdown>> {
+  const ids = Array.from(new Set(squadIds.filter(Boolean)));
+  const fees = new Map<string, SquadFeeBreakdown>();
+  if (ids.length === 0) return fees;
+
+  // The squads, each with every squad of its college: the shared Mixed Relay team may be owned
+  // by the sibling squad, so that squad's team rows must be read as well.
+  const [catalogue, squadRows] = await Promise.all([
     getEventsCatalogue(),
+    fetchInChunks(ids, (part) =>
+      fetchAllRows<any>(() =>
+        supabaseAdmin.from('squads').select('id, college_id, colleges(squads(id))').in('id', part).order('id')
+      )
+    ),
   ]);
+  const collegeOf = new Map<string, string>();
+  for (const s of squadRows) {
+    collegeOf.set(s.id, s.college_id);
+    for (const sib of one(s.colleges)?.squads || []) if (sib?.id) collegeOf.set(sib.id, s.college_id);
+  }
 
-  (regs || []).forEach((r: any) => {
-    if (r.kind === 'regular') regularEventsCount++;
-    else if (r.kind === 'reserve') reserveEventsCount++;
-    else if (r.kind === 'half_marathon') hmCount++;
-    else if (r.kind === 'relay' && r.event_id) {
-      relayEventIds.add(r.event_id);
-      addMember(nominations, r.event_id, r.profile_id);
-    }
-  });
+  const [regs, teams] = await Promise.all([
+    // registrations of the requested squads (joined through profiles)
+    fetchInChunks(ids, (part) =>
+      fetchAllRows<any>(() =>
+        supabaseAdmin
+          .from('registrations')
+          .select('id, kind, event_id, profile_id, profiles!inner(squad_id)')
+          .in('profiles.squad_id', part)
+          .order('id')
+      )
+    ),
+    // relay teams of every squad of the colleges involved, with each member's squad
+    fetchInChunks(Array.from(collegeOf.keys()), (part) =>
+      fetchAllRows<any>(() =>
+        supabaseAdmin
+          .from('relay_teams')
+          .select('id, squad_id, event_id, relay_members(profile_id, profiles(squad_id))')
+          .in('squad_id', part)
+          .order('id')
+      )
+    ),
+  ]);
 
   const eventById = new Map(catalogue.map((e) => [e.id, e]));
   const mixedEventIds = new Set(
     catalogue.filter((e) => String(e.code || '').toUpperCase() === MIXED_RELAY_CODE).map((e) => e.id)
   );
 
+  const regsBySquad = new Map<string, any[]>();
+  for (const r of regs) {
+    const sid = one(r.profiles)?.squad_id;
+    if (!sid) continue;
+    if (!regsBySquad.has(sid)) regsBySquad.set(sid, []);
+    regsBySquad.get(sid)!.push(r);
+  }
+  const teamsBySquad = new Map<string, any[]>();
+  const mixedTeamsByCollege = new Map<string, any[]>();
+  for (const t of teams) {
+    if (!teamsBySquad.has(t.squad_id)) teamsBySquad.set(t.squad_id, []);
+    teamsBySquad.get(t.squad_id)!.push(t);
+    const college = collegeOf.get(t.squad_id);
+    if (college && mixedEventIds.has(t.event_id)) {
+      if (!mixedTeamsByCollege.has(college)) mixedTeamsByCollege.set(college, []);
+      mixedTeamsByCollege.get(college)!.push(t);
+    }
+  }
+
+  for (const squadId of ids) {
+    const college = collegeOf.get(squadId);
+    if (!college) continue;
+    fees.set(
+      squadId,
+      computeSquadFees(
+        squadId,
+        regsBySquad.get(squadId) || [],
+        teamsBySquad.get(squadId) || [],
+        mixedTeamsByCollege.get(college) || [],
+        mixedEventIds,
+        eventById
+      )
+    );
+  }
+  return fees;
+}
+
+/** Pure fee rules for one squad, from rows already in memory. */
+function computeSquadFees(
+  squadId: string,
+  regs: any[],
+  ownedTeams: any[],
+  collegeMixedTeams: any[],
+  mixedEventIds: Set<string>,
+  eventById: Map<string, { code: string; name: string }>
+): SquadFeeBreakdown {
+  let regularEventsCount = 0;
+  let reserveEventsCount = 0;
+  let hmCount = 0;
+  const relayEventIds = new Set<string>();
+  // event_id -> athletes of THIS squad in that relay
+  const nominations = new Map<string, Set<string>>();
+  const addMember = (eventId: string, profileId: string) => {
+    if (!nominations.has(eventId)) nominations.set(eventId, new Set());
+    nominations.get(eventId)!.add(profileId);
+  };
+
+  for (const r of regs) {
+    if (r.kind === 'regular') regularEventsCount++;
+    else if (r.kind === 'reserve') reserveEventsCount++;
+    else if (r.kind === 'half_marathon') hmCount++;
+    else if (r.kind === 'relay' && r.event_id) {
+      relayEventIds.add(r.event_id);
+      addMember(r.event_id, r.profile_id);
+    }
+  }
+
   // Divisional relays: team members = athletes nominated on the athlete form ∪ the squad's own
   // Relay-page lineup, billed for at most 4.
-  (ownedTeams || []).forEach((t: any) => {
-    if (t.event_id && !mixedEventIds.has(t.event_id) && Array.isArray(t.relay_members) && t.relay_members.length > 0) {
-      relayEventIds.add(t.event_id);
-    }
-  });
+  for (const t of ownedTeams) {
+    if (t.event_id && !mixedEventIds.has(t.event_id) && (t.relay_members || []).length > 0) relayEventIds.add(t.event_id);
+  }
 
   // Mixed relay: the team is shared by the college, but each squad pays only for its OWN members
   // (men's squad for its men, women's squad for its women), at most 2 each — so ₹200 per squad,
   // ₹400 per college. Members = this squad's tick-box nominations ∪ this squad's athletes in the
   // college's mixed team on the Relay page, whichever squad owns that team row.
-  const collegeRow: any = Array.isArray((squadRow as any)?.colleges) ? (squadRow as any).colleges[0] : (squadRow as any)?.colleges;
-  const collegeSquadIds: string[] = ((collegeRow?.squads || []) as any[]).map((x: any) => x.id).filter(Boolean);
-  if (!collegeSquadIds.includes(squadId)) collegeSquadIds.push(squadId);
-  const { data: mixedTeams } =
-    mixedEventIds.size > 0
-      ? await supabaseAdmin
-          .from('relay_teams')
-          .select('event_id, relay_members(profile_id, profiles(squad_id))')
-          .in('squad_id', collegeSquadIds)
-          .in('event_id', Array.from(mixedEventIds))
-      : { data: [] as any[] };
-  (mixedTeams || []).forEach((t: any) => {
-    (t.relay_members || []).forEach((m: any) => {
-      const prof = Array.isArray(m?.profiles) ? m.profiles[0] : m?.profiles;
-      if (m?.profile_id && prof?.squad_id === squadId) {
+  for (const t of collegeMixedTeams) {
+    for (const m of t.relay_members || []) {
+      if (m?.profile_id && one(m.profiles)?.squad_id === squadId) {
         relayEventIds.add(t.event_id);
-        addMember(nominations, t.event_id, m.profile_id);
+        addMember(t.event_id, m.profile_id);
       }
-    });
-  });
+    }
+  }
 
   const relayTeams: RelayTeamFee[] = [];
   for (const eventId of relayEventIds) {
     const members = new Set<string>(nominations.get(eventId) || []);
     const isMixed = mixedEventIds.has(eventId);
     if (!isMixed) {
-      (ownedTeams || [])
-        .filter((t: any) => t.event_id === eventId)
-        .forEach((t: any) => (t.relay_members || []).forEach((m: any) => m?.profile_id && members.add(m.profile_id)));
+      for (const t of ownedTeams) {
+        if (t.event_id !== eventId) continue;
+        for (const m of t.relay_members || []) if (m?.profile_id) members.add(m.profile_id);
+      }
     }
     if (members.size === 0) continue;
 
     const billedMembers = Math.min(members.size, isMixed ? MIXED_RELAY_BILLABLE_PER_SQUAD : RELAY_BILLABLE_MEMBERS);
-    const ev: any = eventById.get(eventId) || {};
+    const ev = eventById.get(eventId);
     relayTeams.push({
       eventId,
-      code: ev.code || '',
-      name: ev.name || 'Relay',
+      code: ev?.code || '',
+      name: ev?.name || 'Relay',
       members: members.size,
       billedMembers,
       fee: billedMembers * RELAY_FEE_PER_MEMBER,
@@ -147,26 +248,21 @@ export async function calculateSquadFees(squadId: string) {
   }
   relayTeams.sort((a, b) => a.code.localeCompare(b.code));
 
-  const relayTeamsCount = relayTeams.length;
   const relayMembersBilled = relayTeams.reduce((sum, t) => sum + t.billedMembers, 0);
   const relayFeeTotal = relayTeams.reduce((sum, t) => sum + t.fee, 0);
-  const regularFeeRate = 100;
-  const hmFeeRate = 100;
-  const relayFeeRate = RELAY_FEE_PER_MEMBER; // per member, first 4 members of each team
-  const totalAmount = regularEventsCount * regularFeeRate + hmCount * hmFeeRate + relayFeeTotal;
 
   return {
     regularEventsCount,
-    regularFeeRate,
+    regularFeeRate: REGULAR_EVENT_FEE,
     reserveEventsCount,
     hmCount,
-    hmFeeRate,
-    relayTeamsCount,
-    relayFeeRate,
+    hmFeeRate: HALF_MARATHON_FEE,
+    relayTeamsCount: relayTeams.length,
+    relayFeeRate: RELAY_FEE_PER_MEMBER, // per member, first 4 members of each team
     relayMembersBilled,
     relayFeeTotal,
     relayTeams,
-    totalAmount,
+    totalAmount: regularEventsCount * REGULAR_EVENT_FEE + hmCount * HALF_MARATHON_FEE + relayFeeTotal,
   };
 }
 

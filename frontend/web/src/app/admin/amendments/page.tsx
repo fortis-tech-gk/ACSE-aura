@@ -1,6 +1,7 @@
 import { requireAdmin } from '@/lib/auth-guard';
 import { supabaseAdmin } from '@/lib/supabase';
 import { listAmendmentsAction } from '@/app/actions/bids';
+import { fetchAllRows } from '@/lib/db-fetch-all';
 import AmendmentsManager from './AmendmentsManager';
 
 export const metadata = {
@@ -10,8 +11,9 @@ export const metadata = {
 export default async function AdminAmendmentsPage() {
   await requireAdmin();
 
-  // Fetch athletes
-  const { data: athletes } = await supabaseAdmin
+  // Every athlete (paged: one request returns at most 1,000)
+  const athletes = await fetchAllRows<any>(() =>
+    supabaseAdmin
     .from('profiles')
     .select(`
       id,
@@ -23,9 +25,11 @@ export default async function AdminAmendmentsPage() {
         squad_code
       )
     `)
-    .order('bid_number', { ascending: true });
+    .order('bid_number', { ascending: true })
+    .order('id')
+  );
 
-  const formattedAthletes = (athletes || []).map((a: any) => {
+  const formattedAthletes = athletes.map((a: any) => {
     const s = Array.isArray(a.squads) ? a.squads[0] : a.squads;
     return {
       id: a.id,

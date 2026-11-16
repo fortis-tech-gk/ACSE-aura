@@ -27,6 +27,20 @@ export function forgetSquadStamp(squadId: string) {
   stampCache.delete(squadId);
 }
 
+// Staff accounts: is_active was only checked at login, so a deactivated admin kept access for the
+// 7-day life of the cookie. Checked on every request, cached briefly like the squad stamp.
+const staffActiveCache = new Map<string, { active: boolean; at: number }>();
+
+async function staffStillActive(staffId: string): Promise<boolean | null> {
+  const hit = staffActiveCache.get(staffId);
+  if (hit && Date.now() - hit.at < STAMP_TTL_MS) return hit.active;
+  const { data, error } = await supabaseAdmin.from('staff').select('is_active').eq('id', staffId).maybeSingle();
+  if (error) return hit?.active ?? null; // database hiccup: don't log everyone out
+  const active = data?.is_active === true; // a deleted account is inactive too
+  staffActiveCache.set(staffId, { active, at: Date.now() });
+  return active;
+}
+
 /**
  * Server-side guard to ensure the user is logged in with one of the allowed roles.
  * If unauthorized, redirects to the designated login page or throws an error.
@@ -48,6 +62,14 @@ export async function requireAuth(allowedRoles?: UserRole[]): Promise<SessionDat
       redirect('/registration-desk');
     } else {
       redirect('/');
+    }
+  }
+
+  // Staff roles (admin, finance, desks): the account must still be active
+  if (session.role !== 'squad_manager' && session.role !== 'spectator') {
+    const active = await staffStillActive(session.entityId);
+    if (active === false) {
+      redirect('/login/admin?reason=deactivated');
     }
   }
 

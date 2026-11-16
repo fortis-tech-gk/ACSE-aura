@@ -133,7 +133,9 @@ Fees are calculated dynamically via `calculateSquadFees()` in `frontend/web/src/
 3. **Server Actions in Next.js 16**:
    - Always start action files with `'use server';`.
    - Avoid passing non-serializable objects (e.g. raw functions, unhandled File buffers across client-server boundaries). Use `FormData` for multipart uploads.
-4. **Foreign Key Cascade on Delete**:
+4. **Supabase returns at most 1,000 rows per request**:
+   - Any whole-table read (all athletes, all payments) silently stops at row 1,000. Use `fetchAllRows()` from `src/lib/db-fetch-all.ts` (pages through the query) for those; per-squad reads are far below the cap.
+5. **Foreign Key Cascade on Delete**:
    - When deleting an athlete, registrations, relay memberships, and heat assignments must be deleted first or cascading to prevent FK constraint failures.
 
 ---

@@ -127,7 +127,7 @@ const ORGANIZING_COMMITTEE: LeaderItem[] = [
     degrees: 'M.Tech, Ph.D',
     designation: 'Principal',
     organization: 'Dr. ACS College of Engineering, Bengaluru',
-    imageSrc: '/management/principal.png',
+    imageSrc: '/management/principal.jpg',
     imageAlt: 'Dr. Shylaja B. S., Principal, Dr. ACSCE',
     imageFit: 'contain',
   },

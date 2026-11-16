@@ -7,6 +7,7 @@ import { rosterEditBlockReason } from '@/lib/roster-window';
 import { validateDateOfBirth } from '@/lib/eligibility';
 import { getEventsCatalogue, getEventsByCodes } from '@/lib/events-catalogue';
 import { validateAadhaar } from '@/lib/aadhaar';
+import { countCollegeAthletes, COLLEGE_MAX_ATHLETES } from '@/lib/college-strength';
 
 export interface AddAthleteResult {
   success: boolean;
@@ -84,6 +85,15 @@ export async function addAthleteAction(formData: FormData): Promise<AddAthleteRe
     const lockError = await getRosterMutationBlock(session.squadId);
     if (lockError) {
       return { success: false, error: lockError };
+    }
+
+    // Contingent cap counts the whole college: men and women squads together.
+    const strength = await countCollegeAthletes(session.collegeId);
+    if (strength.total >= COLLEGE_MAX_ATHLETES) {
+      return {
+        success: false,
+        error: `Your college has already registered ${strength.total} athletes (${strength.men} men, ${strength.women} women). The limit is ${COLLEGE_MAX_ATHLETES} athletes per college across both divisions.`,
+      };
     }
 
   const sslcName = (formData.get('sslcName') as string || '').trim();

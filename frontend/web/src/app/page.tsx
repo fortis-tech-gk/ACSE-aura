@@ -152,7 +152,7 @@ export default function HomePage() {
               <div className="hero-torchbearer-wrapper">
                 <div className="hero-torchbearer-card">
                   <img
-                    src="/torchbearer.png"
+                    src="/torchbearer.webp"
                     alt="28th VTU State Athletics Torchbearer Sprinting with the Championship Flame"
                     className="hero-torchbearer-img"
                   />

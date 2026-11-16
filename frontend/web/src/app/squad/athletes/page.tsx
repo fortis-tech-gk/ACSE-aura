@@ -6,6 +6,7 @@ import AthletesManager from './AthletesManager';
 import { canEditRoster, isLateEntryWindow } from '@/lib/roster-window';
 import { calculateSquadFees, MIXED_RELAY_CODE } from '@/lib/payments';
 import { getEventsByCodes } from '@/lib/events-catalogue';
+import { countCollegeAthletes } from '@/lib/college-strength';
 
 export const metadata = {
   title: 'Athlete Roster — VTU SportsOS Squad',
@@ -32,7 +33,7 @@ export default async function SquadAthletesPage() {
   const session = await requireSquad();
 
   // Every read on this page is independent: fetch them together (one round trip, not nine).
-  const [{ data: squad }, { data: meetSettings }, athletes, events, relayCount, fees, siblingMixedCount] =
+  const [{ data: squad }, { data: meetSettings }, athletes, events, relayCount, fees, siblingMixedCount, collegeStrength] =
     await Promise.all([
       supabaseAdmin.from('squads').select('*').eq('id', session.squadId).single(),
       supabaseAdmin.from('meet_settings').select('registration_open').limit(1).maybeSingle(),
@@ -42,6 +43,7 @@ export default async function SquadAthletesPage() {
       // Total dues come from the same calculation as the payment page, so both always agree
       calculateSquadFees(session.squadId),
       countSiblingMixedNominations(session.squadId, session.collegeId),
+      countCollegeAthletes(session.collegeId),
     ]);
   const registrationOpen = meetSettings?.registration_open !== false;
   const lateEntryOpen = isLateEntryWindow(registrationOpen, squad);
@@ -72,6 +74,7 @@ export default async function SquadAthletesPage() {
         relayCount={relayCount}
         totalDues={fees.totalAmount}
         siblingMixedCount={siblingMixedCount}
+        siblingAthleteCount={Math.max(0, collegeStrength.total - athletes.length)}
       />
     </div>
   );

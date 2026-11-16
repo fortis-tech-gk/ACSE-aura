@@ -1,6 +1,7 @@
 import { requireAdmin } from '@/lib/auth-guard';
 import { supabaseAdmin } from '@/lib/supabase';
 import Link from 'next/link';
+import { fetchAllRows } from '@/lib/db-fetch-all';
 import { CertificatesView, type Placer, type Athlete } from './certificates-view';
 
 export const metadata = {
@@ -25,8 +26,9 @@ export default async function AdminCertificatesPage() {
     .lte('place', 3)
     .order('created_at', { ascending: false });
 
-  // Fetch all accredited athletes for Participation Certificates
-  const { data: athletesRaw } = await supabaseAdmin
+  // Every accredited athlete for Participation Certificates (paged: one request returns at most 1,000)
+  const athletesRaw = await fetchAllRows<any>(() =>
+    supabaseAdmin
     .from('profiles')
     .select(`
       id,
@@ -36,7 +38,9 @@ export default async function AdminCertificatesPage() {
       squads(colleges(name, code, district))
     `)
     .eq('accreditation_status', 'ACCREDITED')
-    .order('sslc_name');
+    .order('sslc_name')
+    .order('id')
+  );
 
   const placers: Placer[] = ((placersRaw || []) as any[]).map((p) => ({
     id: p.id,

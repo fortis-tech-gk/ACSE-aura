@@ -38,6 +38,8 @@ interface Props {
     pedEmail?: string;
   };
   athletes: ReportAthlete[];
+  /** Athletes of the college's other division: Rule 23 (min 8) counts men + women together */
+  siblingAthleteCount?: number;
 }
 
 export default function RegistrationReportModal({
@@ -45,7 +47,9 @@ export default function RegistrationReportModal({
   onClose,
   squad,
   athletes,
+  siblingAthleteCount = 0,
 }: Props) {
+  const collegeTotal = athletes.length + siblingAthleteCount;
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
@@ -169,7 +173,9 @@ export default function RegistrationReportModal({
             </div>
             <div className="report-meta-block">
               <span className="meta-lbl">TOTAL ATHLETES:</span>
-              <span className="meta-val">{athletes.length} Students {athletes.length >= 8 ? '✓ (Min 8 Met)' : '⚠️ (< 8 Min)'}</span>
+              <span className="meta-val">
+                {athletes.length} Students · College {collegeTotal} {collegeTotal >= COLLEGE_MIN_ATHLETES ? `✓ (Min ${COLLEGE_MIN_ATHLETES} Met)` : `⚠️ (< ${COLLEGE_MIN_ATHLETES} Min)`}
+              </span>
             </div>
             <div className="report-meta-block">
               <span className="meta-lbl">DIVISION:</span>
