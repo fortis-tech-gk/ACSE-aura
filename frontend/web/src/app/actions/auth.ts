@@ -269,7 +269,7 @@ export async function loginStaffPin(formData: FormData): Promise<AuthResponse> {
   else if (matchedStaff.role === 'call_room_official') redirectTo = '/call-room';
   else if (matchedStaff.role === 'referee') redirectTo = '/referee';
   else if (matchedStaff.role === 'meet_admin') redirectTo = '/admin/colleges';
-  else if (matchedStaff.role === 'finance_desk') redirectTo = '/finance';
+  else if (matchedStaff.role === 'finance_desk') redirectTo = '/admin/payments';
   else if (matchedStaff.role === 'registration_desk') redirectTo = '/registration-desk';
 
   return { success: true, redirectTo };

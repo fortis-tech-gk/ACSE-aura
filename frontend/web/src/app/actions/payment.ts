@@ -397,7 +397,7 @@ export async function submitPaymentAction(formData: FormData): Promise<{ success
     revalidatePath('/squad/payment');
     revalidatePath('/squad/dashboard');
     revalidatePath('/squad/athletes');
-    revalidatePath('/finance');
+    revalidatePath('/admin/payments');
 
     return { success: true };
   } catch (err: any) {
@@ -459,7 +459,7 @@ export async function verifyPaymentAction(
   const result = await reviewPayment(paymentId, newStatus, reason, staffSession.entityId, amountReceived);
   if (!result.success) return result;
 
-  revalidatePath('/finance');
+  revalidatePath('/admin/payments');
   revalidatePath('/squad/payment');
   revalidatePath('/squad/dashboard');
   return { success: true };

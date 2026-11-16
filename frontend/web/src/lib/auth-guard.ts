@@ -58,6 +58,8 @@ export async function requireAuth(allowedRoles?: UserRole[]): Promise<SessionDat
       redirect('/squad/dashboard');
     } else if (session.role === 'meet_admin') {
       redirect('/admin');
+    } else if (session.role === 'finance_desk') {
+      redirect('/admin/payments');
     } else if (session.role === 'registration_desk') {
       redirect('/registration-desk');
     } else {
@@ -99,6 +101,13 @@ export async function requireSquad(): Promise<SessionData & { squadId: string; c
  */
 export async function requireAdmin(): Promise<SessionData> {
   return requireAuth(['meet_admin']);
+}
+
+/**
+ * Guard for the Payment Verification desk: the Meet Admin and Finance Desk staff.
+ */
+export async function requireFinance(): Promise<SessionData> {
+  return requireAuth(['meet_admin', 'finance_desk']);
 }
 
 /**

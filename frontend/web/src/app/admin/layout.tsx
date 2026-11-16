@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { requireAdmin } from '@/lib/auth-guard';
+import { requireFinance } from '@/lib/auth-guard';
 import { logoutAction } from '@/app/actions/auth';
 import { OfficialBanner } from '@/components/layout/OfficialBanner';
 import '@/components/layout/Navbar.css';
@@ -17,7 +17,10 @@ export default async function AdminLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const session = await requireAdmin();
+  // Finance Desk staff may enter the admin area for Payment Verification only: every other admin
+  // page checks requireAdmin() itself.
+  const session = await requireFinance();
+  const isFinance = session.role === 'finance_desk';
 
   return (
     <div className="admin-shell">
@@ -28,6 +31,12 @@ export default async function AdminLayout({
       <nav className="univ-main-nav">
         <div className="univ-nav-inner">
           <div className="univ-nav-menu">
+            {isFinance ? (
+              <Link href="/admin/payments" prefetch={true} className="univ-nav-link">
+                <span>💳 Payment Verification</span>
+              </Link>
+            ) : (
+              <>
             <Link href="/admin" prefetch={true} className="univ-nav-link">
               <span>📊 Dashboard</span>
             </Link>
@@ -55,6 +64,8 @@ export default async function AdminLayout({
             <Link href="/admin/audit" prefetch={true} className="univ-nav-link">
               <span>📜 Audit Log</span>
             </Link>
+              </>
+            )}
           </div>
 
           <div className="univ-nav-auth">

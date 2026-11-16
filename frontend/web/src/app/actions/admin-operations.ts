@@ -1,7 +1,7 @@
 'use server';
 
 import { supabaseAdmin } from '@/lib/supabase';
-import { requireAdmin } from '@/lib/auth-guard';
+import { requireAdmin, requireFinance } from '@/lib/auth-guard';
 import { revalidatePath } from 'next/cache';
 import { calculateFeesForSquads, emptySquadFees, reviewPayment } from '@/lib/payments';
 import { fetchAllRows } from '@/lib/db-fetch-all';
@@ -309,7 +309,7 @@ export async function listAllAthletesAction() {
  * 5. Lists all college squads and their payment submissions for Payment Verification.
  */
 export async function listPaymentsForAdminAction() {
-  await requireAdmin();
+  await requireFinance();
 
   // Fetch squads with colleges and athlete counts
   const { data: squads, error: sqErr } = await supabaseAdmin
@@ -404,7 +404,7 @@ export async function verifySquadPaymentAction(
   rejectionReason?: string,
   amountReceived?: number
 ): Promise<{ success: boolean; error?: string }> {
-  const adminSession = await requireAdmin();
+  const adminSession = await requireFinance();
 
   // Only a payment that is still awaiting verification can be decided. At most one can be
   // pending per squad (enforced at submission), so pick it explicitly — never "the latest row",
