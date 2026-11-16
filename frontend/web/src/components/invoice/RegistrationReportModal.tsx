@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
+import { COLLEGE_MIN_ATHLETES } from '@/lib/college-strength-limits';
 
 export interface ReportAthlete {
   id: string;
