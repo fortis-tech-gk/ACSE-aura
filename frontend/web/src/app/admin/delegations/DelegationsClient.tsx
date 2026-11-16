@@ -158,13 +158,18 @@ export default function DelegationsClient({ squads }: Props) {
                   <tr>
                     <th>Physical Education Director</th>
                     <td>
-                      <strong>{sq.ped_name || '—'}</strong>
-                      <div className="deleg-info-sub">{[sq.ped_phone, sq.ped_email].filter(Boolean).join(' • ')}</div>
+                      <div className="deleg-ped">
+                        <strong className="deleg-ped-name">{sq.ped_name || '—'}</strong>
+                        {sq.ped_phone && <span className="deleg-chip">📞 {sq.ped_phone}</span>}
+                        {sq.ped_email && <span className="deleg-chip">✉️ {sq.ped_email}</span>}
+                      </div>
                     </td>
                     <th>VTU Division</th>
                     <td>
-                      <strong>{divisionOf(sq)}</strong>
-                      <div className="deleg-info-sub">{athletes.length} athlete{athletes.length === 1 ? '' : 's'}</div>
+                      <div className="deleg-ped">
+                        <strong>📍 {divisionOf(sq)}</strong>
+                        <span className="deleg-chip">👥 {athletes.length} athlete{athletes.length === 1 ? '' : 's'}</span>
+                      </div>
                     </td>
                   </tr>
                 </tbody>
@@ -310,6 +315,20 @@ export default function DelegationsClient({ squads }: Props) {
         }
         .deleg-info td {
           width: 32%;
+        }
+        .deleg-ped {
+          display: flex;
+          flex-wrap: wrap;
+          align-items: center;
+          justify-content: space-between;
+          gap: 0.3rem 0.9rem;
+        }
+        .deleg-ped-name {
+          flex-basis: 100%;
+        }
+        .deleg-chip {
+          font-size: 0.78rem;
+          white-space: nowrap;
         }
         .deleg-info-sub {
           font-size: 0.75rem;
