@@ -148,7 +148,7 @@ const OFFICIAL_SCHEDULE_DATA: Record<number, DaySchedule> = {
       { code: 2, time: '02:45 PM', callRoom: '02:15 PM', name: '200 mtrs Run', round: 'Final', section: 'Women', venue: 'Main Mud Track', category: 'Track' },
       { code: 21, time: '03:00 PM', callRoom: '02:30 PM', name: '4 x 400 mtr Relay', round: 'Final', section: 'Men', venue: 'Main Mud Track', category: 'Relay' },
       { code: 21, time: '03:15 PM', callRoom: '02:45 PM', name: '4 x 400 mtr Relay', round: 'Final', section: 'Women', venue: 'Main Mud Track', category: 'Relay' },
-      { code: 0, time: '04:00 PM', callRoom: '03:30 PM', name: 'Grand Medal Ceremony & Rolling Trophy Presentation', specification: 'Overall & Men's and Women's Trophies', round: 'Ceremony', section: 'Both', venue: 'Main Stadium Podium', category: 'Ceremony' },
+      { code: 0, time: '04:00 PM', callRoom: '03:30 PM', name: 'Grand Medal Ceremony & Rolling Trophy Presentation', specification: 'Overall & Men and Women Trophies', round: 'Ceremony', section: 'Both', venue: 'Main Stadium Podium', category: 'Ceremony' },
     ],
   },
 };
