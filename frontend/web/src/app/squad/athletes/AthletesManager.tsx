@@ -436,12 +436,12 @@ export default function AthletesManager({
 
     // 5. Check Official Relay Quotas (Max 6 athletes per relay team)
     if (relayChoice === '4x100' && is100mRelayFull) {
-      setError('4x100m Relay quota is full. Maximum 6 athletes per college division are allowed (4 runners + 2 reserves).');
+      setError('4x100m Relay quota is full. Maximum 6 athletes per squad are allowed (4 runners + 2 reserves).');
       setLoading(false);
       return;
     }
     if (relayChoice === '4x400' && is400mRelayFull) {
-      setError('4x400m Relay quota is full. Maximum 6 athletes per college division are allowed (4 runners + 2 reserves).');
+      setError('4x400m Relay quota is full. Maximum 6 athletes per squad are allowed (4 runners + 2 reserves).');
       setLoading(false);
       return;
     }
@@ -769,7 +769,7 @@ export default function AthletesManager({
                 {athletes.length === 0 ? (
                   <tr>
                     <td colSpan={8} style={{ textAlign: 'center', padding: '3.5rem', color: 'var(--text-muted)' }}>
-                      No students registered yet in this college division. Click &quot;+ Register New Athlete&quot; to begin.
+                      No students registered yet in this squad. Click &quot;+ Register New Athlete&quot; to begin.
                     </td>
                   </tr>
                 ) : (
@@ -1144,7 +1144,7 @@ export default function AthletesManager({
                   Dr. ACS College of Engineering Athletics Meet 2026
                 </span>
                 <h2 style={{ fontSize: '1.75rem', fontWeight: 800, color: 'var(--text-primary)', marginTop: '0.2rem' }}>
-                  Register Athlete ({gender === 'men' ? "Men's Division" : "Women's Division"})
+                  Register Athlete ({gender === 'men' ? "Men" : "Women"})
                 </h2>
                 <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>
                   {collegeName} &bull; Code: <strong>{squadCode}</strong> &bull; Official Registration Form

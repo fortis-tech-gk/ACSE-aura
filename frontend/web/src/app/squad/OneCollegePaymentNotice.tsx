@@ -35,17 +35,17 @@ export default function OneCollegePaymentNotice({
         💡 One payment for your whole college (Men + Women)
       </div>
       <div>
-        Fees of both divisions add up into one total:{' '}
+        Fees of the Men and Women squads add up into one total:{' '}
         <strong>
           Men ₹{menFee} + Women ₹{womenFee} = ₹{total}
         </strong>
         .{' '}
         {locked ? (
-          <>Both divisions are locked because the college payment has been submitted.</>
+          <>Both squads are locked because the college payment has been submitted.</>
         ) : (
           <>
-            Register athletes in <strong>both</strong> divisions first (log in as {other} to add theirs). Then pay{' '}
-            <strong>once</strong> from either login. <strong>Paying locks both divisions</strong>, so don&apos;t pay
+            Register athletes in <strong>both</strong> squads first (log in as {other} to add theirs). Then pay{' '}
+            <strong>once</strong> from either login. <strong>Paying locks both squads</strong>, so don&apos;t pay
             until both are complete.
           </>
         )}

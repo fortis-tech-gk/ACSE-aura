@@ -145,7 +145,7 @@ export default function PaymentsClient({ squads }: Props) {
           <thead>
             <tr>
               <th>College</th>
-              <th style={{ width: '90px' }}>Division</th>
+              <th style={{ width: '90px' }}>Gender</th>
               <th>Physical Education Director</th>
               <th style={{ width: '100px' }}>Athletes</th>
               <th>College Fee (M+W)</th>
@@ -183,7 +183,7 @@ export default function PaymentsClient({ squads }: Props) {
                       </div>
                     </td>
 
-                    {/* Division */}
+                    {/* Gender */}
                     <td>
                       <span
                         style={{
@@ -310,7 +310,7 @@ export default function PaymentsClient({ squads }: Props) {
                   <span>{selectedSquad.colleges?.name || selectedSquad.squad_code}</span>
                 </h3>
                 <p style={{ fontSize: '0.8rem', color: '#64748b', marginTop: '2px' }}>
-                  Code: <strong>{selectedSquad.colleges?.code || selectedSquad.squad_code}</strong> • Division:{' '}
+                  Code: <strong>{selectedSquad.colleges?.code || selectedSquad.squad_code}</strong> • Gender:{' '}
                   <strong>{selectedSquad.gender === 'men' ? 'Men' : 'Women'}</strong> • PED:{' '}
                   <strong>{selectedSquad.ped_name || 'N/A'} ({selectedSquad.ped_phone || 'No phone'})</strong>
                 </p>

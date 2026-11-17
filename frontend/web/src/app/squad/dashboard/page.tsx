@@ -119,7 +119,7 @@ export default async function SquadDashboardPage() {
               <h1 className="squad-college-title">{collegeName}</h1>
               <div className="squad-meta-tags">
                 <span className={`squad-pill-tag ${isMen ? 'squad-pill-division-men' : 'squad-pill-division-women'}`}>
-                  {isMen ? "Men's Athletics Division" : "Women's Athletics Division"}
+                  {isMen ? "Men's Athletics" : "Women's Athletics"}
                 </span>
                 <span className="squad-pill-tag squad-pill-code">
                   College Code: <strong>{collegeCode}</strong>

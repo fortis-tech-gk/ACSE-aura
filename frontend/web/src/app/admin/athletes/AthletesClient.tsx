@@ -84,7 +84,7 @@ export default function AthletesClient({ athletes }: Props) {
     });
   }, [athletes, searchQuery, selectedCollege, selectedGender, selectedStatus, selectedEvent]);
 
-  // Downloads are sorted by college, then division, then name (easier to read than newest-first)
+  // Downloads are sorted by college, then gender, then name (easier to read than newest-first)
   function sortForExport(list: any[]) {
     return [...list].sort((a, b) => {
       const ca = a.squads?.colleges?.code || a.squads?.squad_code || '';
@@ -129,8 +129,8 @@ export default function AthletesClient({ athletes }: Props) {
       ['Generated', new Date().toLocaleString('en-IN')],
       ['Filters', filterSummary(useFilters)],
       ['Athletes', rows.length],
-      ['Men', rows.filter((r) => r.Division === 'Men').length],
-      ['Women', rows.filter((r) => r.Division === 'Women').length],
+      ['Men', rows.filter((r) => r.Gender === 'Men').length],
+      ['Women', rows.filter((r) => r.Gender === 'Women').length],
       ['Colleges', new Set(rows.map((r) => r['College Code'])).size],
       [],
       ['Note', 'Aadhaar numbers show only the last 4 digits.'],
@@ -245,7 +245,7 @@ export default function AthletesClient({ athletes }: Props) {
             className="filter-control"
             id="filter-gender"
           >
-            <option value="ALL">All Divisions</option>
+            <option value="ALL">All Genders</option>
             <option value="men">Men</option>
             <option value="women">Women</option>
           </select>
@@ -320,7 +320,7 @@ export default function AthletesClient({ athletes }: Props) {
               <th style={{ width: '80px' }}>Bib #</th>
               <th>Athlete Name & USN</th>
               <th>College</th>
-              <th style={{ width: '90px' }}>Division</th>
+              <th style={{ width: '90px' }}>Gender</th>
               <th style={{ width: '70px' }}>Blood</th>
               <th>Registered Events</th>
               <th style={{ width: '130px' }}>Payment Status</th>
@@ -412,7 +412,7 @@ export default function AthletesClient({ athletes }: Props) {
                       </div>
                     </td>
 
-                    {/* Division */}
+                    {/* Gender */}
                     <td>
                       <span
                         style={{

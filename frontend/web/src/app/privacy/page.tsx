@@ -36,7 +36,7 @@ export default function PrivacyPage() {
           <h2>Information we hold</h2>
           <p>Each participating college&apos;s Physical Education Director registers its athletes on this website. For each athlete we hold:</p>
           <ul>
-            <li>Name (as on the SSLC certificate), USN, semester, college and division (men / women)</li>
+            <li>Name (as on the SSLC certificate), USN, semester, college and gender (men / women)</li>
             <li>Date of birth, blood group, mobile number and a passport-size photo</li>
             <li>Aadhaar number — used only to stop the same person being registered twice; it is never shown in the apps</li>
             <li>Events entered, bib number, heat and lane, call room check-in, results and points</li>

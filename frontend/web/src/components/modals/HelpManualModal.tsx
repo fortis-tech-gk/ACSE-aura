@@ -82,7 +82,7 @@ const STEPS: Step[] = [
           Registration is done by the college PED (Physical Education Director). Follow the stages in this order:
         </p>
         <ol style={ol}>
-          <li><strong>Sign in</strong> with your college code, division (Men / Women) and passphrase.</li>
+          <li><strong>Sign in</strong> with your college code, gender (Men / Women) and passphrase.</li>
           <li><strong>Register every athlete</strong> with their events (and relay nomination, if any).</li>
           <li><strong>Check everything.</strong> The roster can&apos;t be changed after you pay.</li>
           <li><strong>Pay the entry fee once for the whole college</strong> (Men + Women together) and upload the receipt with the UTR number.</li>
@@ -134,7 +134,7 @@ const STEPS: Step[] = [
       <>
         <ol style={ol}>
           <li>Enter your <strong>College Code</strong>, the official code given by VTU (e.g. <code>ACSCE</code>).</li>
-          <li>Choose the <strong>Division</strong>: <strong>Men</strong> or <strong>Women</strong>.</li>
+          <li>Choose the <strong>Gender</strong>: <strong>Men</strong> or <strong>Women</strong>.</li>
           <li>Enter the <strong>Passphrase</strong> issued by the VTU Athletics Directorate (format like <code>swift-falcon-84</code>).</li>
           <li>Click <strong>Sign In to Institution Portal</strong>.</li>
         </ol>
@@ -143,8 +143,8 @@ const STEPS: Step[] = [
           register women, sign out and sign in again with <strong>Women</strong> selected.
         </div>
         <div style={warn}>
-          ⚠️ <strong>&quot;Invalid college code, division, or passphrase&quot;?</strong> Check the code spelling and that the
-          right division is selected. The passphrase includes the hyphens. If it still fails, contact the VTU Directorate.
+          ⚠️ <strong>&quot;Wrong college code, Men/Women choice or password&quot;?</strong> Check the code spelling and that the
+          right Men/Women choice is selected. The passphrase includes the hyphens. If it still fails, contact the VTU Directorate.
         </div>
       </>
     ),
@@ -200,7 +200,7 @@ const STEPS: Step[] = [
         <ul style={ol}>
           <li>☐ Every athlete who will compete is registered (names, USN and photos correct).</li>
           <li>☐ Each athlete&apos;s events are correct (max 2 events + 1 reserve).</li>
-          <li>☐ Relay entries are ticked for the right athletes; the mixed relay is agreed with the other division.</li>
+          <li>☐ Relay entries are ticked for the right athletes; the mixed relay is agreed with the other squad.</li>
           <li>☐ You downloaded the <strong>Registration Report (PDF)</strong> from the Athlete Roster page for your records.</li>
         </ul>
         <h4 style={{ margin: '1rem 0 0.25rem', fontSize: '0.95rem' }}>How the fee is calculated</h4>
@@ -232,8 +232,8 @@ const STEPS: Step[] = [
       <>
         <div style={box}>
           💡 <strong>One payment per college.</strong> The Men&apos;s and Women&apos;s fees add up into one total
-          (e.g. Men ₹1000 + Women ₹600 = ₹1600). Register athletes in <strong>both</strong> divisions first, then pay
-          the total <strong>once</strong> from either login. Paying locks <strong>both</strong> divisions.
+          (e.g. Men ₹1000 + Women ₹600 = ₹1600). Register athletes in <strong>both</strong> squads (Men and Women) first, then pay
+          the total <strong>once</strong> from either login. Paying locks <strong>both</strong> squads.
         </div>
         <ol style={ol}>
           <li>Open <strong>Fee Settlement</strong>. Note the <strong>Net Balance Due</strong>.</li>

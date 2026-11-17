@@ -10,7 +10,7 @@ export interface ExportRow {
   'Bib No': string;
   'Athlete Name (SSLC)': string;
   USN: string;
-  Division: string;
+  Gender: string;
   Semester: string;
   'Blood Group': string;
   'Date of Birth': string;
@@ -68,7 +68,7 @@ export function buildExportRows(list: any[]): ExportRow[] {
       'Bib No': a.bid_number ? String(a.bid_number) : 'Pending',
       'Athlete Name (SSLC)': a.sslc_name || '',
       USN: a.usn || '',
-      Division: sq.gender === 'men' ? 'Men' : sq.gender === 'women' ? 'Women' : '',
+      Gender: sq.gender === 'men' ? 'Men' : sq.gender === 'women' ? 'Women' : '',
       Semester: a.semester ? String(a.semester) : '',
       'Blood Group': a.blood_group || '',
       'Date of Birth': formatDate(a.date_of_birth),

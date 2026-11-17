@@ -32,8 +32,8 @@ export default function AthletesPdfReport({ title, filterSummary, rows, onClose 
   if (!mounted) return null;
 
   const generated = new Date().toLocaleString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
-  const men = rows.filter((r) => r.Division === 'Men').length;
-  const women = rows.filter((r) => r.Division === 'Women').length;
+  const men = rows.filter((r) => r.Gender === 'Men').length;
+  const women = rows.filter((r) => r.Gender === 'Women').length;
   const colleges = new Set(rows.map((r) => r['College Code'])).size;
 
   return createPortal(
@@ -101,7 +101,7 @@ export default function AthletesPdfReport({ title, filterSummary, rows, onClose 
                   <td className="c">{r['Bib No']}</td>
                   <td className="b">{r['Athlete Name (SSLC)']}</td>
                   <td className="mono">{r.USN}</td>
-                  <td className="c">{r.Division === 'Men' ? 'M' : r.Division === 'Women' ? 'W' : ''}</td>
+                  <td className="c">{r.Gender === 'Men' ? 'M' : r.Gender === 'Women' ? 'W' : ''}</td>
                   <td className="c">{r.Semester}</td>
                   <td className="c">{r['Blood Group']}</td>
                   <td className="c">{r['Date of Birth']}</td>

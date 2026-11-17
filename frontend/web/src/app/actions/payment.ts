@@ -230,7 +230,7 @@ export async function submitPaymentAction(formData: FormData): Promise<{ success
     if ((pendingCount || 0) > 0) {
       return {
         success: false,
-        error: 'Roster Locked & Payment Submitted: A payment for your college (Men or Women division) is already awaiting Finance Desk verification. You can re-submit only if it is rejected.',
+        error: 'Roster Locked & Payment Submitted: A payment for your college (Men or Women squad) is already awaiting Finance Desk verification. You can re-submit only if it is rejected.',
       };
     }
 
@@ -239,7 +239,7 @@ export async function submitPaymentAction(formData: FormData): Promise<{ success
     if (totalAmount <= 0) {
       return {
         success: false,
-        error: 'Cannot submit payment for an empty roster. Please register athletes (Men and/or Women division) before settling fees.',
+        error: 'Cannot submit payment for an empty roster. Please register athletes (Men and/or Women squads) before settling fees.',
       };
     }
 
@@ -251,7 +251,7 @@ export async function submitPaymentAction(formData: FormData): Promise<{ success
     if (balanceDue === 0 && priorVerified > 0) {
       return {
         success: false,
-        error: 'All entry fees for your college (both divisions) have already been fully verified and settled.',
+        error: 'All entry fees for your college (Men and Women) have already been fully verified and settled.',
       };
     }
 

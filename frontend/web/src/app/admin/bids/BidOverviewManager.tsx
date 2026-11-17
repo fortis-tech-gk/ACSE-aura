@@ -110,7 +110,7 @@ export default function BidOverviewManager({ initialSquads }: Props) {
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '1.5rem', marginBottom: '2.5rem' }}>
         <div className="glass-card">
           <div style={{ fontSize: '0.8rem', color: 'var(--accent-cyan)', fontWeight: 700, textTransform: 'uppercase' }}>
-            Men&apos;s Division Allocation
+            Men&apos;s Allocation
           </div>
           <div style={{ fontSize: '1.8rem', fontWeight: 800, margin: '0.5rem 0' }}>
             Chest 100 → {Math.max(0, ...menSquads.map((s) => s.bid_block_end || 0)) || 'Pending'}
@@ -122,7 +122,7 @@ export default function BidOverviewManager({ initialSquads }: Props) {
 
         <div className="glass-card">
           <div style={{ fontSize: '0.8rem', color: 'var(--accent-rose)', fontWeight: 700, textTransform: 'uppercase' }}>
-            Women&apos;s Division Allocation
+            Women&apos;s Allocation
           </div>
           <div style={{ fontSize: '1.8rem', fontWeight: 800, margin: '0.5rem 0' }}>
             Chest 2001 → {Math.max(0, ...womenSquads.map((s) => s.bid_block_end || 0)) || 'Pending'}
@@ -152,7 +152,7 @@ export default function BidOverviewManager({ initialSquads }: Props) {
             <tr>
               <th>College</th>
               <th>Squad Code</th>
-              <th>Division</th>
+              <th>Gender</th>
               <th>Athletes Count</th>
               <th>Assigned Bid Block</th>
               <th>Payment Status</th>

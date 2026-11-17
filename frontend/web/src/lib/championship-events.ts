@@ -162,6 +162,6 @@ export const OFFICIAL_CHAMPIONSHIP_RULES = [
   {
     num: 14,
     title: 'Mixed Relay Championship Points',
-    text: 'Mixed relay points will be considered for the Overall Championship Trophy only, and not for the Men or Women divisional championships.',
+    text: 'Mixed relay points will be considered for the Overall Championship Trophy only, and not for the Men or Women championships.',
   },
 ];

@@ -159,7 +159,7 @@ export default function PaymentClient({ breakdown, payments, squadCode, athletes
 
     // Confirmation prompt
     const confirmed = window.confirm(
-      `Confirm submission of ₹${amount} with UTR "${utrClean}" for entry fee settlement?\n\nThis ONE payment covers your whole college (Men + Women).\n\n⚠️ Submitting payment will LOCK BOTH divisions (Men and Women). Neither PED will be able to add or remove athletes afterwards.`
+      `Confirm submission of ₹${amount} with UTR "${utrClean}" for entry fee settlement?\n\nThis ONE payment covers your whole college (Men + Women).\n\n⚠️ Submitting payment will LOCK BOTH squads (Men and Women). Neither PED will be able to add or remove athletes afterwards.`
     );
 
     if (!confirmed) {
@@ -251,7 +251,7 @@ export default function PaymentClient({ breakdown, payments, squadCode, athletes
 
       {isZeroSquad && (
         <div style={{ padding: '1rem 1.25rem', borderRadius: 'var(--radius-sm)', background: 'rgba(245, 158, 11, 0.1)', border: '1px solid rgba(245, 158, 11, 0.25)', color: '#b45309', fontSize: '0.95rem' }}>
-          ℹ️ <strong>Roster Empty:</strong> Your college has 0 registered athletes in both divisions. Please <Link href="/squad/dashboard" style={{ fontWeight: 700, textDecoration: 'underline' }}>register athletes</Link> into individual and relay disciplines before settling entry fees.
+          ℹ️ <strong>Roster Empty:</strong> Your college has 0 registered athletes in both the Men and Women squads. Please <Link href="/squad/dashboard" style={{ fontWeight: 700, textDecoration: 'underline' }}>register athletes</Link> into individual and relay disciplines before settling entry fees.
         </div>
       )}
 
@@ -264,7 +264,7 @@ export default function PaymentClient({ breakdown, payments, squadCode, athletes
 
       {isAwaitingVerification && (
         <div id="banner-roster-locked-payment-submitted" style={{ padding: '1rem 1.25rem', borderRadius: 'var(--radius-sm)', background: 'rgba(37, 99, 235, 0.08)', border: '1px solid rgba(37, 99, 235, 0.3)', color: '#1e40af', fontSize: '0.95rem' }}>
-          🔒 <strong>Roster Locked &amp; Payment Submitted:</strong> Your college&apos;s receipt is awaiting Finance Desk verification. Athlete changes are frozen in both divisions (Men and Women). Contact the VTU Directorate if an emergency unlock is required.
+          🔒 <strong>Roster Locked &amp; Payment Submitted:</strong> Your college&apos;s receipt is awaiting Finance Desk verification. Athlete changes are frozen in both squads (Men and Women). Contact the VTU Directorate if an emergency unlock is required.
         </div>
       )}
 
@@ -331,7 +331,7 @@ export default function PaymentClient({ breakdown, payments, squadCode, athletes
               {(breakdown.divisions || []).map((d) => (
                 <div key={d.squadId} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.9rem' }}>
                   <span style={{ color: 'var(--text-secondary)' }}>
-                    {d.gender === 'men' ? "Men's" : "Women's"} division ({d.squadCode}, {d.athletes} athletes){d.isMine ? ' · you' : ''}
+                    {d.gender === 'men' ? "Men's" : "Women's"} squad ({d.squadCode}, {d.athletes} athletes){d.isMine ? ' · you' : ''}
                   </span>
                   <span style={{ fontWeight: 700 }}>₹{d.fee}</span>
                 </div>

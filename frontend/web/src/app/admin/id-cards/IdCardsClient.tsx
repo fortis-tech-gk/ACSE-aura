@@ -107,7 +107,7 @@ export default function IdCardsClient({ athletes }: Props) {
             onChange={(e) => setSelectedGender(e.target.value)}
             className="filter-control"
           >
-            <option value="ALL">All Divisions</option>
+            <option value="ALL">All Genders</option>
             <option value="men">Men</option>
             <option value="women">Women</option>
           </select>

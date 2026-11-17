@@ -152,7 +152,7 @@ export function SquadNav({ collegeName, collegeCode, gender }: SquadNavProps) {
               🏛️ {collegeName || collegeCode}
             </div>
             <div style={{ display: 'inline-block', marginTop: '0.25rem', background: isMen ? '#dbeafe' : '#fce7f3', color: isMen ? '#1e40af' : '#9d174d', padding: '0.15rem 0.5rem', borderRadius: '4px', fontSize: '0.75rem', fontWeight: 700 }}>
-              {isMen ? "Men's Athletics Division" : "Women's Athletics Division"}
+              {isMen ? "Men's Athletics" : "Women's Athletics"}
             </div>
           </div>
 

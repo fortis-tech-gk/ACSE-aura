@@ -179,7 +179,7 @@ export default function RegistrationReportModal({
               </span>
             </div>
             <div className="report-meta-block">
-              <span className="meta-lbl">DIVISION:</span>
+              <span className="meta-lbl">GENDER:</span>
               <span className="meta-val" style={{ textTransform: 'uppercase' }}>
                 {squad.gender === 'men' ? "Men's Squad" : squad.gender === 'women' ? "Women's Squad" : 'College Squad'}
               </span>

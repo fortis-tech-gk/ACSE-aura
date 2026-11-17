@@ -249,7 +249,7 @@ export async function addAthleteAction(formData: FormData): Promise<AddAthleteRe
       code.startsWith('4X') ||
       code.startsWith('HM-');
     if (invalid) {
-      return { success: false, error: 'One of the selected events is not a valid individual event for your division. Please re-select the events.' };
+      return { success: false, error: 'One of the selected events is not a valid individual event for your gender. Please re-select the events.' };
     }
   }
 
