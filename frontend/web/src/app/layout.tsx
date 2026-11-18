@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from 'next';
 import './globals.css';
+import UpdateBanner from '@/components/ui/UpdateBanner';
 import { SITE_URL, SITE_NAME, SITE_TITLE, SITE_DESCRIPTION, BRAND_COLOR } from '@/lib/site';
 
 // Icons come from app/favicon.ico, app/icon.svg and app/apple-icon.png (Next.js file conventions);
@@ -79,6 +80,7 @@ export default function RootLayout({
         <main id="main-content">
           {children}
         </main>
+        <UpdateBanner />
       </body>
     </html>
   );

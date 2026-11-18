@@ -22,7 +22,9 @@ dist/
 **/.env.local
 **/.env*.local
 .env.stag
+.env.prod-db
 **/.env.stag
+**/.env.prod-db
 **/.env*.stag
 *.stag.md
 !.env.example
