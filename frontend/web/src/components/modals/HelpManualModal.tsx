@@ -109,7 +109,7 @@ const STEPS: Step[] = [
           </thead>
           <tbody>
             <tr><td style={td}>Full name</td><td style={td}>Exactly as printed on the SSLC (10th) marks card</td></tr>
-            <tr><td style={td}>USN</td><td style={td}>Valid VTU USN, e.g. <code>1RV21CS001</code>. Each USN can be registered only once in the whole championship</td></tr>
+            <tr><td style={td}>USN</td><td style={td}>VTU USN, e.g. <code>1RV21CS001</code>. First-year students without a USN can enter a temporary one (any text). Each USN can be registered only once in the whole championship</td></tr>
             <tr><td style={td}>Aadhaar number</td><td style={td}>Exactly 12 digits. Each Aadhaar can be registered only once in the whole championship</td></tr>
             <tr><td style={td}>Student phone number</td><td style={td}>The student&apos;s own 10-digit mobile number (e.g. 9876543210)</td></tr>
             <tr><td style={td}>Semester</td><td style={td}>Current semester (1–10)</td></tr>
@@ -313,7 +313,6 @@ const STEPS: Step[] = [
           <tr><th style={th}>Message</th><th style={th}>What to do</th></tr>
         </thead>
         <tbody>
-          <tr><td style={td}>&quot;Invalid USN&quot;</td><td style={td}>Use the full VTU USN without spaces, e.g. <code>1RV21CS001</code></td></tr>
           <tr><td style={td}>&quot;…USN / Aadhaar is already registered&quot;</td><td style={td}>This student is already registered (possibly by another college). Check the number; contact the Directorate if it&apos;s wrong</td></tr>
           <tr><td style={td}>&quot;VTU Quota Exceeded … maximum of 2 athletes&quot;</td><td style={td}>Your college already has 2 athletes in that event. Choose another event</td></tr>
           <tr><td style={td}>&quot;Quota full (6/6)&quot; on a relay</td><td style={td}>6 athletes are already nominated for that relay</td></tr>

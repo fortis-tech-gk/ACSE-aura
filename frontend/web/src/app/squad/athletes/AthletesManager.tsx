@@ -96,8 +96,6 @@ function mixedMemberLabel(ownNominated: number): string {
     : '₹0 (your squad already pays for 2 — free)';
 }
 
-/** Official VTU USN pattern, e.g. 1RV21CS001, 4MT22MBA05 (mirrors server validation) */
-const VTU_USN_REGEX = /^[1-4][A-Z]{2}\d{2}[A-Z]{2,3}\d{2,3}$/;
 
 export default function AthletesManager({
   initialAthletes,
@@ -334,12 +332,6 @@ export default function AthletesManager({
     const cleanUsn = usn.trim().toUpperCase();
     if (!cleanUsn) {
       setError('USN is required.');
-      setLoading(false);
-      return;
-    }
-
-    if (!VTU_USN_REGEX.test(cleanUsn)) {
-      setError(`Invalid USN '${cleanUsn}'. Enter a valid VTU USN (e.g. 1RV21CS001).`);
       setLoading(false);
       return;
     }

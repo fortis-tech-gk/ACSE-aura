@@ -15,8 +15,6 @@ export interface AddAthleteResult {
   athleteId?: string;
 }
 
-/** Official VTU USN pattern, e.g. 1RV21CS001, 4MT22MBA05, 2KE20EC400 */
-const VTU_USN_REGEX = /^[1-4][A-Z]{2}\d{2}[A-Z]{2,3}\d{2,3}$/;
 
 const BLOOD_GROUPS = new Set(['A+', 'A-', 'B+', 'B-', 'O+', 'O-', 'AB+', 'AB-']);
 
@@ -121,10 +119,6 @@ export async function addAthleteAction(formData: FormData): Promise<AddAthleteRe
   const aadhaarError = validateAadhaar(aadhaarNumber);
   if (aadhaarError) {
     return { success: false, error: aadhaarError };
-  }
-
-  if (!VTU_USN_REGEX.test(usn)) {
-    return { success: false, error: `Invalid USN '${usn}'. Enter a valid VTU USN (e.g. 1RV21CS001).` };
   }
 
   if (!Number.isInteger(semester) || semester < 1 || semester > 10) {
@@ -677,9 +671,6 @@ export async function updateAthleteAction(formData: FormData): Promise<UpdateAth
     const aadhaarError = validateAadhaar(aadhaarNumber);
     if (aadhaarError) {
       return { success: false, error: aadhaarError };
-    }
-    if (!VTU_USN_REGEX.test(usn)) {
-      return { success: false, error: `Invalid USN '${usn}'. Enter a valid VTU USN (e.g. 1RV21CS001).` };
     }
     if (!Number.isInteger(semester) || semester < 1 || semester > 10) {
       return { success: false, error: 'Semester must be between 1 and 10.' };

@@ -58,7 +58,7 @@ frontend/web/
 - **Fields Required**: Full Name (SSLC/10th Certificate match), USN (University Seat Number), Semester (1–10), Blood Group, College Joining Date, Present Year Start Date (`sem_start_date`), Date of Birth, 10-digit student phone, 12-digit Aadhaar Number.
 - **Validations**:
   - Aadhaar: Exactly 12 digits, globally unique across entire championship (`profiles.aadhaar_number`).
-  - USN: Valid VTU format (e.g. `1AH21CS001`), uppercase, globally unique across championship (`profiles.usn`).
+  - USN: free-form text (no format check, so 1st-years can use a temporary USN), trimmed + uppercased, globally unique across championship (`profiles.usn`).
   - Dates: `college_joining_date <= today`, `sem_start_date >= college_joining_date`.
   - Photo: Mandatory passport-size photo (JPG, PNG, WebP ≤ 5MB) uploaded to Supabase bucket `athlete-photos`.
 

@@ -27,7 +27,6 @@ interface Props {
 }
 
 /** Mirrors server validation */
-const VTU_USN_REGEX = /^[1-4][A-Z]{2}\d{2}[A-Z]{2,3}\d{2,3}$/;
 const BLOOD_GROUPS = ['A+', 'A-', 'B+', 'B-', 'O+', 'O-', 'AB+', 'AB-'];
 
 const toDateInput = (v?: string) => (v ? String(v).slice(0, 10) : '');
@@ -94,7 +93,6 @@ export default function EditAthleteModal({ athlete, onClose, onSaved }: Props) {
     const cleanUsn = usn.trim().toUpperCase();
     const cleanAadhaar = aadhaarNumber.replace(/[\s-]/g, '');
     if (!sslcName.trim()) return setError('Full name is required.');
-    if (!VTU_USN_REGEX.test(cleanUsn)) return setError(`Invalid USN '${cleanUsn}'. Enter a valid VTU USN (e.g. 1RV21CS001).`);
     if (!/^\d{12}$/.test(cleanAadhaar)) return setError('Aadhaar Number must be exactly 12 numeric digits.');
     if (!/^[6-9]\d{9}$/.test(phone)) return setError("Enter the student's 10-digit mobile number (e.g. 9876543210).");
     const dobError = validateDateOfBirth(dateOfBirth);
