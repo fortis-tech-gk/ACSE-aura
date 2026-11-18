@@ -12,3 +12,4 @@ AMENDMENTS (decided by the Organising Committee, applied to the website):
 - 07-11-2026: Reserve rule changed — an athlete may nominate 1 reserve event (free) even when registered for both Event 1 and Event 2. The reserve must be a different event and needs at least one regular event (Rule 36). This replaces "after 2 registered reserved cant be used".
 - 07-11-2026: Relay substitutes can be changed by the call room official up to 24 hours before the race start.
 - 07-11-2026: Relay points (10-6-2) count only for the Overall College Championship; 4x400m Mixed Relay earns no championship points.
+- 17-11-2026: Clarified — the ATHLETE scores 5-3-1 for an individual 1st/2nd/3rd; the COLLEGE team scores 10-6-2 for a 1st/2nd/3rd in any event (individual or relay). Colleges are ranked by total team points. Relay points still count only for the Overall championship; Mixed Relay scores nothing. (migration 0042)

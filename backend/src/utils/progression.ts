@@ -152,6 +152,15 @@ export function pickQualifiers<F extends Finisher>(heatIds: string[], finishers:
   return out.sort((a, b) => a.time! - b.time!);
 }
 
+/** Fastest `max` finishers; runners on exactly the same time are ordered by a draw of lots (so a tie at the cut-off never adds a 9th). */
+export function capFinalists<F extends Finisher>(qualified: F[], max: number): F[] {
+  return qualified
+    .map((q) => ({ q, lot: Math.random() }))
+    .sort((a, b) => a.q.time! - b.q.time! || a.lot - b.lot)
+    .slice(0, max)
+    .map((x) => x.q);
+}
+
 /** Serpentine seeding of ids (best first) into n heats: 1,2,3 / 6,5,4 / 7,8,9 … */
 export function seedHeats(ids: string[], n: number): string[][] {
   const perHeat: string[][] = Array.from({ length: n }, () => []);
@@ -169,10 +178,26 @@ async function buildNextRound(heat: HeatRow, roundHeats: HeatRow[]) {
   const cur = STAGE_ORDER.indexOf(heat.stage as any);
   if (cur < 0 || heat.stage === 'FINAL') return null;
 
+  const lanes = ev.start_type === 'lanes';
+  const maxLanes = ev.max_lanes || 8;
+
+  const finishers = await trackFinishers(roundHeats.map((h) => h.id));
+  let qualified = pickQualifiers(roundHeats.map((h) => h.id), finishers);
+  if (!qualified.length) throw new ProgressionError('No finishers to qualify for the next round.');
+
   // Next stage on the schedule for this event (fallback: FINAL)
   const { data: items } = await supabase.from('schedule_items').select('id, stage').eq('event_id', ev.id);
   const scheduled = new Set((items || []).map((i: any) => i.stage));
-  const nextStage = STAGE_ORDER.slice(cur + 1).find((s) => scheduled.has(s)) || 'FINAL';
+  let nextStage = STAGE_ORDER.slice(cur + 1).find((s) => scheduled.has(s)) || 'FINAL';
+  // More qualifiers than lanes for a lane-race final: run a semi-final first (best 2 of each semi go
+  // through), even if the order of events has none. Only possible after the heats, not after a semi.
+  // (800m is a "waterfall" start run in lanes too, so it counts; 1500m and up are mass starts.)
+  // 1500m is a mass start but is drawn in heats of 8, so its rounds are capped the same way.
+  const inLanes = lanes || ev.start_type === 'waterfall' || ev.start_type === 'mass';
+  if (inLanes && nextStage === 'FINAL' && heat.stage === 'HEATS' && qualified.length > maxLanes) nextStage = 'SEMI_FINAL';
+  // A final never has more than maxLanes runners: when ties at the cut-off push it over, keep the
+  // fastest maxLanes and settle equal times by a draw of lots.
+  if (inLanes && nextStage === 'FINAL' && qualified.length > maxLanes) qualified = capFinalists(qualified, maxLanes);
   const scheduleItemId = (items || []).find((i: any) => i.stage === nextStage)?.id ?? null;
 
   // Already built and under way? Leave it alone.
@@ -180,14 +205,8 @@ async function buildNextRound(heat: HeatRow, roundHeats: HeatRow[]) {
   const started = (existing || []).some((h: any) => h.status !== 'SCHEDULED' || (h.heat_athletes || []).some((a: any) => (Array.isArray(a.track_results) ? a.track_results.length : a.track_results)));
   if (started) return { nextStage, skipped: 'The next round has already started — not rebuilt.' };
 
-  const finishers = await trackFinishers(roundHeats.map((h) => h.id));
-  const qualified = pickQualifiers(roundHeats.map((h) => h.id), finishers);
-  if (!qualified.length) throw new ProgressionError('No finishers to qualify for the next round.');
-
   // How many heats: one per max_lanes runners for lane races; a single race otherwise
-  const lanes = ev.start_type === 'lanes';
-  const maxLanes = ev.max_lanes || 8;
-  const nHeats = lanes && nextStage !== 'FINAL' ? Math.max(1, Math.ceil(qualified.length / maxLanes)) : 1;
+  const nHeats = inLanes && nextStage !== 'FINAL' ?Math.max(1, Math.ceil(qualified.length / maxLanes)) : 1;
   const perHeat = seedHeats(qualified.map((q) => (q.profileId || q.relayTeamId)!), nHeats);
 
   // Replace any not-started draft of the next round, then create it

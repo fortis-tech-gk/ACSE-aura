@@ -765,7 +765,7 @@ export default function HomePage() {
               </div>
               <h3 className="reg-card-title">Championship Points &amp; Scoring Matrix</h3>
               <p className="reg-card-desc">
-                <strong>Individual Events:</strong> 1st = 5 pts, 2nd = 3 pts, 3rd = 1 pt. <strong>Relay Events (4&times;100m &amp; 4&times;400m):</strong> 1st = 10 pts, 2nd = 6 pts, 3rd = 2 pts.
+                <strong>Athlete (individual events):</strong> 1st = 5 pts, 2nd = 3 pts, 3rd = 1 pt. <strong>College team (every event, relays included):</strong> 1st = 10 pts, 2nd = 6 pts, 3rd = 2 pts. Colleges are ranked by total team points.
               </p>
             </div>
 

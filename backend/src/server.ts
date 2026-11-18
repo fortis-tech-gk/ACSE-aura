@@ -1,3 +1,4 @@
+import { createHash } from 'crypto';
 import express, { Request, Response, NextFunction } from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
@@ -61,10 +62,15 @@ app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 const WINDOW_MS = 15 * 60 * 1000;
 const generalLimiter = rateLimit({
   windowMs: WINDOW_MS,
-  max: (req: Request) => (peekUser(req) ? 600 : 20000), // 600 per user · 20k per shared IP
+  max: (req: Request) => (peekUser(req) ? 600 : 20000), // 600 per login/device · 20k per shared IP
   keyGenerator: (req: Request) => {
     const user = peekUser(req);
-    return user ? `user:${user.role}:${user.entityId}` : `ip:${ipKeyGenerator(req.ip || '')}`;
+    if (!user) return `ip:${ipKeyGenerator(req.ip || '')}`;
+    // One budget per LOGIN (device), not per staff account: every phone that logs in with the same
+    // duty PIN is the same staff row, so keying on the account alone made all food counters / wardens /
+    // call-room tablets share one 600-request budget. A token is minted per login, so hash it in.
+    const device = createHash('sha256').update(String(req.headers.authorization || '')).digest('hex').slice(0, 16);
+    return `user:${user.role}:${user.entityId}:${device}`;
   },
   standardHeaders: true,
   legacyHeaders: false,
