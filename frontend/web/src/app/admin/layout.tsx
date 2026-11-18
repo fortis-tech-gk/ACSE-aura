@@ -55,6 +55,9 @@ export default async function AdminLayout({
             <Link href="/admin/heats" prefetch={true} className="univ-nav-link">
               <span>⏱️ Track Heats</span>
             </Link>
+            <Link href="/admin/score-sheets" prefetch={true} className="univ-nav-link">
+              <span>🖨️ Blank Score Sheets</span>
+            </Link>
             <Link href="/admin/delegations" prefetch={true} className="univ-nav-link">
               <span>📋 Delegations</span>
             </Link>
