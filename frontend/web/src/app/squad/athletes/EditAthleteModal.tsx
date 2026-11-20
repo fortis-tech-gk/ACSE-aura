@@ -368,7 +368,7 @@ export default function EditAthleteModal({ athlete, onClose, onSaved }: Props) {
 
 const gridStyle: React.CSSProperties = {
   display: 'grid',
-  gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+  gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 200px), 1fr))',
   gap: '0.75rem',
 };
 

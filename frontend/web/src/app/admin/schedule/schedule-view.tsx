@@ -166,7 +166,7 @@ export function ScheduleManagerView({
           <span>📅</span> Championship Sessions &amp; Order of Events
         </h2>
 
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '1rem' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 280px), 1fr))', gap: '1rem' }}>
           {sessions.map((session) => (
             <div
               key={session.id}
@@ -372,7 +372,7 @@ export function ScheduleManagerView({
             </div>
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(460px, 1fr))', gap: '1.5rem' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 460px), 1fr))', gap: '1.5rem' }}>
             {heats.map((heat) => {
               // Sort athletes by lane number
               const sortedAthletes = [...heat.heat_athletes].sort((a, b) => a.lane_number - b.lane_number);

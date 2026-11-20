@@ -35,6 +35,12 @@ export default function LoginLayout({
             </Link>
           </div>
 
+          <div className="login-nav-mobile">
+            <Link href="/">&larr; Home</Link>
+            <Link href="/login/squad">🏛️ College</Link>
+            <Link href="/login/admin">🛡️ Admin</Link>
+          </div>
+
           <div className="univ-nav-auth">
             <Link
               href="/login/squad"
@@ -55,7 +61,7 @@ export default function LoginLayout({
       </nav>
 
       {/* 3. Main Login Content Area */}
-      <main style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '2.5rem 1.5rem', width: '100%' }}>
+      <main className="login-main" style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '2.5rem 1.5rem', width: '100%' }}>
         {children}
       </main>
 

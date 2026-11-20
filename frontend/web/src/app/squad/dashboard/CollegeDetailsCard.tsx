@@ -105,7 +105,7 @@ export default function CollegeDetailsCard({ initial, collegeCode }: Props) {
       )}
 
       {!editing ? (
-        <dl style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '0.75rem', margin: '1rem 0 0' }}>
+        <dl style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 200px), 1fr))', gap: '0.75rem', margin: '1rem 0 0' }}>
           <Field label="Name of the College" value={saved.collegeName} />
           <Field label="Name of the Principal" value={saved.principalName || '—'} />
           <Field label="Email ID of the Principal" value={saved.principalEmail || '—'} />
@@ -129,7 +129,7 @@ export default function CollegeDetailsCard({ initial, collegeCode }: Props) {
               {error}
             </div>
           )}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '0.75rem' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 220px), 1fr))', gap: '0.75rem' }}>
             <div style={{ gridColumn: '1 / -1' }}>
               <label style={labelStyle} htmlFor="college-name">Name of the College *</label>
               <input id="college-name" value={form.collegeName} onChange={set('collegeName')} style={inputStyle} required />

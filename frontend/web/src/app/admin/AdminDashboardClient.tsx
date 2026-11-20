@@ -275,7 +275,7 @@ export default function AdminDashboardClient({ initialStats }: Props) {
           Meet Management Modules
         </h3>
 
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '1rem' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 300px), 1fr))', gap: '1rem' }}>
           {/* Card: Athletes Management */}
           <Link href="/admin/athletes" style={{ textDecoration: 'none' }}>
             <div className="metric-card" style={{ cursor: 'pointer', transition: 'transform 0.15s ease' }}>

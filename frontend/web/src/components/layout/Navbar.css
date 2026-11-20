@@ -506,3 +506,41 @@
     padding: 0.12rem 0.5rem;
   }
 }
+
+/* Extra-compact banner on phones: drop secondary lines so the header doesn't eat the screen */
+@media (max-width: 480px) {
+  .univ-accreditation-pill,
+  .univ-organized-by {
+    display: none;
+  }
+  .univ-meet-line {
+    font-size: 0.72rem;
+    letter-spacing: 0.02em;
+  }
+  .univ-meet-badge {
+    font-size: 0.55rem;
+    letter-spacing: 0.02em;
+    text-align: center;
+    margin-top: 0.25rem;
+  }
+}
+
+/* Login pages: simple link row replaces the (hidden) desktop menu on phones */
+.login-nav-mobile { display: none; }
+@media (max-width: 992px) {
+  .login-nav-mobile {
+    display: flex;
+    width: 100%;
+    justify-content: space-between;
+    gap: 0.25rem;
+    padding: 0.3rem 0;
+  }
+  .login-nav-mobile a {
+    color: #1d4ed8;
+    font-weight: 700;
+    font-size: 0.8rem;
+    text-decoration: none;
+    padding: 0.4rem 0.5rem;
+  }
+  .login-nav-mobile ~ .univ-nav-auth { display: none; }
+}

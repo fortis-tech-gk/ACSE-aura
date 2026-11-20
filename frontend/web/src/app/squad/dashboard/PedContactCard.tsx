@@ -128,7 +128,7 @@ export default function PedContactCard({ initialName, initialPhone, initialEmail
               {error}
             </div>
           )}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '0.75rem' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 200px), 1fr))', gap: '0.75rem' }}>
             <div>
               <label style={labelStyle} htmlFor="ped-name">Name of the Physical Education Director *</label>
               <input id="ped-name" value={name} onChange={(e) => setName(e.target.value)} style={inputStyle} autoComplete="name" placeholder="e.g. Dr. Ravi Kumar S" required />

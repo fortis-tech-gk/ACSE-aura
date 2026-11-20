@@ -4,7 +4,7 @@
 .results-head h1 { font-size: 2rem; font-weight: 900; color: var(--accent-navy); margin: 4px 0; }
 .results-kicker { font-size: 0.8rem; font-weight: 700; letter-spacing: 0.04em; color: var(--accent-gold); text-transform: uppercase; }
 .results-sub { color: var(--text-secondary, #475569); font-size: 0.95rem; }
-.results-standings { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; margin-bottom: 24px; }
+.results-standings { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr)); gap: 16px; margin-bottom: 24px; }
 .results-events { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 520px), 1fr)); gap: 16px; }
 .results-card { background: var(--bg-card); border: 1px solid #e2e8f0; border-radius: 14px; padding: 16px; overflow-x: auto; }
 .results-card h2 { font-size: 1.1rem; font-weight: 900; color: var(--accent-navy); margin: 0 0 10px; display: flex; align-items: center; gap: 8px; }

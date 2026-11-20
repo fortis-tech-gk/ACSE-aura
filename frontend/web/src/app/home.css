@@ -792,7 +792,7 @@
 
 .cards-triple-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 340px), 1fr));
   gap: 2rem;
 }
 
@@ -924,7 +924,7 @@
 
 .regulations-grid-modern {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 350px), 1fr));
   gap: 1.5rem;
 }
 
@@ -1526,7 +1526,7 @@
 
 .transit-advisory-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr));
   gap: 1.25rem;
 }
 
@@ -1756,7 +1756,7 @@
 /* Core Values Grid */
 .host-core-values-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr));
   gap: 1rem;
 }
 
@@ -1833,7 +1833,7 @@
 /* Achievements Grid */
 .host-achievements-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr));
   gap: 1.25rem;
 }
 
@@ -1877,13 +1877,13 @@
 
 /* Leaders Grid — make it 4-column for the new 4 cards */
 .leaders-grid {
-  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 230px), 1fr));
 }
 
 /* Three Pillars */
 .host-features-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr));
   gap: 1.75rem;
   margin-top: 2rem;
 }
@@ -2640,7 +2640,7 @@
   max-width: 1320px;
   margin: 0 auto;
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr));
   gap: 2.5rem;
   margin-bottom: 3rem;
 }
@@ -3086,4 +3086,49 @@
   color: #92400e;
   font-size: 0.98rem;
   line-height: 1.5;
+}
+
+/* ==========================================================================
+   KEY PATRONS — responsive stacking (tablet: 2 cols, phone: 1 col)
+   ========================================================================== */
+@media (max-width: 1024px) {
+  .patrons-grid,
+  .organizing-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 1.25rem;
+  }
+}
+
+@media (max-width: 640px) {
+  .chief-patrons-grid,
+  .patrons-grid,
+  .organizing-grid,
+  .rank-posters-grid {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 1.25rem;
+  }
+  .chief-patron-card,
+  .leader-card {
+    max-width: 420px;
+    width: 100%;
+    margin-inline: auto;
+  }
+  .chief-image-box {
+    height: 300px;
+  }
+  .leader-image-box {
+    height: 260px;
+  }
+  .rank-poster-image-box {
+    height: 240px;
+  }
+  .ranks-subwrapper {
+    padding: 1rem;
+  }
+  .leader-info {
+    padding: 1rem;
+  }
+  .leadership-subwrapper {
+    margin-bottom: 2.25rem;
+  }
 }

@@ -678,7 +678,7 @@ export default function AthletesManager({
       )}
 
       {/* Metrics Row (Identical to Prototype) */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '1.25rem' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 220px), 1fr))', gap: '1.25rem' }}>
         <StatBox
           title="Total Registered"
           value={athletes.length.toString()}

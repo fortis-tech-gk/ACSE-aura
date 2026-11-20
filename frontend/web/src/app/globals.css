@@ -457,7 +457,7 @@ table.data-table tr:hover td {
 /* Gallery Component */
 .gallery-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 280px), 1fr));
   gap: 1.5rem;
 }
 
@@ -505,4 +505,30 @@ table.data-table tr:hover td {
   padding: 3.5rem 2rem 2rem;
   color: var(--text-secondary);
   box-shadow: 0 -1px 3px rgba(15, 23, 42, 0.02);
+}
+
+/* ==============================================================================
+   MOBILE SAFETY NET — stack fixed multi-column inline grids on phones
+   ============================================================================== */
+@media (max-width: 600px) {
+  [style*="grid-template-columns: 1fr 1fr"],
+  [style*="grid-template-columns:1fr 1fr"] {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+  /* Wide data tables scroll inside their own box instead of squeezing */
+  table { max-width: 100%; }
+  input, select, textarea { font-size: 16px; max-width: 100%; } /* no iOS zoom-on-focus */
+  button, .btn { min-height: 40px; }
+  h1 { overflow-wrap: anywhere; }
+}
+
+@media (max-width: 480px) {
+  [style*="grid-template-columns: 1fr 1fr 1fr"] {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+}
+
+/* Wide tables without a scroll wrapper: scroll sideways on phones instead of being clipped */
+@media (max-width: 768px) {
+  .results-table, .deleg-roster, .deleg-info, .ranks-table { display: block; overflow-x: auto; -webkit-overflow-scrolling: touch; }
 }
