@@ -71,6 +71,8 @@ export type PerformanceResult = {
   reactionMs: number | null;
   wind: number | null;
   attempts: { round?: number; attempt?: number; type?: string; mark?: number | null; height?: number; result?: string; wind?: number | null }[];
+  /** Decathlon / heptathlon: every discipline with its mark and World Athletics points */
+  combined?: { code: string; name: string; day: number; kind: 'track' | 'field'; unit: string; mark: number | null; status: string | null; points: number | null }[];
   placeInHeat: number | null;
   finishers: number;
   entrants: number;

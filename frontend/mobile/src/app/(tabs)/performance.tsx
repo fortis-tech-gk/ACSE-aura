@@ -6,7 +6,7 @@ import { fmtDay, fmtMark, medal, ordinal, stageLabel } from '@/lib/format';
 import type { AthletePerformance, PerformanceResult } from '@/lib/types';
 import { AppHeader, Card, Muted, OfflineBanner, Pill, Screen, SectionLabel, Stat, colors, fonts } from '@/components/ui';
 
-const STATUS_LABEL: Record<string, string> = { DNF: 'Did not finish', DQ: 'Disqualified', DNS: 'Did not start', NM: 'No mark' };
+const STATUS_LABEL: Record<string, string> = { DNF: 'Did not finish', DQ: 'Disqualified', DNS: 'Did not start', NM: 'No mark', NC: 'Not classified' };
 
 function resultLine(r: PerformanceResult): { main: string; tone: 'green' | 'red' | 'grey' | 'blue' } {
   if (r.status) return { main: STATUS_LABEL[r.status] || r.status, tone: 'red' };
@@ -40,6 +40,30 @@ function Attempts({ r }: { r: PerformanceResult }) {
           <Text style={[s.attemptVal, { color: a.type === 'VALID' ? colors.text : colors.red }]}>
             {a.type === 'VALID' ? a.mark?.toFixed(2) : a.type === 'FOUL' ? 'X' : '–'}
           </Text>
+        </View>
+      ))}
+    </View>
+  );
+}
+
+/** Decathlon / heptathlon: mark and points for each discipline, grouped by day */
+function Disciplines({ r }: { r: PerformanceResult }) {
+  if (!r.combined?.length) return null;
+  const days = [...new Set(r.combined.map((d) => d.day))];
+  return (
+    <View style={{ gap: 6 }}>
+      {days.map((day) => (
+        <View key={day} style={{ gap: 2 }}>
+          <Text style={s.attemptTop}>DAY {day}</Text>
+          {r.combined!.filter((d) => d.day === day).map((d) => (
+            <View key={d.code} style={s.discRow}>
+              <Text style={s.discName}>{d.name}</Text>
+              <Text style={s.discMark}>
+                {d.status == null ? '—' : d.status === 'FINISHED' && d.mark != null ? (d.kind === 'track' ? fmtMark(d.mark, 'seconds') : `${d.mark.toFixed(2)} m`) : d.status}
+              </Text>
+              <Text style={s.discPts}>{d.points != null ? `${d.points} pts` : ''}</Text>
+            </View>
+          ))}
         </View>
       ))}
     </View>
@@ -142,6 +166,7 @@ export default function PerformanceScreen() {
                   {r.placeInHeat != null && <Pill label={`${r.finishers} with a result`} tone="grey" />}
                 </View>
                 <Attempts r={r} />
+                <Disciplines r={r} />
               </Card>
             );
           })}
@@ -163,6 +188,10 @@ function MedalCount({ label, color, n }: { label: string; color: string; n: numb
 }
 
 const s = StyleSheet.create({
+  discRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  discName: { flex: 1, fontSize: 14, color: colors.text },
+  discMark: { width: 90, textAlign: 'right', fontSize: 14, fontWeight: '700', color: colors.text },
+  discPts: { width: 70, textAlign: 'right', fontSize: 14, fontWeight: '800', color: colors.blue },
   summary: { backgroundColor: colors.navy, borderColor: 'rgba(233,199,104,0.4)', gap: 16 },
   medals: { flexDirection: 'row' },
   disc: { width: 58, height: 58, borderRadius: 29, alignItems: 'center', justifyContent: 'center', borderWidth: 3, borderColor: 'rgba(255,255,255,0.35)' },

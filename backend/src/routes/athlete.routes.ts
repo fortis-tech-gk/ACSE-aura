@@ -464,7 +464,8 @@ athleteRouter.get('/performance', authenticate, requireRole(['athlete']), async 
               id, heat_id, lane_number,
               track_results ( time_seconds, status, reaction_time_ms, wind_reading, dq_rule ),
               field_attempts ( round_number, attempt_type, mark_meters, wind_reading ),
-              vertical_jump_attempts ( bar_height_meters, attempt_number, result )
+              vertical_jump_attempts ( bar_height_meters, attempt_number, result ),
+              combined_results ( discipline, mark, status, points )
             `)
             .in('heat_id', heatIds),
         ])
@@ -487,6 +488,12 @@ athleteRouter.get('/performance', authenticate, requireRole(['athlete']), async 
         for (const r of (data as any)?.standings || []) combinedStand.set(r.heat_athlete_id, r);
       })
     );
+
+    // Decathlon / Heptathlon: the discipline list with each mark and its points
+    const combinedCodes = Array.from(new Set((heats || []).filter((h: any) => h.events?.category === 'combined').map((h: any) => String(h.events.code).toUpperCase())));
+    const { data: combinedDiscs } = combinedCodes.length
+      ? await supabase.from('combined_disciplines').select('event_code, seq, code, name, day, kind, unit').in('event_code', combinedCodes).order('seq')
+      : { data: [] as any[] };
 
     const results = myEntries.map((mineEntry) => {
       const heat: any = heatById.get(mineEntry.heat_id);
@@ -522,6 +529,14 @@ athleteRouter.get('/performance', authenticate, requireRole(['athlete']), async 
         lane: (me as any).lane ?? null,
         relayLeg: relay?.leg_order ?? null,
         startAt: istIso(date, heat?.schedule_items?.scheduled_time),
+        combined: isCombined
+          ? (combinedDiscs || [])
+              .filter((d: any) => d.event_code === String(heat?.events?.code || '').toUpperCase())
+              .map((d: any) => {
+                const own = (heatEntries.find((e) => e.id === mineEntry.id)?.combined_results || []).find((r: any) => r.discipline === d.code);
+                return { code: d.code, name: d.name, day: d.day, kind: d.kind, unit: d.unit, mark: own?.mark != null ? Number(own.mark) : null, status: own?.status ?? null, points: own?.points ?? null };
+              })
+          : undefined,
         value: me.value,
         status: me.status,
         dqRule: me.dq,

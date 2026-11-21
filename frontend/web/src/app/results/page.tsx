@@ -81,6 +81,33 @@ function rankHeat(h: any, combined?: Map<string, any>): Row[] {
   return [...out, ...rows.filter((r: any) => r.value == null).map((r: any) => ({ ...r, place: null }))];
 }
 
+/** Decathlon / Heptathlon: every discipline's mark and points per athlete */
+function combinedBreakdown(h: any, standings: Map<string, any>, discs: any[]) {
+  const ev = one<any>(h.events) || {};
+  const ds = discs.filter((d) => String(d.event_code).toUpperCase() === String(ev.code).toUpperCase());
+  const rows = (h.heat_athletes || [])
+    .map((a: any) => {
+      const p = one<any>(a.profiles);
+      const st = standings.get(a.id);
+      const res = new Map<string, any>((a.combined_results || []).map((r: any) => [r.discipline, r]));
+      return {
+        order: st?.classified ? st.rank : 999,
+        place: st?.classified ? st.rank : null,
+        bib: p?.bid_number ?? null,
+        name: p?.sslc_name || 'Athlete',
+        total: st && (a.combined_results || []).length ? st.total : null,
+        cells: ds.map((d) => {
+          const r = res.get(d.code);
+          if (!r) return '';
+          if (r.status === 'FINISHED') return `${d.kind === 'track' ? showTime(Number(r.mark)) : Number(r.mark).toFixed(2)} (${r.points})`;
+          return r.status === 'NM' ? 'NM (0)' : r.status;
+        }),
+      };
+    })
+    .sort((x: any, y: any) => x.order - y.order || String(x.name).localeCompare(String(y.name)));
+  return { ds, rows };
+}
+
 async function load() {
   const [heatsRes, standingsRes] = await Promise.all([
     supabaseAdmin
@@ -94,7 +121,7 @@ async function load() {
            track_results(time_seconds, status, dq_rule),
            field_attempts(attempt_type, mark_meters),
            vertical_jump_attempts(bar_height_meters, result),
-           combined_results(discipline, status, points))`
+           combined_results(discipline, mark, status, points))`
       )
       .in('status', ['IN_PROGRESS', 'ON_TRACK', 'COMPLETED', 'OFFICIAL']),
     supabaseAdmin.rpc('get_championship_standings'),
@@ -108,7 +135,8 @@ async function load() {
       for (const r of (data as any)?.standings || []) combined.set(r.heat_athlete_id, r);
     })
   );
-  return { heats: heatsRes.data || [], standings: (standingsRes.data || {}) as any, combined: [...combined.entries()], error: heatsRes.error?.message || null };
+  const discs = combinedIds.length ? (await supabaseAdmin.from('combined_disciplines').select('event_code, seq, code, name, day, kind').order('seq')).data || [] : [];
+  return { heats: heatsRes.data || [], standings: (standingsRes.data || {}) as any, combined: [...combined.entries()], discs, error: heatsRes.error?.message || null };
 }
 
 // Every spectator's tab re-renders this page every 15 s. During the meet that is hundreds of
@@ -116,8 +144,9 @@ async function load() {
 const loadShared = unstable_cache(load, ['public-results-v1'], { revalidate: 10 });
 
 export default async function ResultsPage() {
-  const { heats, standings, combined, error } = await loadShared();
+  const { heats, standings, combined, discs, error } = await loadShared();
   const combinedById = new Map<string, any>(combined as [string, any][]);
+  const allDiscs = (discs || []) as any[];
 
   // Group heats by event; finals first, then by event name
   const byEvent = new Map<string, { ev: any; heats: any[] }>();
@@ -215,6 +244,30 @@ export default async function ResultsPage() {
                         ))}
                       </tbody>
                     </table>
+                    {ev.category === 'combined' && (() => {
+                      const { ds, rows: br } = combinedBreakdown(h, combinedById, allDiscs);
+                      if (!ds.length || !br.some((r: any) => r.total != null)) return null;
+                      return (
+                        <div style={{ overflowX: 'auto', marginTop: 8 }}>
+                          <table className="results-table">
+                            <thead>
+                              <tr><th>Pos</th><th className="results-left">Name</th>{ds.map((d: any) => <th key={d.code} title={`${d.name} · day ${d.day}`}>{d.code}</th>)}<th>Total</th></tr>
+                            </thead>
+                            <tbody>
+                              {br.map((r: any, k: number) => (
+                                <tr key={k}>
+                                  <td>{r.place ?? '—'}</td>
+                                  <td className="results-left">{r.name}</td>
+                                  {r.cells.map((c: string, n: number) => <td key={n}>{c}</td>)}
+                                  <td className="results-strong">{r.total ?? ''}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                          <p style={{ fontSize: 12, color: '#64748b', margin: '4px 0 0' }}>Each cell: mark (World Athletics points). NM = no valid mark. NC = not classified.</p>
+                        </div>
+                      );
+                    })()}
                   </div>
                 );
               })}

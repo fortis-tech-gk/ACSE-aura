@@ -10,5 +10,6 @@ export default async function BlankScoreSheetsPage() {
     .from('events')
     .select('id, code, name, gender, category')
     .order('code', { ascending: true });
-  return <ScoreSheetsClient events={events || []} />;
+  const { data: disciplines } = await supabaseAdmin.from('combined_disciplines').select('event_code, seq, code, name, day, kind').order('seq');
+  return <ScoreSheetsClient events={events || []} disciplines={disciplines || []} />;
 }

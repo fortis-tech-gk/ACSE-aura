@@ -3,7 +3,8 @@
 import { useMemo, useState } from 'react';
 
 type Ev = { id: string; code: string; name: string; gender: string | null; category: string | null };
-type Kind = 'track' | 'field' | 'vertical';
+type Kind = 'track' | 'field' | 'vertical' | 'combined';
+type Disc = { event_code: string; seq: number; code: string; name: string; day: number; kind: string };
 
 const MEET = {
   name: 'Dr. ACS-AURA 2026',
@@ -13,16 +14,15 @@ const MEET = {
 };
 const GROUP: Record<string, string> = { men: 'MEN', women: 'WOMEN', mixed: 'MIXED' };
 
-// Combined events (decathlon / heptathlon) have no standard card here
 function kindOf(e: Ev): Kind | null {
   const c = e.category || '';
-  if (c === 'combined') return null;
+  if (c === 'combined') return 'combined';
   if (c === 'field_vertical_jump') return 'vertical';
   if (c.startsWith('field_')) return 'field';
   return 'track';
 }
 
-const KIND_LABEL: Record<Kind, string> = { track: 'Track / relay / road', field: 'Throws and horizontal jumps', vertical: 'High jump and pole vault' };
+const KIND_LABEL: Record<Kind, string> = { track: 'Track / relay / road', field: 'Throws and horizontal jumps', vertical: 'High jump and pole vault', combined: 'Decathlon and heptathlon (one sheet per day)' };
 
 function Info({ e, stage }: { e: Ev; stage: boolean }) {
   return (
@@ -57,9 +57,11 @@ function Rows({ n, cols }: { n: number; cols: number }) {
   );
 }
 
-function Sheet({ e, kind, rows }: { e: Ev; kind: Kind; rows: number }) {
-  const title = kind === 'track' ? 'REPORT of REFEREE TRACK' : kind === 'field' ? '* DISTANCE SCORE CARD *' : `RESULT CARD  *  ${e.code.startsWith('PV') ? 'POLE VAULT' : 'HIGH JUMP'}`;
-  const sigs = kind === 'track' ? ['REFEREE', 'CHIEF JUDGE'] : kind === 'field' ? ['REFEREE', 'CHIEF JUDGE'] : ['REFEREE', 'JUDGES'];
+function Sheet({ e, kind, rows, discs, onlyDay }: { e: Ev; kind: Kind; rows: number; discs: Disc[]; onlyDay?: number }) {
+  const allDays = [...new Set(discs.map((d) => d.day))];
+  const days = onlyDay ? [onlyDay] : allDays;
+  const title = kind === 'combined' ? `REPORT of REFEREE  *  ${e.name.toUpperCase()}` : kind === 'track' ? 'REPORT of REFEREE TRACK' : kind === 'field' ? '* DISTANCE SCORE CARD *' : `RESULT CARD  *  ${e.code.startsWith('PV') ? 'POLE VAULT' : 'HIGH JUMP'}`;
+  const sigs = kind === 'combined' ? ['REFEREE', 'CHIEF JUDGE'] : kind === 'track' ? ['REFEREE', 'CHIEF JUDGE'] : kind === 'field' ? ['REFEREE', 'CHIEF JUDGE'] : ['REFEREE', 'JUDGES'];
   return (
     <section className="bs-sheet">
       <div className="fed">ATHLETICS FEDERATION OF INDIA</div>
@@ -125,8 +127,47 @@ function Sheet({ e, kind, rows }: { e: Ev; kind: Kind; rows: number }) {
         </table>
       )}
 
+      {kind === 'combined' && days.map((day) => {
+        const ds = discs.filter((d) => d.day === day);
+        const last = day === allDays[allDays.length - 1];
+        return (
+          <div key={day}>
+            <div style={{ fontWeight: 800, margin: '4px 0 2px' }}>DAY {day}</div>
+            <table className="bs-grid">
+              <thead>
+                <tr>
+                  <th colSpan={4} />
+                  {ds.map((d) => <th key={d.code} colSpan={2}>{d.name.toUpperCase()}</th>)}
+                  <th colSpan={last ? 3 : 1} />
+                </tr>
+                <tr>
+                  <th style={{ width: 28 }}>S.N.</th><th>NAME of the ATHLETES</th><th style={{ width: 52 }}>BIB No.</th><th style={{ width: 70 }}>COLLEGE</th>
+                  {ds.map((d) => [
+                    <th key={`${d.code}m`}>{d.kind === 'track' ? 'TIME' : 'MARK'}</th>,
+                    <th key={`${d.code}p`}>PTS</th>,
+                  ])}
+                  <th>DAY {day}<div className="sub">TOTAL</div></th>
+                  {last && <th>GRAND<div className="sub">TOTAL</div></th>}
+                  {last && <th>POSITION</th>}
+                </tr>
+              </thead>
+              <tbody>
+                {Array.from({ length: rows }, (_, i) => (
+                  <tr key={i}>
+                    <td>{i + 1}</td>
+                    {Array.from({ length: 3 + ds.length * 2 + (last ? 3 : 1) }, (_, j) => <td key={j} />)}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        );
+      })}
+
       <div className="note">
-        {kind === 'track'
+        {kind === 'combined'
+          ? 'Marks in metres (jumps and throws) or time. Points from the World Athletics tables. NM no valid mark (0 points). DNS / DNF / DQ: the athlete is not ranked. Equal totals: higher score in more disciplines wins.'
+          : kind === 'track'
           ? 'Write the status (finished / DNS / DNF / DQ) and time against each lane.'
           : kind === 'field'
             ? 'X foul · – pass · NM no valid mark. Trials 4–6 for the best 8 after three trials.'
@@ -145,7 +186,7 @@ function Sheet({ e, kind, rows }: { e: Ev; kind: Kind; rows: number }) {
   );
 }
 
-export default function ScoreSheetsClient({ events }: { events: Ev[] }) {
+export default function ScoreSheetsClient({ events, disciplines }: { events: Ev[]; disciplines: Disc[] }) {
   const usable = useMemo(() => events.map((e) => ({ e, kind: kindOf(e) })).filter((x): x is { e: Ev; kind: Kind } => x.kind !== null), [events]);
   const [selected, setSelected] = useState<Set<string>>(new Set(usable.map((x) => x.e.id)));
   const [copies, setCopies] = useState(1);
@@ -165,7 +206,7 @@ export default function ScoreSheetsClient({ events }: { events: Ev[] }) {
           Landscape A4, one sheet per page.
         </p>
 
-        {(['track', 'field', 'vertical'] as Kind[]).map((k) => {
+        {(['track', 'field', 'vertical', 'combined'] as Kind[]).map((k) => {
           const list = usable.filter((x) => x.kind === k);
           const all = list.every((x) => selected.has(x.e.id));
           return (
@@ -190,16 +231,21 @@ export default function ScoreSheetsClient({ events }: { events: Ev[] }) {
           <label>Track rows <input type="number" min={4} max={16} value={trackRows} onChange={(e) => setTrackRows(Math.max(4, Math.min(16, +e.target.value || 8)))} style={{ width: 56 }} /></label>
           <label>Field rows <input type="number" min={8} max={20} value={fieldRows} onChange={(e) => setFieldRows(Math.max(8, Math.min(20, +e.target.value || 14)))} style={{ width: 56 }} /></label>
           <button type="button" className="bs-print" disabled={!chosen.length} onClick={() => window.print()}>
-            Print / save as PDF ({chosen.length * copies} sheet{chosen.length * copies === 1 ? '' : 's'})
+            Print / save as PDF
           </button>
         </div>
-        <p style={{ fontSize: 12, color: '#64748b' }}>Decathlon and heptathlon are not included: they have no single score card.</p>
       </div>
 
       <div className="bs-print-area">
-        {chosen.flatMap(({ e, kind }) =>
-          Array.from({ length: copies }, (_, c) => <Sheet key={`${e.id}-${c}`} e={e} kind={kind} rows={kind === 'track' ? trackRows : fieldRows} />)
-        )}
+        {chosen.flatMap(({ e, kind }) => {
+          const ds = disciplines.filter((d) => d.event_code.toUpperCase() === e.code.toUpperCase());
+          const rowsFor = kind === 'track' ? trackRows : kind === 'combined' ? 12 : fieldRows;
+          // A decathlon / heptathlon gets one page per day
+          const pages: (number | undefined)[] = kind === 'combined' ? [...new Set(ds.map((d) => d.day))] : [undefined];
+          return Array.from({ length: copies }, (_, c) =>
+            pages.map((day) => <Sheet key={`${e.id}-${c}-${day ?? 0}`} e={e} kind={kind} rows={rowsFor} discs={ds} onlyDay={day} />)
+          ).flat();
+        })}
       </div>
 
       <style>{`

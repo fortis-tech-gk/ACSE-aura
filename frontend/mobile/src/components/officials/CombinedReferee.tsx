@@ -9,7 +9,7 @@ import { ordinal } from '@/lib/format';
 import { HeatHeader } from './HeatHeader';
 import { afterFinalize } from './finalize';
 import { entryName, type EntryPerson } from './entry';
-import { Cell, POSITION_WORD, SheetGrid, SheetInfo, SheetNote, SheetRow, SheetTitle, type Col } from './ScoreSheet';
+import { Cell, POSITION_WORD, PrintSheetButton, SheetGrid, SheetInfo, SheetNote, SheetRow, SheetTitle, type Col } from './ScoreSheet';
 import { Button, Card, Muted, OfflineBanner, colors } from '@/components/ui';
 import { CallRoomGate, callRoomClosed, canEnterResults, notifyCallRoomOpen } from './CallRoomGate';
 
@@ -38,7 +38,7 @@ const showMark = (d: Discipline, v: number | null): string => (v == null ? '' : 
  * World Athletics points and the running total fill in. Marks save themselves (and queue offline).
  */
 export function CombinedReferee({ heatId, startAt }: { heatId: string; startAt?: string | null }) {
-  const { submitOp } = useOfficialSession();
+  const { submitOp, staff } = useOfficialSession();
   const { data, offline, savedAt, error, reload, pending } = useHeat<HeatData>(heatId, `/combined/heats/${heatId}`, 20000);
   const entries = useMemo(() => data?.athletes || [], [data]);
   const discs = useMemo(() => data?.disciplines || [], [data]);
@@ -244,6 +244,49 @@ export function CombinedReferee({ heatId, startAt }: { heatId: string; startAt?:
     { key: 'total', title: 'TOTAL', width: 84 },
   ];
 
+  /** The paper copy: one table per day (marks with points in brackets), the grand total and the position */
+  const markText = (id: string, d: Discipline): string => {
+    const p = pointsOf(id, d.code);
+    if (!p) return '';
+    if (p.status === 'FINISHED') return `${showMark(d, p.mark)} (${p.points})`;
+    return p.status === 'NM' ? 'NM (0)' : p.status;
+  };
+  const dayTotal = (id: string, day: number) => discs.filter((d) => d.day === day).reduce((n, d) => n + (pointsOf(id, d.code)?.points ?? 0), 0);
+  const placeText = (id: string) => {
+    const r = table.find((x) => x.id === id);
+    return r?.rank ? POSITION_WORD[r.rank - 1] || ordinal(r.rank) : r && r.done === discs.length ? 'NC' : '';
+  };
+  const printable = () => ({
+    title: `REPORT of REFEREE - ${data.heat.events.name.toUpperCase()}`,
+    heat: data.heat,
+    startAt,
+    referee: staff?.displayName || '',
+    signatures: ['REFEREE', 'CHIEF JUDGE'],
+    tables: days.map((day, i) => ({
+      heading: `DAY ${day}${i === days.length - 1 ? '  -  with the grand total' : ''}`,
+      cols: [
+        { title: 'ORDER' },
+        { title: 'BIB No.' },
+        { title: 'NAME of the ATHLETES' },
+        { title: 'UNIT', sub: 'College' },
+        ...discs.filter((d) => d.day === day).map((d) => ({ title: d.name.toUpperCase(), sub: d.kind === 'track' ? 'time (points)' : 'metres (points)' })),
+        { title: `DAY ${day}`, sub: 'points' },
+        ...(i === days.length - 1 ? [{ title: 'GRAND TOTAL' }, { title: 'POSITION' }] : []),
+      ],
+      rows: entries.map((e) => ({
+        cells: [
+          e.lane_number,
+          bibOf(e),
+          entryName(e),
+          unitOf(e),
+          ...discs.filter((d) => d.day === day).map((d) => markText(e.id, d)),
+          dayTotal(e.id, day),
+          ...(i === days.length - 1 ? [table.find((x) => x.id === e.id)?.total ?? '', placeText(e.id)] : []),
+        ],
+      })),
+    })),
+  });
+
   return (
     <View style={{ gap: 14 }}>
       <OfflineBanner offline={offline} lastSyncedAt={savedAt} note="Marks are saved on this device and sent when the network is back." />
@@ -363,6 +406,7 @@ export function CombinedReferee({ heatId, startAt }: { heatId: string; startAt?:
           );
         })}
       </SheetGrid>
+      <PrintSheetButton build={printable} />
       <Text style={s.legend}>NC = not classified (a discipline is missing, or DNS / DNF / DQ). Equal totals: the athlete with the higher score in more disciplines ranks first.</Text>
 
       {!done ? (
