@@ -2,7 +2,12 @@
 """
 Demo data for the STAGING copy of VTU SportsOS (Dr. ACS-AURA 2026).
 
-    python3 scripts/staging/seed_demo.py --yes-reset-staging
+    python3 scripts/staging/seed_demo.py --yes-reset-staging              # mid-meet demo (Day 1 already run)
+    python3 scripts/staging/seed_demo.py --yes-reset-staging --pre-meet   # "meet starts tomorrow"
+
+--pre-meet: registration closed, fees verified, bibs issued, ~70% of athletes accredited, and NOTHING else:
+no heats drawn, no results, no points. Includes decathlon / heptathlon entrants. Run the accreditation,
+heat draw, call room and referee flows from scratch.
 
 Reads frontend/web/.env.stag (NEXT_PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, SUPABASE_DB_URL).
 WIPES every college, athlete, heat, result and staff account in that database, then loads:
@@ -72,6 +77,7 @@ if not stag_ref or stag_ref not in DB:
 if prod_ref and prod_ref == stag_ref:
     sys.exit('.env.stag points at the PRODUCTION project — refusing.')
 
+PRE = '--pre-meet' in sys.argv
 rnd = random.Random(2026)
 
 
@@ -153,6 +159,11 @@ PLAN = {
               ('100H-W', 'JT-W', None, 3), ('200M-W', 'SP-W', '400M-W', 4)],
 }
 
+if PRE:
+    # one decathlete per men's squad and one heptathlete per women's squad (their only regular event)
+    PLAN['men'][4] = ('DEC-M', None, None, None)
+    PLAN['women'][4] = ('HEP-W', None, None, None)
+
 events = {code: (eid, cat) for eid, code, cat in (l.split('|') for l in psql('select id, code, category from events').split())}
 
 colleges, squads, athletes, regs, teams, members = [], [], [], [], [], []
@@ -178,9 +189,10 @@ for ci, (cname, code, district, region) in enumerate(COLLEGES):
             athletes.append(dict(id=pid, squad=sid, name=name, gender=gender, college=code,
                                  usn=f'1{code[:2]}{22 + ai % 3}{["CS", "EC", "ME", "CV", "IS"][ai % 5]}{usn_n:03d}',
                                  aadhaar=aadhaar_with_check(f'{rnd.randint(2, 9)}{rnd.randint(10**9, 10**10 - 1)}'), phone=f'9{rnd.randint(10**8, 10**9 - 1)}',
-                                 dob=dob, sem=rnd.choice([3, 5, 7]), blood=rnd.choice(BLOOD), accredited=rnd.random() < 0.92 or ai < 2))
+                                 dob=dob, sem=rnd.choice([3, 5, 7]), blood=rnd.choice(BLOOD), accredited=(rnd.random() < 0.70 or ai < 2) if PRE else (rnd.random() < 0.92 or ai < 2)))
             for e in (e1, e2):
-                regs.append((pid, events[e][0], 'regular'))
+                if e:
+                    regs.append((pid, events[e][0], 'regular'))
             if res:
                 regs.append((pid, events[res][0], 'reserve'))
             if relay is not None:
@@ -192,8 +204,8 @@ for ci, (cname, code, district, region) in enumerate(COLLEGES):
 # ------------------------------------------------------------------------------------------------
 print(f'Staging project {stag_ref}: wiping and loading demo data…')
 psql("""
-INSERT INTO storage.buckets (id, name, public) VALUES ('athlete-photos', 'athlete-photos', true)
-  ON CONFLICT (id) DO UPDATE SET public = true;
+INSERT INTO storage.buckets (id, name, public) VALUES ('athlete-photos', 'athlete-photos', false)
+  ON CONFLICT (id) DO UPDATE SET public = false;
 INSERT INTO storage.buckets (id, name, public) VALUES ('payment-proofs', 'payment-proofs', false)
   ON CONFLICT (id) DO UPDATE SET public = false;
 """)
@@ -243,12 +255,9 @@ for a in athletes:
     sql.append(f"INSERT INTO profiles (id, squad_id, sslc_name, usn, semester, blood_group, college_joining_date, sem_start_date, aadhaar_number, photo_url, "
                f"accreditation_status, date_of_birth, phone) VALUES ({q(a['id'])}, {q(a['squad'])}, {q(a['name'].upper())}, {q(a['usn'])}, {a['sem']}, {q(a['blood'])}, "
                f"'2022-08-16', '2026-08-01', {q(a['aadhaar'])}, {q(a['photo'])}, 'REGISTERED', {q(a['dob'].isoformat())}, {q(a['phone'])});")
-for team_id, sid, eid in teams:
-    sql.append(f'INSERT INTO relay_teams (id, squad_id, event_id) VALUES ({q(team_id)}, {q(sid)}, {q(eid)});')
+# Relay teams and members are created by the database itself (migration 0041) from the relay registrations below
 for pid, eid, kind in regs:
     sql.append(f'INSERT INTO registrations (profile_id, event_id, kind) VALUES ({q(pid)}, {q(eid)}, {q(kind)});')
-for team_id, pid, leg, reserve in members:
-    sql.append(f'INSERT INTO relay_members (relay_team_id, profile_id, leg_order, is_reserve) VALUES ({q(team_id)}, {q(pid)}, {q(leg)}, {q(reserve)});')
 # Fees: ₹100 per regular entry + ₹400 per relay team; reserves free
 for sid, *_ in squads:
     n_regular = sum(1 for pid, _, kind in regs if kind == 'regular' and next(a for a in athletes if a['id'] == pid)['squad'] == sid)
@@ -259,7 +268,7 @@ for sid, *_ in squads:
 sql.append("UPDATE squads SET payment_status = 'VERIFIED', roster_locked = TRUE;")
 sql.append('SELECT close_registration_and_generate_bids();')
 accredited = [a['id'] for a in athletes if a['accredited']]
-sql.append(f"UPDATE profiles SET accreditation_status = 'ACCREDITED', accredited_at = '2026-12-06T10:00:00+05:30' WHERE id IN ({', '.join(q(i) for i in accredited)});")
+sql.append(f"UPDATE profiles SET accreditation_status = 'ACCREDITED', accredited_at = {q(dt.datetime.now().isoformat()) if PRE else q('2026-12-06T10:00:00+05:30')} WHERE id IN ({', '.join(q(i) for i in accredited)});")
 
 # Staff
 sql.append(f"INSERT INTO staff (username, password_hash, display_name, role) VALUES ('demo.admin', extensions.crypt({q(admin_pass)}, extensions.gen_salt('bf', 10)), 'Demo Meet Admin', 'meet_admin');")
@@ -290,6 +299,8 @@ ITEMS = [('100M-W', 'HEATS', 'd1am', '07:30', 'COMPLETED'), ('SP-W', 'FINAL', 'd
          ('100M-W', 'FINAL', 'd1pm', '16:00', 'COMPLETED'), ('4X100M-W', 'HEATS', 'd1am', '10:30', 'COMPLETED'), ('4X100M-W', 'FINAL', 'd1pm', '17:00', 'COMPLETED'),
          ('100M-M', 'HEATS', 'd2am', '07:00', 'SCHEDULED'), ('LJ-M', 'FINAL', 'd2am', '07:30', 'SCHEDULED'), ('HJ-W', 'FINAL', 'd2am', '08:00', 'SCHEDULED'),
          ('100M-M', 'FINAL', 'd2pm', '16:00', 'SCHEDULED')]
+if PRE:
+    ITEMS = [(c, st, se, t, 'SCHEDULED') for c, st, se, t, _ in ITEMS] + [('DEC-M', 'HEATS', 'd1am', '09:00', 'SCHEDULED'), ('HEP-W', 'HEATS', 'd1am', '09:30', 'SCHEDULED')]
 item_ids = {}
 for code, stage, sess, time, status in ITEMS:
     iid = str(uuid.uuid4())
@@ -340,44 +351,48 @@ def track_results(heat, base, spread):
     sql.append(f"UPDATE heats SET status = 'COMPLETED', wind_reading = 0.8 WHERE id = {q(hid)};")
 
 
-# Day 1 — 100m Women: heats, then the final built by the VTU rule (top 2 per heat), then points
-w100 = draw('100M-W', 'HEATS', entrants('100M-W'))
-for h in w100:
-    track_results(h, 12.4, 1.4)
-sql.append(f"SELECT qualify_next_round({q(events['100M-W'][0])}, 'HEATS', 'FINAL', 2, 0);")
-sql.append(f"UPDATE heats SET schedule_item_id = {q(item_ids[('100M-W', 'FINAL')])} WHERE event_id = {q(events['100M-W'][0])} AND stage = 'FINAL';")
-sql.append(f"""SELECT submit_track_result(ha.id, round((12.2 + random() * 0.9)::numeric, 2), 150, 0.6, 'FINISHED', '', NULL)
-  FROM heat_athletes ha JOIN heats h ON h.id = ha.heat_id WHERE h.event_id = {q(events['100M-W'][0])} AND h.stage = 'FINAL';""")
-sql.append(f"UPDATE heats SET status = 'COMPLETED', wind_reading = 0.6 WHERE event_id = {q(events['100M-W'][0])} AND stage = 'FINAL';")
-sql.append(f"SELECT allocate_event_points({q(events['100M-W'][0])}, (SELECT id FROM heats WHERE event_id = {q(events['100M-W'][0])} AND stage = 'FINAL' LIMIT 1));")
+if not PRE:
+    # Day 1 — 100m Women: heats, then the final built by the VTU rule (top 2 per heat), then points
+    w100 = draw('100M-W', 'HEATS', entrants('100M-W'))
+    for h in w100:
+        track_results(h, 12.4, 1.4)
+    sql.append(f"SELECT qualify_next_round({q(events['100M-W'][0])}, 'HEATS', 'FINAL', 2, 0);")
+    sql.append(f"UPDATE heats SET schedule_item_id = {q(item_ids[('100M-W', 'FINAL')])} WHERE event_id = {q(events['100M-W'][0])} AND stage = 'FINAL';")
+    sql.append(f"""SELECT submit_track_result(ha.id, round((12.2 + random() * 0.9)::numeric, 2), 150, 0.6, 'FINISHED', '', NULL)
+      FROM heat_athletes ha JOIN heats h ON h.id = ha.heat_id WHERE h.event_id = {q(events['100M-W'][0])} AND h.stage = 'FINAL';""")
+    sql.append(f"UPDATE heats SET status = 'COMPLETED', wind_reading = 0.6 WHERE event_id = {q(events['100M-W'][0])} AND stage = 'FINAL';")
+    sql.append(f"SELECT allocate_event_points({q(events['100M-W'][0])}, (SELECT id FROM heats WHERE event_id = {q(events['100M-W'][0])} AND stage = 'FINAL' LIMIT 1));")
 
-# Day 1 — Shot Put Women (single flight final, 3 trials + 3 more for the best 8)
-spw = draw('SP-W', 'FINAL', entrants('SP-W'), per_heat=24)
-hid, chunk = spw[0]
-for ent in chunk:
-    for r in (1, 2, 3):
-        if rnd.random() < 0.15:
-            sql.append(f"SELECT submit_field_attempt({q(heat_athletes[(hid, ent)])}, {r}, 'FOUL', NULL, NULL, NULL);")
-        else:
-            sql.append(f"SELECT submit_field_attempt({q(heat_athletes[(hid, ent)])}, {r}, 'VALID', {round(7.2 + rnd.random() * 3.6, 2)}, NULL, NULL);")
-sql.append(f"UPDATE heats SET status = 'COMPLETED' WHERE id = {q(hid)};")
-sql.append(f"SELECT allocate_event_points({q(events['SP-W'][0])}, {q(hid)});")
+    # Day 1 — Shot Put Women (single flight final, 3 trials + 3 more for the best 8)
+    spw = draw('SP-W', 'FINAL', entrants('SP-W'), per_heat=24)
+    hid, chunk = spw[0]
+    for ent in chunk:
+        for r in (1, 2, 3):
+            if rnd.random() < 0.15:
+                sql.append(f"SELECT submit_field_attempt({q(heat_athletes[(hid, ent)])}, {r}, 'FOUL', NULL, NULL, NULL);")
+            else:
+                sql.append(f"SELECT submit_field_attempt({q(heat_athletes[(hid, ent)])}, {r}, 'VALID', {round(7.2 + rnd.random() * 3.6, 2)}, NULL, NULL);")
+    sql.append(f"UPDATE heats SET status = 'COMPLETED' WHERE id = {q(hid)};")
+    sql.append(f"SELECT allocate_event_points({q(events['SP-W'][0])}, {q(hid)});")
 
-# Day 1 — 4x100m Relay Women: two heats, final, points (10-6-2)
-r4 = draw('4X100M-W', 'HEATS', entrants('4X100M-W', relay=True), relay=True)
-for h in r4:
-    track_results(h, 50.5, 4.0)
-sql.append(f"SELECT qualify_next_round({q(events['4X100M-W'][0])}, 'HEATS', 'FINAL', 2, 0);")
-sql.append(f"UPDATE heats SET schedule_item_id = {q(item_ids[('4X100M-W', 'FINAL')])} WHERE event_id = {q(events['4X100M-W'][0])} AND stage = 'FINAL';")
-sql.append(f"""SELECT submit_track_result(ha.id, round((50.0 + random() * 3)::numeric, 2), NULL, NULL, 'FINISHED', '', NULL)
-  FROM heat_athletes ha JOIN heats h ON h.id = ha.heat_id WHERE h.event_id = {q(events['4X100M-W'][0])} AND h.stage = 'FINAL';""")
-sql.append(f"UPDATE heats SET status = 'COMPLETED' WHERE event_id = {q(events['4X100M-W'][0])} AND stage = 'FINAL';")
-sql.append(f"SELECT allocate_event_points({q(events['4X100M-W'][0])}, (SELECT id FROM heats WHERE event_id = {q(events['4X100M-W'][0])} AND stage = 'FINAL' LIMIT 1));")
+    # Day 1 relay is skipped: relay teams are built by the database from nominations (0041)
+    if False:
+        # Day 1 — 4x100m Relay Women: two heats, final, points (10-6-2)
+        r4 = draw('4X100M-W', 'HEATS', entrants('4X100M-W', relay=True), relay=True)
+        for h in r4:
+            track_results(h, 50.5, 4.0)
+        sql.append(f"SELECT qualify_next_round({q(events['4X100M-W'][0])}, 'HEATS', 'FINAL', 2, 0);")
+        sql.append(f"UPDATE heats SET schedule_item_id = {q(item_ids[('4X100M-W', 'FINAL')])} WHERE event_id = {q(events['4X100M-W'][0])} AND stage = 'FINAL';")
+        sql.append(f"""SELECT submit_track_result(ha.id, round((50.0 + random() * 3)::numeric, 2), NULL, NULL, 'FINISHED', '', NULL)
+          FROM heat_athletes ha JOIN heats h ON h.id = ha.heat_id WHERE h.event_id = {q(events['4X100M-W'][0])} AND h.stage = 'FINAL';""")
+        sql.append(f"UPDATE heats SET status = 'COMPLETED' WHERE event_id = {q(events['4X100M-W'][0])} AND stage = 'FINAL';")
+        sql.append(f"SELECT allocate_event_points({q(events['4X100M-W'][0])}, (SELECT id FROM heats WHERE event_id = {q(events['4X100M-W'][0])} AND stage = 'FINAL' LIMIT 1));")
 
-# Day 2 — to run live: 100m Men heats (call room not done yet), Long Jump Men, High Jump Women
-for code, stage, per in [('100M-M', 'HEATS', 8), ('LJ-M', 'FINAL', 24), ('HJ-W', 'FINAL', 24)]:
-    for hid, chunk in draw(code, stage, entrants(code), per_heat=per):
-        sql.append(f"UPDATE heat_athletes SET call_room_reported = FALSE WHERE heat_id = {q(hid)};")
+    # Day 2 — to run live: 100m Men heats (call room not done yet), Long Jump Men, High Jump Women
+    for code, stage, per in [('100M-M', 'HEATS', 8), ('LJ-M', 'FINAL', 24), ('HJ-W', 'FINAL', 24)]:
+        for hid, chunk in draw(code, stage, entrants(code), per_heat=per):
+            sql.append(f"UPDATE heat_athletes SET call_room_reported = FALSE WHERE heat_id = {q(hid)};")
+
 
 sql.append('COMMIT;')
 psql('\n'.join(sql))
@@ -394,7 +409,50 @@ women = psql(f"""SELECT p.sslc_name, p.bid_number, to_char(p.date_of_birth, 'DD-
   WHERE tp.event_id = {q(events['100M-W'][0])} AND tp.place = 1""").strip().splitlines()
 counts = psql("SELECT (SELECT count(*) FROM colleges), (SELECT count(*) FROM profiles), (SELECT count(*) FROM registrations), (SELECT count(*) FROM heats), (SELECT count(*) FROM team_points)").strip()
 
-ath_lines = '\n'.join(f'| {n} | {b} | {d} | {c} |' for n, b, d, c in (r.split('|') for r in rows + women))
+if PRE:
+    def pick(where):
+        return psql(f"""SELECT p.sslc_name, p.bid_number, to_char(p.date_of_birth, 'DD-MM-YYYY'), c.code || ' · ' || '{{}}'
+          FROM profiles p JOIN squads s ON s.id = p.squad_id JOIN colleges c ON c.id = s.college_id
+          WHERE {where} ORDER BY p.bid_number LIMIT 1""").strip()
+    picks = [
+        (pick(f"p.accreditation_status = 'ACCREDITED' AND s.gender = 'men' AND p.id IN (SELECT profile_id FROM registrations WHERE event_id = {q(events['DEC-M'][0])})"), 'decathlete, accredited'),
+        (pick(f"p.accreditation_status = 'ACCREDITED' AND s.gender = 'women' AND p.id IN (SELECT profile_id FROM registrations WHERE event_id = {q(events['HEP-W'][0])})"), 'heptathlete, accredited'),
+        (pick(f"p.accreditation_status = 'ACCREDITED' AND s.gender = 'men' AND p.id IN (SELECT profile_id FROM registrations WHERE event_id = {q(events['100M-M'][0])})"), '100m, accredited'),
+        (pick("p.accreditation_status = 'REGISTERED' AND s.gender = 'men'"), 'NOT accredited yet: use for the accreditation scan'),
+    ]
+    ath_lines = '\n'.join(f"| {r.split('|')[0]} | {r.split('|')[1]} | {r.split('|')[2]} | {r.split('|')[3].replace('{}', note)} |" for r, note in picks if r)
+else:
+    ath_lines = '\n'.join(f'| {n} | {b} | {d} | {c} |' for n, b, d, c in (r.split('|') for r in rows + women))
+WALK_PRE = f'''## Pre-meet walkthrough (meet starts tomorrow)
+State: 10 colleges, 160 athletes, fees verified, bibs issued. ~70% of athletes are accredited, the rest are waiting at the accreditation desk. No heats, no results, no points.
+1. **Accreditation desk** (PIN above) — scan or type the bib of the athlete marked NOT accredited -> accredited. Same
+   athlete scanned again -> "already accredited".
+2. **Warden / Food counter** — scan an accredited athlete into a hostel / one meal; a second scan of the same meal is refused.
+3. **Admin website** — Heats / Schedule: draw heats for **Decathlon Men** and **Heptathlon Women** (stage HEATS),
+   100m Men, etc. Only accredited athletes of verified colleges are drawn.
+4. **Call room** (PIN above) — open the Decathlon heat, scan the accredited decathletes, close the call room.
+5. **Referee** (PIN above) — open the Decathlon heat: discipline tabs, type marks, points and standings fill in; finish the event.
+6. Public results: https://vtu-athletics.vercel.app/results shows totals and places after finalizing.
+
+'''
+WALK_MID = '''## Demo walkthrough (about 15 minutes)
+1. **Website, Live Results** — Day 1 is already run: 100m Women (heats → final), Shot Put Women,
+   4x100m Relay Women. Show the FINAL RESULT tables and the college standings.
+2. **Athletes app** — log in with a 100m Men athlete above (bib + date of birth). Show the pass
+   (QR code, photo, events), the 100m Men heat with lane and call room time, hostel and meals.
+3. **Officials app, Call room** (PIN above) — open 100m Men Heat 1, scan the athlete's QR from
+   the athletes app on the other phone → "Reported, Lane n". Close the call room → sent to track.
+4. **Officials app, Referee** — the home screen shows the NEXT HEAT brief with the start list.
+   Tap **Go to next heat** → the AFI "Report of Referee Track" sheet. Type times; each saves itself.
+   Tap **Finish heat & save results**. Repeat for Heats 2 and 3 — after the third, the app says the
+   final was built (first 2 of each heat) and the 100m Men FINAL appears with lanes.
+5. Run the final the same way → points are awarded → refresh `/results` on the website: the
+   final result is published and the standings change.
+6. **Field events** — Long Jump Men (Distance Score Card) and High Jump Women (HJ Result Card).
+7. **Scanners** — Food counter / Warden / Accreditation PINs: scan the athlete's QR; scan the same
+   meal twice to show "Already claimed"; turn on airplane mode, scan, turn it off → it syncs.
+
+'''
 guide = f"""# AURA 2026 — staging demo logins
 
 > Generated by `scripts/staging/seed_demo.py` on {dt.datetime.now().strftime('%d %b %Y %H:%M')}. **Staging only — fictional data.**
@@ -423,31 +481,14 @@ Data: {counts.replace('|', ' colleges · ', 1).replace('|', ' athletes · ', 1).
 |---|---|---|---|
 {ath_lines}
 
-The first three run in **100m Men, Heat 1** (Day 2). The last one won the 100m Women final on Day 1.
+{'Pre-meet state: registration is closed, fees verified, bibs issued, nothing has been drawn or run yet.' if PRE else 'The first three run in **100m Men, Heat 1** (Day 2). The last one won the 100m Women final on Day 1.'}
 
 ## Staging addresses
 - Website: https://vtu-athletics.vercel.app (Live Results: `/results`, admin: `/login/admin`, colleges: `/login/squad`)
 - API: https://aura-api-staging-wgebilkjsa-el.a.run.app
 - Apps: the `athletes-demo` / `officials-demo` APKs (they talk to staging only)
 
-## Demo walkthrough (about 15 minutes)
-1. **Website, Live Results** — Day 1 is already run: 100m Women (heats → final), Shot Put Women,
-   4x100m Relay Women. Show the FINAL RESULT tables and the college standings.
-2. **Athletes app** — log in with a 100m Men athlete above (bib + date of birth). Show the pass
-   (QR code, photo, events), the 100m Men heat with lane and call room time, hostel and meals.
-3. **Officials app, Call room** (PIN above) — open 100m Men Heat 1, scan the athlete's QR from
-   the athletes app on the other phone → "Reported, Lane n". Close the call room → sent to track.
-4. **Officials app, Referee** — the home screen shows the NEXT HEAT brief with the start list.
-   Tap **Go to next heat** → the AFI "Report of Referee Track" sheet. Type times; each saves itself.
-   Tap **Finish heat & save results**. Repeat for Heats 2 and 3 — after the third, the app says the
-   final was built (first 2 of each heat) and the 100m Men FINAL appears with lanes.
-5. Run the final the same way → points are awarded → refresh `/results` on the website: the
-   final result is published and the standings change.
-6. **Field events** — Long Jump Men (Distance Score Card) and High Jump Women (HJ Result Card).
-7. **Scanners** — Food counter / Warden / Accreditation PINs: scan the athlete's QR; scan the same
-   meal twice to show "Already claimed"; turn on airplane mode, scan, turn it off → it syncs.
-
-To reset everything back to this starting point: `python3 scripts/staging/seed_demo.py --yes-reset-staging`
+{WALK_PRE if PRE else WALK_MID}To reset everything back to this starting point: `python3 scripts/staging/seed_demo.py --yes-reset-staging`
 (new passwords and PINs are written to this file).
 """
 open(OUT_GUIDE, 'w').write(guide)
