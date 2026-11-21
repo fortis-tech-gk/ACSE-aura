@@ -2,6 +2,8 @@
 
 Modern, multi-tier athletic meet management, collegiate squad registration, offline accreditation scanning, contiguous bid allocation, heat seeding, and real-time live scoring system for VTU athletic championships.
 
+> **Documentation:** [ARCHITECTURE.md](ARCHITECTURE.md) (technical, with diagrams) · [HOW-IT-WORKS.md](HOW-IT-WORKS.md) (plain-language guide for PEDs, athletes, officials and admins) · [DEPLOY.md](DEPLOY.md) (how to ship) · [CLAUDE.md](CLAUDE.md) (business rules)
+
 ---
 
 ## Architecture Overview
