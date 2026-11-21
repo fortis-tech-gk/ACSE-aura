@@ -10,7 +10,7 @@ import type { HeatSummary } from '@/lib/officials/types';
 import { Button, Card, Icon, Muted, OfflineBanner, Pill, SectionLabel, colors, shadow, type IconName } from '@/components/ui';
 import { entryName, type EntryPerson } from './entry';
 
-const KIND_ICON: Record<HeatSummary['kind'], IconName> = { track: 'run', relay: 'relay', field: 'disc', vertical: 'height' };
+const KIND_ICON: Record<HeatSummary['kind'], IconName> = { track: 'run', relay: 'relay', field: 'disc', vertical: 'height', combined: 'disc' };
 
 const DONE = ['COMPLETED', 'OFFICIAL'];
 
@@ -139,11 +139,11 @@ type BriefEntry = EntryPerson & { id: string; lane_number: number; call_room_rep
  */
 function NextHeatBrief({ heat }: { heat: HeatSummary }) {
   const { token } = useOfficialSession();
-  const path = heat.kind === 'field' || heat.kind === 'vertical' ? `/field/heats/${heat.id}` : `/track/heats/${heat.id}`;
+  const path = heat.kind === 'combined' ? `/combined/heats/${heat.id}` : heat.kind === 'field' || heat.kind === 'vertical' ? `/field/heats/${heat.id}` : `/track/heats/${heat.id}`;
   const { data } = useCachedFetch<{ athletes: BriefEntry[] }>(`@aura/off-heat:${path}`, path, { token, enabled: !!token });
   const entries = [...(data?.athletes || [])].sort((a, b) => a.lane_number - b.lane_number);
   const st = HEAT_STATUS[heat.status] || HEAT_STATUS.SCHEDULED;
-  const order = heat.kind === 'field' || heat.kind === 'vertical' ? 'Order' : 'Lane';
+  const order = heat.kind === 'field' || heat.kind === 'vertical' || heat.kind === 'combined' ? 'Order' : 'Lane';
   return (
     <View style={s.next}>
       <View style={s.nextTop}>

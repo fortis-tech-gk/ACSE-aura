@@ -7,6 +7,7 @@ import { CallRoomHeat } from '@/components/officials/CallRoomHeat';
 import { TrackReferee } from '@/components/officials/TrackReferee';
 import { FieldReferee } from '@/components/officials/FieldReferee';
 import { VerticalReferee } from '@/components/officials/VerticalReferee';
+import { CombinedReferee } from '@/components/officials/CombinedReferee';
 import { SyncPill } from '@/components/officials/ScanPanel';
 import { AppHeader, Screen, colors } from '@/components/ui';
 
@@ -32,7 +33,7 @@ export default function HeatScreen() {
       header={
         <AppHeader
           back="All heats"
-          eyebrow={isCallRoom ? 'Call room' : kind === 'field' ? 'Referee · distance card' : kind === 'vertical' ? 'Referee · result card' : 'Referee · track'}
+          eyebrow={isCallRoom ? 'Call room' : kind === 'field' ? 'Referee · distance card' : kind === 'vertical' ? 'Referee · result card' : kind === 'combined' ? 'Referee · combined events' : 'Referee · track'}
           title={title || 'Heat'}
           maxWidth={1280}
           right={<SyncPill pending={pendingCount} expired={sessionExpired} syncing={syncing} onPress={() => router.push('/officials/history')} />}
@@ -43,6 +44,8 @@ export default function HeatScreen() {
         <CallRoomHeat heatId={id} />
       ) : kind === 'field' ? (
         <FieldReferee heatId={id} startAt={startAt || null} />
+      ) : kind === 'combined' ? (
+        <CombinedReferee heatId={id} startAt={startAt || null} />
       ) : kind === 'vertical' ? (
         <VerticalReferee heatId={id} startAt={startAt || null} />
       ) : (

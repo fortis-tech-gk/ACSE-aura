@@ -59,7 +59,7 @@ export type QueuedScan = {
 
 export type Hostel = { id: string; name: string; gender: 'men' | 'women'; total_capacity: number; occupied: number; available: number };
 
-export type HeatKind = 'track' | 'relay' | 'field' | 'vertical';
+export type HeatKind = 'track' | 'relay' | 'field' | 'vertical' | 'combined';
 
 export type HeatSummary = {
   id: string;

@@ -301,7 +301,8 @@ export async function finalizeHeat(
   let nextRound: any = null;
   let pointsAwarded: any = null;
   if (!waiting.length) {
-    if (h.stage === 'FINAL') pointsAwarded = await awardPoints(h);
+    // A combined event (decathlon / heptathlon) is one competition: points follow its last heat
+    if (h.stage === 'FINAL' || h.events?.category === 'combined') pointsAwarded = await awardPoints(h);
     else nextRound = await buildNextRound(h, roundHeats);
   }
 

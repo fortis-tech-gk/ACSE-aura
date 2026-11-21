@@ -26,8 +26,9 @@ function istIso(date?: string | null, time?: string | null): string | null {
 const DEFAULT_CALL_ROOM_LEAD_MIN = 30;
 
 /** Event category → which referee screen the app shows */
-function heatKind(category: string): 'track' | 'relay' | 'field' | 'vertical' {
+function heatKind(category: string): 'track' | 'relay' | 'field' | 'vertical' | 'combined' {
   if (category === 'relay') return 'relay';
+  if (category === 'combined') return 'combined';
   if (category === 'field_vertical_jump') return 'vertical';
   if (category === 'field_throw' || category === 'field_horizontal_jump') return 'field';
   return 'track';
