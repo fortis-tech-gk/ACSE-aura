@@ -278,6 +278,7 @@ The App Store listing text and the reviewer notes are in `docs/app-store/athlete
 | 0040 20 km walk, decathlon, heptathlon events | ✅ | ✅ rows already present, not run |
 | 0041 relay teams built from athlete-form nominations | ✅ | ✅ |
 | 0045 decathlon / heptathlon scoring (World Athletics tables) | ✅ | ✅ |
+| 0046 substitute athlete keeps events, photo, DOB, phone, Aadhaar | ✅ | ✅ |
 
 ## Deploy log
 
@@ -287,4 +288,5 @@ The App Store listing text and the reviewer notes are in `docs/app-store/athlete
 | 2026-11-16 | Officials app | staging | `d27d0f9` | `officials-demo` build `99d10efa…` |
 | 2026-11-21 | API | staging | decathlon / heptathlon | revision `aura-api-staging-00009-dkr` |
 | 2026-11-21 | API | production | decathlon / heptathlon | revision `aura-api-00010-n4v` |
+| 2026-11-21 | Database | staging + production | 0046 | substitute athlete migration |
 | — | Website | production | still `700e1d5` | not deployed (unchanged) |

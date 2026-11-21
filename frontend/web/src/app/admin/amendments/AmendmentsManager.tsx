@@ -69,9 +69,9 @@ export default function AmendmentsManager({ athletes, initialAmendments }: Props
     const formData = new FormData(e.currentTarget);
     const res = await substituteAthleteAction(formData);
     if (res.success) {
-      setMsg({ text: `✓ Substitute athlete enrolled with inherited bid number!`, error: false });
+      setMsg({ text: `✓ Substitute enrolled with the inherited bid number and ${res.result?.copied_registrations ?? 0} event entr${res.result?.copied_registrations === 1 ? 'y' : 'ies'}.`, error: false });
       setSubstituteWithdrawnId('');
-      window.location.reload();
+      setTimeout(() => window.location.reload(), 2500);
     } else {
       setMsg({ text: res.error || 'Failed to substitute athlete.', error: true });
     }
@@ -197,7 +197,7 @@ export default function AmendmentsManager({ athletes, initialAmendments }: Props
               <div className="form-group">
                 <label className="form-label" htmlFor="newSemester">Semester</label>
                 <select id="newSemester" name="newSemester" className="input-field" defaultValue="3">
-                  {[1, 2, 3, 4, 5, 6, 7, 8].map((s) => (
+                  {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((s) => (
                     <option key={s} value={s}>Sem {s}</option>
                   ))}
                 </select>
@@ -219,7 +219,37 @@ export default function AmendmentsManager({ athletes, initialAmendments }: Props
               </div>
             </div>
 
-            <input type="hidden" name="newSemStartDate" value="2026-08-01" />
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+              <div className="form-group">
+                <label className="form-label" htmlFor="newSemStartDate">Present Year Start Date</label>
+                <input id="newSemStartDate" name="newSemStartDate" type="date" required className="input-field" defaultValue="2026-08-01" />
+              </div>
+              <div className="form-group">
+                <label className="form-label" htmlFor="newDateOfBirth">Date of Birth</label>
+                <input id="newDateOfBirth" name="newDateOfBirth" type="date" required className="input-field" />
+              </div>
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+              <div className="form-group">
+                <label className="form-label" htmlFor="newAadhaar">Aadhaar Number</label>
+                <input id="newAadhaar" name="newAadhaar" type="text" inputMode="numeric" required maxLength={14} placeholder="12 digits" className="input-field" />
+              </div>
+              <div className="form-group">
+                <label className="form-label" htmlFor="newPhone">Student Mobile</label>
+                <input id="newPhone" name="newPhone" type="tel" required placeholder="9876543210" className="input-field" />
+              </div>
+            </div>
+
+            <div className="form-group">
+              <label className="form-label" htmlFor="photo">Passport Photo (JPG / PNG / WebP, max 5 MB)</label>
+              <input id="photo" name="photo" type="file" accept="image/jpeg,image/png,image/webp" required className="input-field" />
+            </div>
+
+            <p style={{ color: 'var(--text-secondary)', fontSize: '0.8rem', margin: '0 0 0.75rem' }}>
+              The substitute automatically takes over the withdrawn athlete&apos;s events (including relay nominations).
+              Athletes withdrawn before this update have no saved events.
+            </p>
 
             <div className="form-group">
               <label className="form-label" htmlFor="reason">Amendment Authorization Reason</label>
