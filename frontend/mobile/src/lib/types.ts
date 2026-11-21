@@ -56,7 +56,7 @@ export type PerformanceResult = {
   eventName: string;
   eventCode: string;
   category: string;
-  unit: 'seconds' | 'metres';
+  unit: 'seconds' | 'metres' | 'points';
   stage: string | null;
   heatNumber: number | null;
   heatStatus: string;

@@ -51,7 +51,8 @@ publicRouter.get('/live/heats', cacheResponse(5), async (_req: Request, res: Res
             squads(colleges(name, code))
           ),
           track_results(time_seconds, reaction_time_ms, status, dq_rule),
-          field_attempts(round_number, attempt_type, mark_meters)
+          field_attempts(round_number, attempt_type, mark_meters),
+          combined_results(discipline, mark, status, points)
         )
       `)
       .order('created_at', { ascending: false })
@@ -85,7 +86,8 @@ publicRouter.get('/live/results', cacheResponse(5), async (_req: Request, res: R
           profiles (id, sslc_name, usn, bid_number, squads(colleges(name, code))),
           relay_teams (id, squads(colleges(name, code))),
           track_results (time_seconds, reaction_time_ms, status, dq_rule),
-          field_attempts (round_number, attempt_type, mark_meters)
+          field_attempts (round_number, attempt_type, mark_meters),
+          combined_results (discipline, mark, status, points)
         )
       `)
       .in('status', ['COMPLETED', 'OFFICIAL'])

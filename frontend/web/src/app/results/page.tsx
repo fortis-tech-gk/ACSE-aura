@@ -29,9 +29,30 @@ function showTime(sec: number): string {
 
 type Row = { place: number | null; bib: number | null; name: string; college: string; mark: string; note: string };
 
+/** Decathlon / Heptathlon: total World Athletics points and place come from the database standings */
+function rankCombined(h: any, standings?: Map<string, any>): Row[] {
+  const rows = (h.heat_athletes || []).map((a: any) => {
+    const p = one<any>(a.profiles);
+    const college = one<any>(one<any>(p?.squads)?.colleges);
+    const st = standings?.get(a.id);
+    const done = (a.combined_results || []).length;
+    return {
+      place: st?.classified ? (st.rank as number) : null,
+      bib: p?.bid_number ?? null,
+      name: p?.sslc_name || 'Athlete',
+      college: college?.code || '',
+      mark: st && done ? `${st.total} pts` : '',
+      note: st && !st.classified && done ? 'Not classified' : '',
+      order: st?.classified ? st.rank : 999,
+    };
+  });
+  return rows.sort((x: any, y: any) => x.order - y.order || String(x.name).localeCompare(String(y.name))).map((r: any) => ({ place: r.place, bib: r.bib, name: r.name, college: r.college, mark: r.mark, note: r.note }));
+}
+
 /** Ranked rows for one heat: times ascending, field best valid mark, vertical best height cleared */
-function rankHeat(h: any): Row[] {
+function rankHeat(h: any, combined?: Map<string, any>): Row[] {
   const ev = one<any>(h.events) || {};
+  if (ev.category === 'combined') return rankCombined(h, combined);
   const field = String(ev.category || '').startsWith('field');
   const vertical = ev.category === 'field_vertical_jump';
   const rows = (h.heat_athletes || []).map((a: any) => {
@@ -67,17 +88,27 @@ async function load() {
       .select(
         `id, stage, heat_number, status, wind_reading,
          events(id, name, code, gender, category),
-         heat_athletes(lane_number,
+         heat_athletes(id, lane_number,
            profiles(sslc_name, bid_number, squads(colleges(code, name))),
            relay_teams(squads(colleges(code, name))),
            track_results(time_seconds, status, dq_rule),
            field_attempts(attempt_type, mark_meters),
-           vertical_jump_attempts(bar_height_meters, result))`
+           vertical_jump_attempts(bar_height_meters, result),
+           combined_results(discipline, status, points))`
       )
       .in('status', ['IN_PROGRESS', 'ON_TRACK', 'COMPLETED', 'OFFICIAL']),
     supabaseAdmin.rpc('get_championship_standings'),
   ]);
-  return { heats: heatsRes.data || [], standings: (standingsRes.data || {}) as any, error: heatsRes.error?.message || null };
+  // Combined events (decathlon / heptathlon): ranked by the database, which applies the tie-break
+  const combinedIds = [...new Set(((heatsRes.data || []) as any[]).map((h) => one<any>(h.events)).filter((e) => e?.category === 'combined').map((e) => e.id))];
+  const combined = new Map<string, any>();
+  await Promise.all(
+    combinedIds.map(async (id) => {
+      const { data } = await supabaseAdmin.rpc('compute_combined_standings', { p_event_id: id });
+      for (const r of (data as any)?.standings || []) combined.set(r.heat_athlete_id, r);
+    })
+  );
+  return { heats: heatsRes.data || [], standings: (standingsRes.data || {}) as any, combined: [...combined.entries()], error: heatsRes.error?.message || null };
 }
 
 // Every spectator's tab re-renders this page every 15 s. During the meet that is hundreds of
@@ -85,7 +116,8 @@ async function load() {
 const loadShared = unstable_cache(load, ['public-results-v1'], { revalidate: 10 });
 
 export default async function ResultsPage() {
-  const { heats, standings, error } = await loadShared();
+  const { heats, standings, combined, error } = await loadShared();
+  const combinedById = new Map<string, any>(combined as [string, any][]);
 
   // Group heats by event; finals first, then by event name
   const byEvent = new Map<string, { ev: any; heats: any[] }>();
@@ -158,7 +190,7 @@ export default async function ResultsPage() {
                 {ev.name} {GENDER[ev.gender] ? <span className="results-tag">{GENDER[ev.gender]}</span> : null}
               </h2>
               {hs.map((h) => {
-                const rows = rankHeat(h);
+                const rows = rankHeat(h, combinedById);
                 const live = !['COMPLETED', 'OFFICIAL'].includes(h.status);
                 return (
                   <div key={h.id} className="results-heat">
@@ -173,7 +205,7 @@ export default async function ResultsPage() {
                       </thead>
                       <tbody>
                         {rows.map((r, i) => (
-                          <tr key={i} className={h.stage === 'FINAL' && !live && r.place && r.place <= 3 ? `results-medal results-medal-${r.place}` : ''}>
+                          <tr key={i} className={(h.stage === 'FINAL' || ev.category === 'combined') && !live && r.place && r.place <= 3 ? `results-medal results-medal-${r.place}` : ''}>
                             <td>{r.place ?? '—'}</td>
                             <td>{r.bib ?? ''}</td>
                             <td className="results-left">{r.name}</td>

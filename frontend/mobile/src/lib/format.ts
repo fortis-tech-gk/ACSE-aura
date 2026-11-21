@@ -79,8 +79,9 @@ export function fmtSeconds(sec: number | null | undefined): string {
   return s.toFixed(2);
 }
 
-export function fmtMark(value: number | null | undefined, unit: 'seconds' | 'metres'): string {
+export function fmtMark(value: number | null | undefined, unit: 'seconds' | 'metres' | 'points'): string {
   if (value == null) return '—';
+  if (unit === 'points') return `${Math.round(value)} pts`;
   return unit === 'seconds' ? fmtSeconds(value) : `${value.toFixed(2)} m`;
 }
 

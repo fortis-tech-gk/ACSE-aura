@@ -478,12 +478,29 @@ athleteRouter.get('/performance', authenticate, requireRole(['athlete']), async 
       entriesByHeat.set(e.heat_id, list);
     }
 
+    // Decathlon / Heptathlon: total World Athletics points and place come from the database
+    const combinedStand = new Map<string, any>();
+    const combinedEvents = Array.from(new Set((heats || []).filter((h: any) => h.events?.category === 'combined').map((h: any) => h.events.id)));
+    await Promise.all(
+      combinedEvents.map(async (eventId) => {
+        const { data } = await supabase.rpc('compute_combined_standings', { p_event_id: eventId });
+        for (const r of (data as any)?.standings || []) combinedStand.set(r.heat_athlete_id, r);
+      })
+    );
+
     const results = myEntries.map((mineEntry) => {
       const heat: any = heatById.get(mineEntry.heat_id);
       const category: string = heat?.events?.category || 'track_sprint';
-      const lowerIsBetter = !category.startsWith('field_');
+      const isCombined = category === 'combined';
+      const lowerIsBetter = !category.startsWith('field_') && !isCombined;
       const heatEntries = entriesByHeat.get(mineEntry.heat_id) || [];
-      const scored = heatEntries.map((e) => ({ id: e.id, lane: e.lane_number, ...bestOf(e, category) }));
+      const scored = heatEntries.map((e) => {
+        if (isCombined) {
+          const c = combinedStand.get(e.id);
+          return { id: e.id, lane: e.lane_number, value: c?.classified ? Number(c.total) : null, status: c && !c.classified && c.done ? 'NC' : null, reaction: null, wind: null, dq: null, attempts: [] as Attempt[] };
+        }
+        return { id: e.id, lane: e.lane_number, ...bestOf(e, category) };
+      });
       const me = scored.find((s) => s.id === mineEntry.id) || { value: null, status: null, reaction: null, wind: null, dq: null, attempts: [], lane: null };
       let placeInHeat: number | null = null;
       if (me.value != null) {
@@ -498,7 +515,7 @@ athleteRouter.get('/performance', authenticate, requireRole(['athlete']), async 
         eventName: heat?.events?.name || 'Event',
         eventCode: heat?.events?.code || '',
         category,
-        unit: lowerIsBetter ? 'seconds' : 'metres',
+        unit: isCombined ? 'points' : lowerIsBetter ? 'seconds' : 'metres',
         stage: heat?.stage || null,
         heatNumber: heat?.heat_number ?? null,
         heatStatus: heat?.status || 'SCHEDULED',
