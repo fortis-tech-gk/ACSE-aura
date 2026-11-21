@@ -91,8 +91,9 @@ read and write nothing. Only the website's server and the API hold the service k
 | Official | duty + 6-digit PIN | JWT with the role of that duty | throttle, per-role scope |
 
 Referees can carry a **scope** of assigned events. A referee can write results only for those events
-(`assertEventScope`). A heat that is finalized rejects further writes from referees, and only an admin can
-correct it. Every result change is logged in `result_changes`.
+(`assertEventScope`). A heat that is finalized rejects further writes from referees. The admin's **Results & Corrections**
+page (`/admin/results`, `actions/results-admin.ts`) can reopen it (back to `ON_TRACK`; refused when the next round has already
+started) or correct a track final time / decathlon mark directly; a reason is required and goes in `admin_audit_logs`. Every result change is logged in `result_changes`.
 
 ---
 
@@ -169,13 +170,16 @@ Women's squads are summed, either PED can pay, and verification sets the status 
    - marks the heat COMPLETED;
    - when every heat of the round is done, builds the next round (first 2 of each heat qualify, ties for
      second go through, no time qualifiers; a semi-final is added when more than eight qualify; a final never has more than eight);
-   - when the FINAL (or a combined event) is complete, calls `allocate_event_points`;
+   - when the FINAL (or a combined event) is complete, calls `allocate_event_points` (places 1-3);
    - clears the caches and pushes "you are through to the final" notifications to the qualifiers.
 
 ### Points
-- Individual events: 1st/2nd/3rd = **5 / 3 / 1**. Relays (4x100, 4x400): **10 / 6 / 2**, Overall only.
-  The Mixed Relay scores nothing.
-- Ties share a place and split the points of the places covered, e.g. two athletes tied for 2nd get (3+1)/2 = 2 each.
+- **College points: 10 / 6 / 2** for 1st / 2nd / 3rd in any event, individual or relay (migration 0042,
+  view `championship_scored_points`). Overall = every event; Men's / Women's team = that gender's individual events only.
+- **Athlete's own points: 5 / 3 / 1** for individual events (Best Male / Female Athlete). `team_points.points` keeps
+  these; the standings read the view's `college_points` / `athlete_points` columns.
+- The Mixed Relay scores nothing.
+- Ties share a place.
 - A result edited after the points were awarded recalculates them automatically (database triggers).
 
 ### Field and vertical events

@@ -184,6 +184,7 @@ Wi-Fi at a stadium can be poor. The app **keeps working**:
 - Type each athlete's mark: **times** like 10.42 or 1:52.34, **distances and heights in metres** like 7.42.
 - The **points** appear straight away (World Athletics scoring), and the standings table below shows the running total and rank for every athlete.
 - Statuses: **FIN** (finished), **NM** (no valid mark, scores 0 and the athlete stays in), **DNF/DQ/DNS** (the athlete is not ranked).
+- **Print / Save PDF** gives the paper sheet: one table per day with each mark and its points, the grand total and the position.
 - Press **Finish event & award points** when every mark is in.
 
 ### Rules referees should know
@@ -210,7 +211,8 @@ Payments page**. The **registration desk** account marks arrivals.
 | **Bibs** | Generate contiguous bib numbers once registration closes (never change afterwards) |
 | **ID cards** | Print athlete accreditation cards (admin-only; colleges do not see them) |
 | **Heats / Schedule** | Draw heats for each event, see the schedule, link each heat to its slot |
-| **Score sheets** | Print blank referee score sheets |
+| **Results & Corrections** | Fix a result after a referee finished the heat: **reopen** the heat for the referee, or correct a track final time or a decathlon / heptathlon mark directly. A reason is required and goes in the Audit Log; places and points recalculate by themselves. |
+| **Score sheets** | Print blank referee score sheets, including decathlon / heptathlon sheets (one page per day) |
 | **Delegations** | Printable delegation sheets with the principal's signature and seal |
 | **Certificates** | Generate the official certificates |
 | **Amendments** | Withdraw or substitute an athlete after the roster is locked |
@@ -246,10 +248,14 @@ Results appear as soon as a referee finalizes a heat.
 
 | What | Points |
 |---|---|
-| 1st, 2nd, 3rd in an individual event | **5, 3, 1** |
-| 1st, 2nd, 3rd in 4x100 m or 4x400 m relay | **10, 6, 2** (Overall championship only) |
-| Mixed relay | no championship points |
-| Tie | the tied athletes share the place and split the points of the places they cover |
+| **College points**: 1st, 2nd, 3rd in **any** event (individual or relay, decathlon and heptathlon included) | **10, 6, 2** |
+| **Athlete's own points**: 1st, 2nd, 3rd in an individual event (used for Best Male / Female Athlete) | **5, 3, 1** |
+| Mixed relay | no points |
+| Tie | the tied athletes share the place |
+
+Which events count where:
+- **Overall championship:** college points from every event, individual and 4x100 m / 4x400 m relays.
+- **Men's / Women's team championship:** college points from that gender's individual events only (no relays).
 
 **Qualifying:** in track events with several heats, the **first 2 of each heat** go to the next round (ties for
 2nd place both go through). If more than 8 qualify for a final, a semi-final is run first.
@@ -287,7 +293,8 @@ Results appear as soon as a referee finalizes a heat.
 an athlete (Amendments) or unlock the squad.
 
 **A referee typed a wrong time.** If the heat is not finalized, retype it (it saves over the old one). If it is
-finalized, ask the meet office to reopen. The change is logged, and points recalculate automatically.
+finalized, the admin opens **Results & Corrections** and either reopens the heat (the referee fixes it and finishes it
+again) or corrects a final time / decathlon mark directly. The change is logged, and points recalculate automatically.
 
 **The tablet lost Wi-Fi.** Keep working. Items show *Queued* and send themselves when the network returns.
 

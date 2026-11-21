@@ -240,7 +240,7 @@ receipt_url = f'{URL}/storage/v1/object/public/payment-proofs/demo/receipt.png'
 # ------------------------------------------------------------------------------------------------
 # Wipe and load
 # ------------------------------------------------------------------------------------------------
-keep = {'events', 'meet_settings'}
+keep = {'events', 'meet_settings', 'combined_disciplines'}  # reference data, not demo data
 tables = [t for t in psql("select tablename from pg_tables where schemaname='public'").split() if t not in keep]
 sql = ['BEGIN;', f'TRUNCATE {", ".join(tables)} RESTART IDENTITY CASCADE;']
 sql.append("""UPDATE meet_settings SET meet_name = 'Dr. ACS-AURA 2026 — 28th VTU State Level Inter-Collegiate Athletic Meet (DEMO)',
