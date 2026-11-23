@@ -314,7 +314,7 @@ export default function AthletesClient({ athletes }: Props) {
 
       {/* Athletes Data Table */}
       <div className="admin-table-container">
-        <table className="admin-table">
+        <table className="admin-table stack-mobile">
           <thead>
             <tr>
               <th style={{ width: '80px' }}>Bib #</th>

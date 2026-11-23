@@ -15,7 +15,7 @@ export default function AuditClient({ logs }: Props) {
       </div>
 
       <div className="admin-table-container">
-        <table className="admin-table">
+        <table className="admin-table stack-mobile">
           <thead>
             <tr>
               <th style={{ width: '180px' }}>Timestamp</th>

@@ -203,7 +203,7 @@ export default function CollegesManager({ initialColleges }: Props) {
 
       {/* College List Table */}
       <div className="table-container">
-        <table className="data-table" id="colleges-table">
+        <table className="data-table stack-mobile" id="colleges-table">
           <thead>
             <tr>
               <th>College</th>

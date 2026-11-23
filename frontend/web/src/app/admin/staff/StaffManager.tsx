@@ -95,7 +95,7 @@ export default function StaffManager({ initialStaff }: Props) {
       </div>
 
       <div className="table-container">
-        <table className="data-table" id="staff-table">
+        <table className="data-table stack-mobile" id="staff-table">
           <thead>
             <tr>
               <th>Official Name</th>

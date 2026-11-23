@@ -147,7 +147,7 @@ export default function BidOverviewManager({ initialSquads }: Props) {
 
       {/* Squad Bid Table */}
       <div className="table-container">
-        <table className="data-table" id="bid-overview-table">
+        <table className="data-table stack-mobile" id="bid-overview-table">
           <thead>
             <tr>
               <th>College</th>

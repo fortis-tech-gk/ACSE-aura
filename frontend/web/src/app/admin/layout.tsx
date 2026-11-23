@@ -4,6 +4,7 @@ import { logoutAction } from '@/app/actions/auth';
 import { OfficialBanner } from '@/components/layout/OfficialBanner';
 import '@/components/layout/Navbar.css';
 import './admin.css';
+import StackTableLabels from './StackTableLabels';
 
 export const metadata = {
   // Private portal: keep out of search results
@@ -104,6 +105,7 @@ export default async function AdminLayout({
       <main className="admin-container">
         {children}
       </main>
+      <StackTableLabels />
     </div>
   );
 }

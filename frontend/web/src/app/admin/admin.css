@@ -910,25 +910,44 @@
 
   /* Tables → stacked cards (opt-in via .stack-mobile + td[data-label]) */
   .admin-table-container:has(.stack-mobile) { overflow: visible; background: transparent; border: none; box-shadow: none; }
-  .admin-table.stack-mobile, .admin-table.stack-mobile tbody,
-  .admin-table.stack-mobile tr, .admin-table.stack-mobile td { display: block; width: 100%; }
-  .admin-table.stack-mobile thead { display: none; }
-  .admin-table.stack-mobile tr {
+  table.stack-mobile, table.stack-mobile tbody,
+  table.stack-mobile tr, table.stack-mobile td { display: block; width: 100%; }
+  table.stack-mobile thead { display: none; }
+  table.stack-mobile tr {
     background: #fff; border: 1px solid var(--border-color); border-radius: 12px;
     padding: 0.5rem 0.85rem; margin-bottom: 0.75rem; box-shadow: 0 1px 3px rgba(0,0,0,0.05);
   }
-  .admin-table.stack-mobile td {
+  table.stack-mobile td {
     display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem;
     padding: 0.5rem 0; border-bottom: 1px solid #f1f5f9; text-align: right;
   }
-  .admin-table.stack-mobile td::before {
+  table.stack-mobile td::before {
     content: attr(data-label); flex: 0 0 auto; font-size: 0.7rem; font-weight: 700;
     text-transform: uppercase; letter-spacing: 0.04em; color: #64748b; text-align: left; padding-top: 0.1rem;
   }
-  .admin-table.stack-mobile td:first-child { font-size: 0.95rem; }
-  .admin-table.stack-mobile td.cell-action { border-bottom: none; padding-top: 0.75rem; display: block; }
-  .admin-table.stack-mobile td.cell-action::before { content: none; }
-  .admin-table.stack-mobile td.cell-action .btn-admin { width: 100%; }
-  .admin-table.stack-mobile td.cell-empty { display: block; text-align: center; }
-  .admin-table.stack-mobile td.cell-empty::before { content: none; }
+  table.stack-mobile td:first-child { font-size: 0.95rem; }
+  table.stack-mobile td.cell-action { border-bottom: none; padding-top: 0.75rem; display: block; }
+  table.stack-mobile td.cell-action::before { content: none; }
+  table.stack-mobile td.cell-action .btn-admin { width: 100%; }
+  table.stack-mobile td.cell-empty { display: block; text-align: center; }
+  table.stack-mobile td.cell-empty::before { content: none; }
+}
+
+@media (max-width: 768px) {
+  /* Same card treatment for the .data-table / .table-container variant */
+  .admin-container .table-container:has(.stack-mobile) { overflow: visible; background: transparent; border: none; box-shadow: none; }
+  .admin-container table.stack-mobile th { display: none; }
+  .admin-container table.data-table.stack-mobile td { padding: 0.5rem 0; }
+  .admin-container table.data-table.stack-mobile tr:hover td { background: transparent; }
+  .admin-container table.data-table.stack-mobile td:last-child { border-bottom: none; }
+  table.stack-mobile td > div, .data-table.stack-mobile td > div { text-align: right; }
+  /* Action cells with several buttons: let them wrap */
+  .admin-container table.stack-mobile td button { min-height: 40px; }
+
+  /* Every other table (heats, schedule, results, delegations): scroll sideways instead of overflowing */
+  .admin-container table:not(.stack-mobile) { display: block; max-width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  .admin-container input[type="text"], .admin-container input[type="search"], .admin-container input[type="number"],
+  .admin-container select, .admin-container textarea { font-size: 16px; max-width: 100%; }
+  .admin-container [style*="min-width: 2"], .admin-container [style*="min-width: 3"],
+  .admin-container [style*="minWidth"] { min-width: 0 !important; }
 }
