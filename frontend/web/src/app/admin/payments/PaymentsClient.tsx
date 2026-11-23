@@ -115,7 +115,7 @@ export default function PaymentsClient({ squads }: Props) {
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="filter-control"
-            style={{ minWidth: '280px' }}
+            style={{ minWidth: 0, flex: '1 1 240px' }}
             id="payment-search"
           />
 
@@ -141,7 +141,7 @@ export default function PaymentsClient({ squads }: Props) {
 
       {/* Squads List Table */}
       <div className="admin-table-container">
-        <table className="admin-table">
+        <table className="admin-table stack-mobile">
           <thead>
             <tr>
               <th>College</th>
@@ -157,7 +157,7 @@ export default function PaymentsClient({ squads }: Props) {
           <tbody>
             {filteredSquads.length === 0 ? (
               <tr>
-                <td colSpan={8} style={{ textAlign: 'center', padding: '3rem 1rem', color: '#94a3b8' }}>
+                <td colSpan={8} className="cell-empty" style={{ textAlign: 'center', padding: '3rem 1rem', color: '#94a3b8' }}>
                   <div style={{ fontSize: '2rem', marginBottom: '0.5rem' }}>💳</div>
                   <div style={{ fontWeight: 600, color: '#475569' }}>No squads found</div>
                   <div style={{ fontSize: '0.8rem', marginTop: '0.2rem' }}>
@@ -174,7 +174,7 @@ export default function PaymentsClient({ squads }: Props) {
                 return (
                   <tr key={sq.id}>
                     {/* College */}
-                    <td>
+                    <td data-label="College">
                       <div style={{ fontWeight: 700, color: '#0f172a' }}>
                         {sq.colleges?.code || sq.squad_code}
                       </div>
@@ -184,7 +184,7 @@ export default function PaymentsClient({ squads }: Props) {
                     </td>
 
                     {/* Gender */}
-                    <td>
+                    <td data-label="Gender">
                       <span
                         style={{
                           fontSize: '0.75rem',
@@ -200,7 +200,7 @@ export default function PaymentsClient({ squads }: Props) {
                     </td>
 
                     {/* PED */}
-                    <td>
+                    <td data-label="PED">
                       <div style={{ fontWeight: 600, color: '#1e293b' }}>
                         {sq.ped_name || 'Not Provided'}
                       </div>
@@ -210,20 +210,20 @@ export default function PaymentsClient({ squads }: Props) {
                     </td>
 
                     {/* Athletes Count */}
-                    <td>
+                    <td data-label="Athletes">
                       <span style={{ fontWeight: 700, color: '#0f172a' }}>{athleteCount}</span>{' '}
                       <span style={{ fontSize: '0.75rem', color: '#64748b' }}>Athletes</span>
                     </td>
 
                     {/* Expected Fee */}
-                    <td>
+                    <td data-label="College fee">
                       <span style={{ fontWeight: 700, color: '#0f172a' }}>
                         ₹{sq.expectedFee.toLocaleString()}
                       </span>
                     </td>
 
                     {/* Submitted UTR & Amount */}
-                    <td>
+                    <td data-label="UTR / Amount">
                       {payment ? (
                         <div>
                           <div style={{ fontWeight: 600, color: '#2563eb', fontSize: '0.8rem' }}>
@@ -252,7 +252,7 @@ export default function PaymentsClient({ squads }: Props) {
                     </td>
 
                     {/* Status */}
-                    <td>
+                    <td data-label="Status">
                       <span
                         className={`badge-status ${status === 'VERIFIED'
                             ? 'badge-verified'
@@ -274,7 +274,7 @@ export default function PaymentsClient({ squads }: Props) {
                     </td>
 
                     {/* Open Button */}
-                    <td style={{ textAlign: 'right' }}>
+                    <td className="cell-action" style={{ textAlign: 'right' }}>
                       <button
                         type="button"
                         onClick={() => {

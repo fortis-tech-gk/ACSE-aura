@@ -863,3 +863,72 @@
   margin-right: 0.15rem;
   white-space: nowrap;
 }
+
+/* ==========================================================================
+   Mobile usability (phones / small tablets)
+   ========================================================================== */
+.admin-table-container { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+
+@media (max-width: 768px) {
+  .admin-container { padding: 0.9rem 0.75rem !important; }
+  .admin-title-group h2 { font-size: 1.2rem; }
+  .admin-title-group p { font-size: 0.8rem; }
+
+  /* Banner takes too much of a phone screen: tighten it */
+  .admin-shell .univ-main-banner { position: static; }
+  .admin-shell .univ-main-nav { position: sticky; top: 0; z-index: 100; }
+  .admin-shell .univ-nav-inner { flex-wrap: wrap; row-gap: 0.25rem; padding: 0.25rem 0.5rem; }
+  .admin-shell .univ-nav-menu { flex: 1 1 100%; order: 2; padding-bottom: 0.25rem; }
+  .admin-shell .univ-nav-auth { flex: 1 1 100%; order: 1; justify-content: space-between; gap: 0.5rem; }
+  .admin-shell .univ-nav-link { padding: 0.5rem 0.7rem; }
+
+  /* Filters stack full width, 16px inputs avoid iOS zoom */
+  .filter-bar { padding: 0.75rem; flex-direction: column; align-items: stretch; }
+  .filter-inputs { flex-direction: column; align-items: stretch; }
+  .filter-control { width: 100%; min-width: 0 !important; font-size: 16px; min-height: 44px; }
+  .btn-admin { min-height: 44px; }
+  .admin-actions-group { width: 100%; }
+  .control-panel-banner { flex-direction: column; align-items: stretch; padding: 1rem; }
+
+  /* Two-column inline grids collapse to one column */
+  .admin-container [style*="grid-template-columns: 1fr 1fr"],
+  .modal-body [style*="grid-template-columns: 1fr 1fr"] { grid-template-columns: 1fr !important; }
+
+  /* Modals become full-screen sheets with a sticky action footer */
+  .modal-overlay { padding: 0; align-items: stretch; }
+  .modal-content { max-width: 100%; max-height: 100dvh; height: 100dvh; border-radius: 0; }
+  .modal-header { padding: 0.85rem 1rem; position: sticky; top: 0; background: #fff; z-index: 2; }
+  .modal-header h3 { font-size: 1.05rem; }
+  .modal-body { padding: 1rem; }
+  .modal-footer {
+    position: sticky; bottom: 0; flex-wrap: wrap; padding: 0.75rem 1rem;
+    padding-bottom: max(0.75rem, env(safe-area-inset-bottom)); justify-content: stretch;
+  }
+  .modal-footer .btn-admin { flex: 1 1 100%; }
+  .modal-footer > span { flex: 1 1 100%; }
+  .modal-close-btn { min-width: 44px; min-height: 44px; }
+
+  /* Tables → stacked cards (opt-in via .stack-mobile + td[data-label]) */
+  .admin-table-container:has(.stack-mobile) { overflow: visible; background: transparent; border: none; box-shadow: none; }
+  .admin-table.stack-mobile, .admin-table.stack-mobile tbody,
+  .admin-table.stack-mobile tr, .admin-table.stack-mobile td { display: block; width: 100%; }
+  .admin-table.stack-mobile thead { display: none; }
+  .admin-table.stack-mobile tr {
+    background: #fff; border: 1px solid var(--border-color); border-radius: 12px;
+    padding: 0.5rem 0.85rem; margin-bottom: 0.75rem; box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+  }
+  .admin-table.stack-mobile td {
+    display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem;
+    padding: 0.5rem 0; border-bottom: 1px solid #f1f5f9; text-align: right;
+  }
+  .admin-table.stack-mobile td::before {
+    content: attr(data-label); flex: 0 0 auto; font-size: 0.7rem; font-weight: 700;
+    text-transform: uppercase; letter-spacing: 0.04em; color: #64748b; text-align: left; padding-top: 0.1rem;
+  }
+  .admin-table.stack-mobile td:first-child { font-size: 0.95rem; }
+  .admin-table.stack-mobile td.cell-action { border-bottom: none; padding-top: 0.75rem; display: block; }
+  .admin-table.stack-mobile td.cell-action::before { content: none; }
+  .admin-table.stack-mobile td.cell-action .btn-admin { width: 100%; }
+  .admin-table.stack-mobile td.cell-empty { display: block; text-align: center; }
+  .admin-table.stack-mobile td.cell-empty::before { content: none; }
+}
