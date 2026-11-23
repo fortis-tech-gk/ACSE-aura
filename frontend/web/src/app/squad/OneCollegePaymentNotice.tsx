@@ -32,7 +32,7 @@ export default function OneCollegePaymentNotice({
       }}
     >
       <div style={{ fontWeight: 800, marginBottom: '0.25rem' }}>
-        💡 One payment for your whole college (Men + Women)
+        💡 One payment for your whole college 
       </div>
       <div>
         Fees of the Men and Women squads add up into one total:{' '}
@@ -40,15 +40,10 @@ export default function OneCollegePaymentNotice({
           Men ₹{menFee} + Women ₹{womenFee} = ₹{total}
         </strong>
         .{' '}
-        {locked ? (
-          <>Both squads are locked because the college payment has been submitted.</>
-        ) : (
-          <>
-            Register athletes in <strong>both</strong> squads first (log in as {other} to add theirs). Then pay{' '}
-            <strong>once</strong> from either login. <strong>Paying locks both squads</strong>, so don&apos;t pay
-            until both are complete.
-          </>
-        )}
+        <>
+          You can pay at any time, from either login, as many times as you like. Paying never locks the roster
+          ({other} squad fees are added to the amount due until they are paid).
+        </>
       </div>
     </div>
   );

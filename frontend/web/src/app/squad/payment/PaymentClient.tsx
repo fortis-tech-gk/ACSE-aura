@@ -7,12 +7,12 @@ import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
 import FeeInvoiceModal, { type InvoiceAthlete } from '@/components/invoice/FeeInvoiceModal';
 import Link from 'next/link';
-import OneCollegePaymentNotice from '../OneCollegePaymentNotice';
 import { OFFICIAL_UPI_QR_SRC } from '@/lib/payment-config';
 import { creditedAmount } from '@/lib/payment-status';
 
 interface Props {
   breakdown: FeeBreakdown;
+  fullBreakdown?: FeeBreakdown;
   payments: PaymentRecord[];
   squadCode: string;
   athletes?: InvoiceAthlete[];
@@ -34,7 +34,7 @@ function formatDate(dateStr: string): string {
   }
 }
 
-export default function PaymentClient({ breakdown, payments, squadCode, athletes = [] }: Props) {
+export default function PaymentClient({ breakdown, fullBreakdown, payments, squadCode, athletes = [] }: Props) {
   const payableTarget = breakdown.balanceDue > 0 ? breakdown.balanceDue : (breakdown.totalPaid > 0 ? 0 : breakdown.totalAmount);
   // The amount is fixed to the balance due (the server rejects anything else); Finance then
   // records what was actually credited in the bank when verifying.
@@ -159,7 +159,7 @@ export default function PaymentClient({ breakdown, payments, squadCode, athletes
 
     // Confirmation prompt
     const confirmed = window.confirm(
-      `Confirm submission of ₹${amount} with UTR "${utrClean}" for entry fee settlement?\n\nThis ONE payment covers your whole college (Men + Women)..`
+      `Confirm submission of ₹${amount} with UTR "${utrClean}" for entry fee settlement?.`
     );
 
     if (!confirmed) {
@@ -242,13 +242,6 @@ export default function PaymentClient({ breakdown, payments, squadCode, athletes
         </div>
       </div>
 
-      <OneCollegePaymentNotice
-        menFee={(breakdown.divisions || []).filter((d) => d.gender === 'men').reduce((s, d) => s + d.fee, 0)}
-        womenFee={(breakdown.divisions || []).filter((d) => d.gender !== 'men').reduce((s, d) => s + d.fee, 0)}
-        myGender={breakdown.gender || ''}
-        locked={breakdown.rosterLocked}
-      />
-
       {isZeroSquad && (
         <div style={{ padding: '1rem 1.25rem', borderRadius: 'var(--radius-sm)', background: 'rgba(245, 158, 11, 0.1)', border: '1px solid rgba(245, 158, 11, 0.25)', color: '#b45309', fontSize: '0.95rem' }}>
           ℹ️ <strong>Roster Empty:</strong> Your college has 0 registered athletes in both the Men and Women squads. Please <Link href="/squad/dashboard" style={{ fontWeight: 700, textDecoration: 'underline' }}>register athletes</Link> into individual and relay disciplines before settling entry fees.
@@ -264,13 +257,13 @@ export default function PaymentClient({ breakdown, payments, squadCode, athletes
 
       {isAwaitingVerification && (
         <div id="banner-roster-locked-payment-submitted" style={{ padding: '1rem 1.25rem', borderRadius: 'var(--radius-sm)', background: 'rgba(37, 99, 235, 0.08)', border: '1px solid rgba(37, 99, 235, 0.3)', color: '#1e40af', fontSize: '0.95rem' }}>
-          🔒 <strong>Roster Locked &amp; Payment Submitted:</strong> Your college&apos;s receipt is awaiting Finance Desk verification. Athlete changes are frozen in both squads (Men and Women). Contact the VTU Directorate if an emergency unlock is required.
+          ⏳ <strong>Payment Submitted:</strong> Your receipt is awaiting Finance Desk verification. You can keep editing athletes and pay again whenever needed.
         </div>
       )}
 
       {isRejected && (
         <div id="banner-payment-rejected" style={{ padding: '1rem 1.25rem', borderRadius: 'var(--radius-sm)', background: 'rgba(239, 68, 68, 0.08)', border: '1px solid rgba(239, 68, 68, 0.3)', color: 'var(--danger)', fontSize: '0.95rem' }}>
-          ✕ <strong>Payment Rejected:</strong> {latestRejection?.rejection_reason || 'The Finance Desk rejected your last submission.'} Please re-upload a correct receipt / UTR below. Your roster remains locked.
+          ✕ <strong>Payment Rejected:</strong> {latestRejection?.rejection_reason || 'The Finance Desk rejected your last submission.'} Please re-upload a correct receipt / UTR below. 
         </div>
       )}
 
@@ -338,7 +331,7 @@ export default function PaymentClient({ breakdown, payments, squadCode, athletes
               ))}
 
               <div style={{ display: 'flex', justifyContent: 'space-between', paddingTop: '0.5rem', alignItems: 'center' }}>
-                <span style={{ fontSize: '1rem', fontWeight: 600, color: 'var(--text-secondary)' }}>Total College Fee (Men + Women):</span>
+                <span style={{ fontSize: '1rem', fontWeight: 600, color: 'var(--text-secondary)' }}>Total Amount to Pay:</span>
                 <span style={{ fontSize: '1.25rem', fontWeight: 700, color: 'var(--text-primary)' }}>
                   ₹{breakdown.totalAmount}
                 </span>
@@ -588,11 +581,7 @@ export default function PaymentClient({ breakdown, payments, squadCode, athletes
               >
                 {loading 
                   ? 'Submitting Receipt...' 
-                  : isFullySettled 
-                    ? '✓ Entry Fees Fully Settled' 
-                    : isAwaitingVerification
-                    ? '🔒 Roster Locked & Payment Submitted'
-                    : isPedMissing
+                  : isPedMissing
                     ? '⚠️ Add PED Contact Details First'
                     : isRejected
                     ? `Re-submit Payment Proof (₹${amount}) →`
@@ -675,7 +664,7 @@ export default function PaymentClient({ breakdown, payments, squadCode, athletes
       <FeeInvoiceModal
         isOpen={showInvoice}
         onClose={() => setShowInvoice(false)}
-        breakdown={breakdown}
+        breakdown={fullBreakdown || breakdown}
         payments={payments}
         squadCode={squadCode}
         athletes={athletes}

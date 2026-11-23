@@ -89,9 +89,8 @@ const STEPS: Step[] = [
           <li><strong>Wait for verification</strong> by the Finance Desk. ID badges are printed by the organisers and handed to you at the accreditation desk.</li>
         </ol>
         <div style={danger}>
-          🔒 <strong>Most important rule:</strong> once you submit a payment, your roster is <strong>LOCKED</strong>. You
-          can&apos;t add or remove athletes or change relay entries after that. Finish stages 2–3 completely
-          before paying.
+          💡 <strong>Good to know:</strong> paying never locks your roster. You can pay any time, as many times as you
+          like, from either the Men or Women login. The payment page shows only the amount still to be paid.
         </div>
       </>
     ),
@@ -254,8 +253,8 @@ const STEPS: Step[] = [
           </tbody>
         </table>
         <div style={danger}>
-          🔒 <strong>Your roster locks the moment you submit.</strong> You can submit only <strong>one payment at a time</strong>;
-          wait for the Finance Desk to verify or reject it before submitting another.
+          💡 <strong>Your roster is never locked by payment.</strong> You can submit as many payments as you need, even
+          while an earlier receipt is still being verified.
         </div>
       </>
     ),
@@ -272,9 +271,9 @@ const STEPS: Step[] = [
           </thead>
           <tbody>
             <tr><td style={td}><strong>DRAFT</strong></td><td style={td}>Not paid yet. Roster open</td><td style={td}>Finish registration, then pay</td></tr>
-            <tr><td style={td}><strong>SUBMITTED</strong> 🔒</td><td style={td}>Receipt sent, waiting for the Finance Desk. Roster locked</td><td style={td}>Wait. Check this page again later</td></tr>
+            <tr><td style={td}><strong>SUBMITTED</strong> 🔒</td><td style={td}>Receipt sent, waiting for the Finance Desk</td><td style={td}>Wait. Check this page again later</td></tr>
             <tr><td style={td}><strong>SUBMITTED</strong> with balance due</td><td style={td}>Payment verified, but it was less than the total</td><td style={td}>Pay the remaining balance and submit a new receipt</td></tr>
-            <tr><td style={td}><strong>REJECTED</strong></td><td style={td}>Receipt/UTR didn&apos;t match. The reason is shown on the page</td><td style={td}>Submit again with the correct UTR and receipt. The roster stays locked</td></tr>
+            <tr><td style={td}><strong>REJECTED</strong></td><td style={td}>Receipt/UTR didn&apos;t match. The reason is shown on the page</td><td style={td}>Submit again with the correct UTR and receipt</td></tr>
             <tr><td style={td}><strong>VERIFIED</strong> 🔒</td><td style={td}>Fee fully received. Registration complete</td><td style={td}>Nothing more. Collect ID badges at the accreditation desk</td></tr>
           </tbody>
         </table>
@@ -316,7 +315,6 @@ const STEPS: Step[] = [
           <tr><td style={td}>&quot;…USN / Aadhaar is already registered&quot;</td><td style={td}>This student is already registered (possibly by another college). Check the number; contact the Directorate if it&apos;s wrong</td></tr>
           <tr><td style={td}>&quot;VTU Quota Exceeded … maximum of 2 athletes&quot;</td><td style={td}>Your college already has 2 athletes in that event. Choose another event</td></tr>
           <tr><td style={td}>&quot;Quota full (6/6)&quot; on a relay</td><td style={td}>6 athletes are already nominated for that relay</td></tr>
-          <tr><td style={td}>&quot;Roster Locked &amp; Payment Submitted&quot;</td><td style={td}>You already paid. Changes need an emergency unlock from the Directorate</td></tr>
           <tr><td style={td}>&quot;UTR … has already been submitted&quot;</td><td style={td}>That UTR was already used. Check you copied the correct number from <em>this</em> payment</td></tr>
           <tr><td style={td}>&quot;Invalid photo format&quot;</td><td style={td}>Convert the photo to JPG/PNG (iPhone: share the photo as JPG) and keep it under 4 MB</td></tr>
         </tbody>

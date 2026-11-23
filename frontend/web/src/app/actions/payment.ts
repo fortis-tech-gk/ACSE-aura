@@ -3,9 +3,9 @@
 import { supabaseAdmin } from '@/lib/supabase';
 import { requireSquad, requireStaff } from '@/lib/auth-guard';
 import { revalidatePath } from 'next/cache';
-import { calculateCollegeFees, reviewPayment } from '@/lib/payments';
+import { calculateCollegeFees, reviewPayment, sumSquadFees } from '@/lib/payments';
 import { resolveHostUpiId, resolveHostAccountName } from '@/lib/payment-config';
-import { normalizePaymentStatus, totalCredited, type SquadPaymentStatus } from '@/lib/payment-status';
+import { normalizePaymentStatus, totalCredited, creditedAmount, type SquadPaymentStatus } from '@/lib/payment-status';
 import { fetchAllRows } from '@/lib/db-fetch-all';
 
 export interface FeeBreakdown {
@@ -63,6 +63,8 @@ export interface PaymentRecord {
  */
 export async function getSquadFeeBreakdownAction(): Promise<{
   breakdown: FeeBreakdown;
+  /** Whole-college breakdown (both divisions), used for the invoice */
+  fullBreakdown: FeeBreakdown;
   payments: PaymentRecord[];
 }> {
   const session = await requireSquad();
@@ -115,6 +117,34 @@ export async function getSquadFeeBreakdownAction(): Promise<{
   const totalAmount = feeCalc.totalAmount;
   const balanceDue = Math.max(0, totalAmount - totalPaid);
 
+  // What is still to be paid, per division. Every receipt that is not rejected counts (a receipt
+  // still under verification is already paid as far as the PED is concerned). A division's own
+  // receipts cover it first; any excess spills over to the other division.
+  const paidBy = new Map<string, number>();
+  for (const p of payments || []) {
+    if ((p as any).status === 'REJECTED') continue;
+    const amt = (p as any).status === 'VERIFIED' ? creditedAmount(p as any) : Number((p as any).amount_submitted || 0);
+    paidBy.set((p as any).squad_id, (paidBy.get((p as any).squad_id) || 0) + amt);
+  }
+  const feeOf = (id: string) => bySquad.get(id)?.totalAmount || 0;
+  const remaining = new Map<string, number>();
+  let spill = 0;
+  for (const id of squadIds) {
+    const over = (paidBy.get(id) || 0) - feeOf(id);
+    remaining.set(id, Math.max(0, -over));
+    if (over > 0) spill += over;
+  }
+  for (const id of squadIds) {
+    const r = remaining.get(id) || 0;
+    const use = Math.min(r, spill);
+    remaining.set(id, r - use);
+    spill -= use;
+  }
+  const dueIds = squadIds.filter((id) => (remaining.get(id) || 0) > 0);
+  const shownIds = dueIds.length > 0 ? dueIds : squadIds;
+  const shownFees = sumSquadFees(shownIds.map((id) => bySquad.get(id)).filter(Boolean) as any[]);
+  const currentDue = dueIds.reduce((sum, id) => sum + (remaining.get(id) || 0), 0);
+
   const athletesBySquad = new Map<string, number>();
   for (const r of athleteRows || []) athletesBySquad.set(r.squad_id, (athletesBySquad.get(r.squad_id) || 0) + 1);
   const divisions = (collegeSquads || [])
@@ -127,12 +157,12 @@ export async function getSquadFeeBreakdownAction(): Promise<{
       isMine: sq.id === session.squadId,
     }))
     .sort((x, y) => (x.gender === 'men' ? -1 : 1) - (y.gender === 'men' ? -1 : 1));
+  const shownDivisions = divisions.filter((d) => shownIds.includes(d.squadId));
   const athletesCount = (athleteRows || []).length;
 
   const college = squad?.colleges as any;
 
-  return {
-    breakdown: {
+  const base = {
       regularEventsCount: feeCalc.regularEventsCount,
       regularFeeRate: feeCalc.regularFeeRate,
       reserveEventsCount: feeCalc.reserveEventsCount,
@@ -161,7 +191,23 @@ export async function getSquadFeeBreakdownAction(): Promise<{
       pedPhone: squad?.ped_phone || '',
       pedEmail: squad?.ped_email || '',
       athletesCount: athletesCount || 0,
+    };
+  return {
+    breakdown: {
+      ...base,
+      regularEventsCount: shownFees.regularEventsCount,
+      reserveEventsCount: shownFees.reserveEventsCount,
+      hmCount: shownFees.hmCount,
+      relayTeamsCount: shownFees.relayTeamsCount,
+      relayMembersBilled: shownFees.relayMembersBilled,
+      relayFeeTotal: shownFees.relayFeeTotal,
+      relayTeams: shownFees.relayTeams,
+      totalAmount: shownFees.totalAmount,
+      totalPaid: dueIds.length > 0 ? shownFees.totalAmount - currentDue : totalPaid,
+      balanceDue: currentDue,
+      divisions: shownDivisions,
     },
+    fullBreakdown: base,
     payments: payments || [],
   };
 }

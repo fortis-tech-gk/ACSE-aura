@@ -13,7 +13,7 @@ export default async function SquadPaymentPage() {
   const session = await requireSquad();
   // One payment per college: the invoice lists the athletes of BOTH divisions (Men + Women)
   const collegeSquadIds = await getCollegeSquadIds(session.squadId);
-  const [{ breakdown, payments }, { data: athletesRaw }] = await Promise.all([
+  const [{ breakdown, fullBreakdown, payments }, { data: athletesRaw }] = await Promise.all([
     getSquadFeeBreakdownAction(),
     supabaseAdmin
       .from('profiles')
@@ -38,6 +38,7 @@ export default async function SquadPaymentPage() {
     <div id="squad-payment-page" style={{ width: '100%', maxWidth: '100%' }}>
       <PaymentClient
         breakdown={breakdown}
+        fullBreakdown={fullBreakdown}
         payments={payments}
         squadCode={session.squadCode || ''}
         athletes={athletes}
