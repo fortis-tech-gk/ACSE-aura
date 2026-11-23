@@ -46,7 +46,7 @@ export default async function SquadDashboardPage() {
   const squadCode = squad?.squad_code || session.squadCode || '';
   const paymentStatus = normalizePaymentStatus(squad?.payment_status);
   const isPaymentVerified = paymentStatus === 'VERIFIED';
-  const rosterLocked = squad?.roster_locked === true;
+  const rosterLocked = false;
   const paymentStatusLabel =
     paymentStatus + (rosterLocked ? ' · 🔒 Roster Locked' : '');
 

@@ -426,7 +426,7 @@ export async function reviewPayment(
 
   const { error: sqErr } = await supabaseAdmin
     .from('squads')
-    .update({ payment_status: squadStatus, roster_locked: true, updated_at: now })
+    .update({ payment_status: squadStatus, updated_at: now })
     .in('id', squadIds);
 
   if (sqErr) return { success: false, error: sqErr.message };

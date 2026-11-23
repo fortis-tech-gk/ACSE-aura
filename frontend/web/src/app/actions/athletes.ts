@@ -571,7 +571,7 @@ export async function deleteAthleteAction(profileId: string): Promise<{ success:
     .map((m: any) => (Array.isArray(m.relay_teams) ? m.relay_teams[0] : m.relay_teams))
     .find((t: any) => {
       const sq = Array.isArray(t?.squads) ? t.squads[0] : t?.squads;
-      return t && t.squad_id !== session.squadId && sq?.roster_locked === true;
+      return t && t.squad_id !== session.squadId && false;
     });
   if (lockedTeam) {
     const ev = Array.isArray(lockedTeam.events) ? lockedTeam.events[0] : lockedTeam.events;

@@ -38,7 +38,7 @@ export default function PaymentClient({ breakdown, payments, squadCode, athletes
   const payableTarget = breakdown.balanceDue > 0 ? breakdown.balanceDue : (breakdown.totalPaid > 0 ? 0 : breakdown.totalAmount);
   // The amount is fixed to the balance due (the server rejects anything else); Finance then
   // records what was actually credited in the bank when verifying.
-  const amount = String(breakdown.balanceDue);
+  const [amount, setAmount] = useState(String(breakdown.balanceDue > 0 ? breakdown.balanceDue : ''));
   const [utr, setUtr] = useState('');
   const [screenshotData, setScreenshotData] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -53,7 +53,7 @@ export default function PaymentClient({ breakdown, payments, squadCode, athletes
   const isRejected = breakdown.squadPaymentStatus === 'REJECTED' && !breakdown.hasPendingPayment;
   const latestRejection = payments.find((p) => p.status === 'REJECTED');
   const isPedMissing = !breakdown.pedName?.trim() || !breakdown.pedPhone?.trim();
-  const isFormDisabled = isZeroSquad || isFullySettled || isAwaitingVerification || isPedMissing;
+  const isFormDisabled = isZeroSquad || isPedMissing;
   const statusLabel =
     breakdown.squadPaymentStatus === 'DRAFT'
       ? 'DRAFT'
@@ -159,7 +159,7 @@ export default function PaymentClient({ breakdown, payments, squadCode, athletes
 
     // Confirmation prompt
     const confirmed = window.confirm(
-      `Confirm submission of ₹${amount} with UTR "${utrClean}" for entry fee settlement?\n\nThis ONE payment covers your whole college (Men + Women).\n\n⚠️ Submitting payment will LOCK BOTH squads (Men and Women). Neither PED will be able to add or remove athletes afterwards.`
+      `Confirm submission of ₹${amount} with UTR "${utrClean}" for entry fee settlement?\n\nThis ONE payment covers your whole college (Men + Women)..`
     );
 
     if (!confirmed) {
@@ -461,7 +461,7 @@ export default function PaymentClient({ breakdown, payments, squadCode, athletes
           <CardContent style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
             
             {/* Payment & Registration Workflow Notice */}
-            {!isFullySettled && !isAwaitingVerification && (
+            {false && (
               <div style={{
                 padding: '1rem 1.15rem',
                 background: '#eff6ff',
@@ -513,14 +513,15 @@ export default function PaymentClient({ breakdown, payments, squadCode, athletes
                 <input
                   id="amount"
                   type="text"
-                  readOnly
+                  inputMode="numeric"
                   aria-describedby="amount-help"
-                  style={{ ...inputStyle, fontWeight: 800, background: 'var(--bg-tertiary)', cursor: 'default' }}
-                  value={`₹${amount}`}
+                  style={{ ...inputStyle, fontWeight: 800 }}
+                  value={amount}
+                  onChange={(e) => setAmount(e.target.value.replace(/\D/g, ''))}
                   disabled={isFormDisabled}
                 />
                 <div id="amount-help" style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginTop: '0.35rem', lineHeight: 1.45 }}>
-                  Transfer exactly this amount. The Finance Desk checks the amount actually credited against your UTR in the bank statement — only that amount is counted.
+                  Enter the amount you transferred. You may pay as many times as you like. The Finance Desk checks the amount actually credited against your UTR in the bank statement — only that amount is counted.
                 </div>
               </div>
 

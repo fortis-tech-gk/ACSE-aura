@@ -16,12 +16,11 @@ export interface RosterWindowSquad {
 }
 
 export function isLateEntryWindow(registrationOpen: boolean, squad: RosterWindowSquad | null | undefined): boolean {
-  return !registrationOpen && squad?.roster_locked !== true && squad?.late_entry_open === true;
+  return !registrationOpen && squad?.late_entry_open === true;
 }
 
 export function canEditRoster(registrationOpen: boolean, squad: RosterWindowSquad | null | undefined): boolean {
   if (!squad) return false;
-  if (squad.roster_locked === true) return false;
   return registrationOpen || squad.late_entry_open === true;
 }
 
@@ -29,7 +28,7 @@ export function canEditRoster(registrationOpen: boolean, squad: RosterWindowSqua
 export function rosterEditBlockReason(registrationOpen: boolean, squad: RosterWindowSquad | null | undefined): string | null {
   if (!squad) return 'Unable to verify squad roster status. Please try again.';
   if (canEditRoster(registrationOpen, squad)) return null;
-  if (!registrationOpen && squad.roster_locked !== true) {
+  if (!registrationOpen) {
     return 'Championship registrations are officially closed by the VTU Directorate. Contact the Directorate to request a late entry.';
   }
   if (!registrationOpen) {

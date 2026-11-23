@@ -152,7 +152,7 @@ export async function getSquadFeeBreakdownAction(): Promise<{
       hasPendingPayment: (payments || []).some((p: any) => p.status === 'SUBMITTED'),
       divisions,
       registrationOpen: settings?.registration_open !== false,
-      rosterLocked: squad?.roster_locked === true,
+      rosterLocked: false,
       collegeName: college?.name || 'VTU Affiliated Institution',
       collegeCode: college?.code || '',
       district: college?.district || '',
@@ -224,16 +224,6 @@ export async function submitPaymentAction(formData: FormData): Promise<{ success
       };
     }
 
-    // Lifecycle guard: only one payment may be awaiting verification at a time.
-    // DRAFT and REJECTED squads may submit; a VERIFIED squad may submit only if an admin
-    // emergency-unlocked the roster and a differential balance is now due (checked below).
-    if ((pendingCount || 0) > 0) {
-      return {
-        success: false,
-        error: 'Roster Locked & Payment Submitted: A payment for your college (Men or Women squad) is already awaiting Finance Desk verification. You can re-submit only if it is rejected.',
-      };
-    }
-
     // Get expected total fee calculated accurately with ₹100 per relay member (first 4 per team)
     const totalAmount = feeCalc.totalAmount;
     if (totalAmount <= 0) {
@@ -243,26 +233,6 @@ export async function submitPaymentAction(formData: FormData): Promise<{ success
       };
     }
 
-    // Check prior verified payments to prevent duplicate payments on settled rosters
-    // Only bank-confirmed amounts (amount_received) count as already paid
-    const priorVerified = totalCredited(pastPayments as any[]);
-    const balanceDue = Math.max(0, totalAmount - priorVerified);
-
-    if (balanceDue === 0 && priorVerified > 0) {
-      return {
-        success: false,
-        error: 'All entry fees for your college (Men and Women) have already been fully verified and settled.',
-      };
-    }
-
-    // The college may not type an arbitrary amount: it must pay exactly the balance due.
-    // (Finance still confirms the amount actually credited in the bank at verification.)
-    if (amountSubmitted !== balanceDue) {
-      return {
-        success: false,
-        error: `The amount must equal your college's balance due of ₹${balanceDue} (Men + Women). Pay exactly ₹${balanceDue} and enter that amount.`,
-      };
-    }
 
 
     // Upload screenshot to Supabase Storage Bucket ('payment-proofs') with validation
@@ -376,23 +346,11 @@ export async function submitPaymentAction(formData: FormData): Promise<{ success
       return { success: false, error: error.message };
     }
 
-    // Freeze BOTH divisions of the college: one payment covers Men + Women
-    const { error: lockErr } = await supabaseAdmin
+    // Roster is never locked by payment. Mark both divisions as awaiting verification.
+    await supabaseAdmin
       .from('squads')
-      .update({
-        roster_locked: true,
-        payment_status: 'SUBMITTED',
-        updated_at: new Date().toISOString(),
-      })
+      .update({ payment_status: 'SUBMITTED', updated_at: new Date().toISOString() })
       .in('id', squadIds);
-
-    if (lockErr) {
-      console.error('submitPaymentAction roster lock error:', lockErr);
-      return { success: false, error: `Payment recorded, but the roster could not be locked: ${lockErr.message}` };
-    }
-
-    // Paying closes any late-entry window the admin opened (best effort: column from migration 0017)
-    await supabaseAdmin.from('squads').update({ late_entry_open: false }).in('id', squadIds).eq('late_entry_open', true);
 
     revalidatePath('/squad/payment');
     revalidatePath('/squad/dashboard');
