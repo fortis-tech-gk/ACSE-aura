@@ -72,7 +72,13 @@ export default function FeeInvoiceModal({ isOpen, onClose, breakdown, payments, 
   const divisionLabel = 'Men + Women';
   const letterFor = (g?: string) => (g === 'women' ? 'F' : g === 'men' ? 'M' : genderLetter);
   const listedPayments = payments.filter((p) => p.status !== 'REJECTED');
-  const isFullySettled = breakdown.balanceDue === 0 && breakdown.totalPaid > 0 && breakdown.squadPaymentStatus === 'VERIFIED';
+  // A receipt counts as paid as soon as it is submitted (Finance verifies it later)
+  const paidAmount = listedPayments.reduce(
+    (sum, p) => sum + (p.status === 'VERIFIED' ? creditedAmount(p) : Number(p.amount_submitted || 0)),
+    0
+  );
+  const balanceDue = Math.max(0, breakdown.totalAmount - paidAmount);
+  const isFullySettled = paidAmount > 0 && balanceDue === 0;
 
   // Always print at least 12 roster lines so the sheet reads like the official form
   const minRows = Math.max(0, 12 - athletes.length);
@@ -232,7 +238,7 @@ export default function FeeInvoiceModal({ isOpen, onClose, breakdown, payments, 
                       {new Date(p.created_at).toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' })}
                     </td>
                     <td className="c">UPI / Bank Transfer</td>
-                    <td className="c">{p.status === 'VERIFIED' ? 'Verified' : 'Awaiting verification'}</td>
+                    <td className="c">Paid</td>
                     <td className="r b">
                       {(p.status === 'VERIFIED' ? creditedAmount(p) : p.amount_submitted).toLocaleString('en-IN')}/-
                     </td>
@@ -252,9 +258,9 @@ export default function FeeInvoiceModal({ isOpen, onClose, breakdown, payments, 
             </span>
             <span>Reserve events {breakdown.reserveEventsCount} (free)</span>
             <span className="kit-total">Total fee: ₹{breakdown.totalAmount.toLocaleString('en-IN')}/-</span>
-            <span>Paid (verified): ₹{breakdown.totalPaid.toLocaleString('en-IN')}/-</span>
-            <span className={breakdown.balanceDue > 0 ? 'kit-due' : 'kit-clear'}>
-              Balance due: ₹{breakdown.balanceDue.toLocaleString('en-IN')}/-
+            <span>Paid: ₹{paidAmount.toLocaleString('en-IN')}/-</span>
+            <span className={balanceDue > 0 ? 'kit-due' : 'kit-clear'}>
+              Balance due: ₹{balanceDue.toLocaleString('en-IN')}/-
             </span>
           </div>
 
