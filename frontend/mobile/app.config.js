@@ -109,6 +109,11 @@ module.exports = ({ config }) => {
             // Faster local builds: ANDROID_BUILD_ARCHS=arm64-v8a compiles native code for one chip
             // type only. Leave unset for store builds (all architectures).
             ...(process.env.ANDROID_BUILD_ARCHS ? { buildArchs: process.env.ANDROID_BUILD_ARCHS.split(',') } : {}),
+            // Small sideloaded APKs: ANDROID_SMALL_APK=1 turns on R8 (minify), resource shrinking and
+            // compressed native libraries. Off by default, so store builds are unchanged.
+            ...(process.env.ANDROID_SMALL_APK === '1'
+              ? { enableMinifyInReleaseBuilds: true, enableShrinkResourcesInReleaseBuilds: true, useLegacyPackaging: true }
+              : {}),
           },
         },
       ],

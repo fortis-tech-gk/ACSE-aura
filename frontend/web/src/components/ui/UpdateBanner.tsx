@@ -40,6 +40,7 @@ export default function UpdateBanner() {
   if (!stale) return null;
   return (
     <div
+      className="no-print"
       role="alert"
       style={{
         position: 'fixed', left: 0, right: 0, bottom: 0, zIndex: 9999,

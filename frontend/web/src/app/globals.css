@@ -532,3 +532,13 @@ table.data-table tr:hover td {
 @media (max-width: 768px) {
   .results-table, .deleg-roster, .deleg-info, .ranks-table { display: block; overflow-x: auto; -webkit-overflow-scrolling: touch; }
 }
+
+/* Printing / "Save as PDF": never include site chrome (banner, nav, update bar) */
+@media print {
+  .univ-main-banner,
+  .univ-main-nav,
+  .official-banner-root,
+  .no-print {
+    display: none !important;
+  }
+}

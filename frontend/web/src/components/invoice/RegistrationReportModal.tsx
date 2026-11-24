@@ -771,6 +771,14 @@ export default function RegistrationReportModal({
           }
         }
       `}</style>
+      <style jsx global>{`
+        @media print {
+          /* Print only the report: hide the portal banner, navigation and everything else on the page */
+          body > *:not(.report-modal-overlay) {
+            display: none !important;
+          }
+        }
+      `}</style>
     </div>,
     document.body
   );
