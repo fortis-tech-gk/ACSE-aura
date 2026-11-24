@@ -299,7 +299,16 @@ export async function addAthleteAction(formData: FormData): Promise<AddAthleteRe
     mixedRelayEventId = mixedEvent.id;
     // The mixed team is shared by the college (both squads): max 6 nominations in total
     // (4 runners + 2 reserves) — the team is picked only from these nominees.
-    const mixedCount = (mixedCollegeRegs.data || []).filter((r: any) => r.event_id === mixedEvent.id).length;
+    const mixedRegs = (mixedCollegeRegs.data || []).filter((r: any) => r.event_id === mixedEvent.id);
+    // Each squad fills exactly half of that team: 2 runners + 1 reserve, so at most 3 per squad.
+    const ownMixedCount = mixedRegs.filter((r: any) => r.profiles?.squad_id === session.squadId).length;
+    if (ownMixedCount >= 3) {
+      return {
+        success: false,
+        error: 'Your squad has already nominated 3 athletes for the 4x400m Mixed Relay. Each squad may nominate at most 3 (2 runners + 1 reserve); the team needs 2 Men and 2 Women.',
+      };
+    }
+    const mixedCount = mixedRegs.length;
     if (mixedCount >= 6) {
       return {
         success: false,

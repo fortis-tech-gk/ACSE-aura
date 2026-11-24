@@ -437,7 +437,12 @@ export default function AthletesManager({
       setLoading(false);
       return;
     }
-    // Mixed Relay nominations are capped at 6 per college on the server; Half Marathon is unrestricted.
+    // Mixed Relay: each squad nominates at most 3 (2 runners + 1 reserve), 6 per college. Half Marathon is unrestricted.
+    if (isMixedRelay && ownMixedRelay >= 3) {
+      setError('Mixed Relay quota is full for your squad. Each squad may nominate at most 3 athletes (2 runners + 1 reserve); the team needs 2 Men and 2 Women.');
+      setLoading(false);
+      return;
+    }
 
     // 6. Photo is strongly required for official VTU call room & ID badge issuance
     if (!photoPreview) {
