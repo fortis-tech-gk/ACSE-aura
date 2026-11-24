@@ -1,10 +1,16 @@
-name: Build Android AAB (local EAS build)
+name: Build Android AAB (GitHub runner) and submit to Play
 
-# Builds the Play Store bundle on the GitHub runner with `eas build --local`, which does not use
-# the EAS cloud build quota. Signing keys come from EAS (remote credentials).
+# The .aab is built here with Gradle (no EAS build, no EAS build quota). EAS is used only to
+# SUBMIT the bundle to Google Play.
 #
-# Needs one repository secret: EXPO_TOKEN (expo.dev -> account ganesh_a_k_11 -> Access tokens).
-# Run: Actions -> "Build Android AAB" -> Run workflow. The .aab is attached as an artifact.
+# Repository secrets needed:
+#   ANDROID_KEYSTORE_BASE64, ANDROID_KEYSTORE_PASSWORD, ANDROID_KEY_ALIAS, ANDROID_KEY_PASSWORD
+#       the upload keystore (export the existing one with `eas credentials`, so the Play build
+#       is signed with the same key as the APKs already handed out)
+#   EXPO_TOKEN               expo.dev access token (account ganesh_a_k_11), for `eas submit`
+#   PLAY_SERVICE_ACCOUNT_JSON  Play Console service-account key (only when submit = true)
+#
+# Run: Actions -> this workflow -> Run workflow. The .aab is also kept as an artifact.
 
 on:
   workflow_dispatch:
@@ -14,6 +20,18 @@ on:
         type: choice
         options: [athletes, officials]
         default: athletes
+      version_code:
+        description: Android versionCode (must be higher than any upload so far)
+        default: '3'
+      track:
+        description: Play track for submit
+        type: choice
+        options: [internal, alpha, beta, production]
+        default: alpha
+      submit:
+        description: Submit to Play after building
+        type: boolean
+        default: false
 
 jobs:
   build:
@@ -23,6 +41,9 @@ jobs:
     defaults:
       run:
         working-directory: frontend/mobile
+    env:
+      APP_VARIANT: ${{ inputs.variant }}
+      ANDROID_VERSION_CODE: ${{ inputs.version_code }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -36,17 +57,34 @@ jobs:
           java-version: 17
       - uses: android-actions/setup-android@v3
       - run: npm ci
-      - run: npm install -g eas-cli
-      - name: Build AAB
-        env:
-          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
-          EAS_NO_VCS: '1'
+      - name: Generate native project
         run: |
-          eas build --local --non-interactive --platform android \
-            --profile ${{ inputs.variant }}-production \
-            --output "$GITHUB_WORKSPACE/${{ inputs.variant }}.aab"
+          export EXPO_PUBLIC_API_URL=$(node -p "require('./eas.json').build.base.env.EXPO_PUBLIC_API_URL")
+          npx expo prebuild --platform android --no-install
+      - name: Build signed AAB
+        run: |
+          export EXPO_PUBLIC_API_URL=$(node -p "require('./eas.json').build.base.env.EXPO_PUBLIC_API_URL")
+          echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 -d > "$RUNNER_TEMP/upload.keystore"
+          cd android
+          ./gradlew bundleRelease --no-daemon \
+            -Pandroid.injected.signing.store.file="$RUNNER_TEMP/upload.keystore" \
+            -Pandroid.injected.signing.store.password='${{ secrets.ANDROID_KEYSTORE_PASSWORD }}' \
+            -Pandroid.injected.signing.key.alias='${{ secrets.ANDROID_KEY_ALIAS }}' \
+            -Pandroid.injected.signing.key.password='${{ secrets.ANDROID_KEY_PASSWORD }}'
+          cp app/build/outputs/bundle/release/app-release.aab "$GITHUB_WORKSPACE/${{ inputs.variant }}.aab"
       - uses: actions/upload-artifact@v4
         with:
           name: aura-${{ inputs.variant }}-aab
           path: ${{ github.workspace }}/${{ inputs.variant }}.aab
           retention-days: 14
+      - name: Submit to Google Play with EAS
+        if: ${{ inputs.submit }}
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+          EAS_NO_VCS: '1'
+        run: |
+          echo '${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}' > "$RUNNER_TEMP/play.json"
+          npm install -g eas-cli
+          eas submit --platform android --non-interactive \
+            --path "$GITHUB_WORKSPACE/${{ inputs.variant }}.aab" \
+            --key "$RUNNER_TEMP/play.json" --track ${{ inputs.track }}

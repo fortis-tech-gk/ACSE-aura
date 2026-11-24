@@ -68,6 +68,8 @@ module.exports = ({ config }) => {
     },
     android: {
       package: v.id,
+      // Set by the GitHub Actions Play build; EAS builds manage it remotely and ignore this
+      ...(process.env.ANDROID_VERSION_CODE ? { versionCode: Number(process.env.ANDROID_VERSION_CODE) } : {}),
       adaptiveIcon: {
         backgroundColor: '#E6F4FE',
         foregroundImage: './assets/android-icon-foreground.png',
