@@ -65,6 +65,7 @@ export default function RootLayout() {
           {/* Opened from More, on top of the tabs, so Back returns to More */}
           <Stack.Screen name="stay" />
           <Stack.Screen name="settings" />
+          <Stack.Screen name="certificate" />
           <Stack.Screen name="officials" />
         </Stack>
       </AthleteSessionProvider>

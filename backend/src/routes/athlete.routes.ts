@@ -10,6 +10,7 @@ import { isLoginThrottled, recordLoginFailure, clearLoginFailures, THROTTLE_MESS
  * AURA Athletes app API.
  *
  *   POST   /api/athlete/login        { bib, dob }  or  { qrToken }
+ *   GET    /api/athlete/certificate  Certificate of Participation data (after the meet, participants only)
  *   GET    /api/athlete/me           profile, photo, events, schedule (heat/lane/call room), hostel, meals
  *   POST   /api/athlete/push-token   { token, platform }  register this device for push notifications
  *   DELETE /api/athlete/push-token   { token }            unregister on logout
@@ -607,6 +608,77 @@ athleteRouter.get('/performance', authenticate, requireRole(['athlete']), async 
       official,
       results,
       collegeStanding,
+    });
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * GET /api/athlete/certificate
+ *
+ * Certificate of Participation for the logged-in athlete. Available only after the meet has
+ * finished (day after meet_settings.end_date, IST; 10 Dec 2026 if unset) and only to athletes
+ * who actually took part: accredited AND reported at a call room / roll call for at least one
+ * event (own heat or their relay team's). Set CERTIFICATE_FORCE_OPEN=true on staging to rehearse.
+ */
+const MEET_END_FALLBACK = '2026-12-10';
+
+athleteRouter.get('/certificate', authenticate, requireRole(['athlete']), async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const athleteId = req.user!.entityId;
+
+    const { data: settings } = await supabase.from('meet_settings').select('end_date').limit(1).maybeSingle();
+    const endDate: string = (settings as any)?.end_date || MEET_END_FALLBACK;
+    const forceOpen = process.env.CERTIFICATE_FORCE_OPEN === 'true';
+    if (!forceOpen && istToday() <= endDate) {
+      return res.json({ available: false, reason: 'NOT_FINISHED', meetEndDate: endDate, serverTime: new Date().toISOString() });
+    }
+
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('id, sslc_name, usn, bid_number, accreditation_status, squads ( colleges ( name ) )')
+      .eq('id', athleteId)
+      .maybeSingle();
+    if (!profile || profile.accreditation_status !== 'ACCREDITED') {
+      return res.json({ available: false, reason: 'NOT_PARTICIPATED', meetEndDate: endDate, serverTime: new Date().toISOString() });
+    }
+
+    const { data: members } = await supabase.from('relay_members').select('relay_team_id').eq('profile_id', athleteId);
+    const teamIds = (members || []).map((m: any) => m.relay_team_id);
+
+    const [ownHeat, teamHeat, ownRoll, teamRoll] = await Promise.all([
+      supabase.from('heat_athletes').select('id').eq('profile_id', athleteId).eq('call_room_reported', true).limit(1),
+      teamIds.length
+        ? supabase.from('heat_athletes').select('id').in('relay_team_id', teamIds).eq('call_room_reported', true).limit(1)
+        : Promise.resolve({ data: [] as any[] }),
+      supabase.from('roll_call_entries').select('id').eq('profile_id', athleteId).eq('status', 'REPORTED').limit(1),
+      teamIds.length
+        ? supabase.from('roll_call_entries').select('id').in('relay_team_id', teamIds).eq('status', 'REPORTED').limit(1)
+        : Promise.resolve({ data: [] as any[] }),
+    ]);
+    const participated = [ownHeat, teamHeat, ownRoll, teamRoll].some((r: any) => (r.data || []).length > 0);
+    if (!participated) {
+      return res.json({ available: false, reason: 'NOT_PARTICIPATED', meetEndDate: endDate, serverTime: new Date().toISOString() });
+    }
+
+    const { data: regs } = await supabase.from('registrations').select('kind, events ( name )').eq('profile_id', athleteId);
+    const events = (regs || [])
+      .filter((r: any) => r.kind !== 'reserve' && r.events?.name)
+      .map((r: any) => r.events.name as string);
+
+    const squad: any = profile.squads;
+    const college = Array.isArray(squad?.colleges) ? squad.colleges[0] : squad?.colleges;
+    return res.json({
+      available: true,
+      serverTime: new Date().toISOString(),
+      certificate: {
+        athleteName: profile.sslc_name,
+        usn: profile.usn,
+        collegeName: college?.name || '',
+        certificateNo: `AURA26-${String(profile.bid_number ?? 0).padStart(4, '0')}`,
+        events,
+      },
     });
   } catch (err: any) {
     return res.status(500).json({ error: err.message });

@@ -14,6 +14,8 @@ export default function MoreScreen() {
       <Card style={{ padding: 0, overflow: 'hidden' }}>
         <ListRow icon="bed" title="Stay & Meals" subtitle={`${me?.hostel?.name || 'Accommodation details'} · ${meals}/4 meals today`} onPress={() => router.push('/stay')} />
         <View style={s.divider} />
+        <ListRow icon="medal" title="Certificate" subtitle="Certificate of Participation — available after the meet" onPress={() => router.push('/certificate')} />
+        <View style={s.divider} />
         <ListRow icon="location" title="Directions to venue" subtitle={`${VENUE.name}, Kambipura`} onPress={openVenueDirections} />
         <View style={s.divider} />
         <ListRow icon="settings" title="Settings" subtitle="Reminders, notifications, refresh, log out" onPress={() => router.push('/settings')} />
