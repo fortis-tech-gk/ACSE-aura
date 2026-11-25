@@ -1,10 +1,10 @@
-import Link from 'next/link';
 import { requireFinance } from '@/lib/auth-guard';
 import { logoutAction } from '@/app/actions/auth';
 import { OfficialBanner } from '@/components/layout/OfficialBanner';
 import '@/components/layout/Navbar.css';
 import './admin.css';
 import StackTableLabels from './StackTableLabels';
+import AdminNav from './AdminNav';
 
 export const metadata = {
   // Private portal: keep out of search results
@@ -31,49 +31,7 @@ export default async function AdminLayout({
       {/* 3. SOLID DEEP NAVY ADMINISTRATIVE NAV BAR */}
       <nav className="univ-main-nav">
         <div className="univ-nav-inner">
-          <div className="univ-nav-menu">
-            {isFinance ? (
-              <Link href="/admin/payments" prefetch={true} className="univ-nav-link">
-                <span>💳 Payment Verification</span>
-              </Link>
-            ) : (
-              <>
-            <Link href="/admin" prefetch={true} className="univ-nav-link">
-              <span>📊 Dashboard</span>
-            </Link>
-            <Link href="/admin/colleges" prefetch={true} className="univ-nav-link">
-              <span>🏛️ Colleges &amp; Squads</span>
-            </Link>
-            <Link href="/admin/athletes" prefetch={true} className="univ-nav-link">
-              <span>🏃 Athletes Management</span>
-            </Link>
-            <Link href="/admin/payments" prefetch={true} className="univ-nav-link">
-              <span>💳 Payment Verification</span>
-            </Link>
-            <Link href="/admin/id-cards" prefetch={true} className="univ-nav-link">
-              <span>🪪 ID Cards Studio</span>
-            </Link>
-            <Link href="/admin/heats" prefetch={true} className="univ-nav-link">
-              <span>⏱️ Track Heats</span>
-            </Link>
-            <Link href="/admin/results" prefetch={true} className="univ-nav-link">
-              <span>✏️ Results &amp; Corrections</span>
-            </Link>
-            <Link href="/admin/score-sheets" prefetch={true} className="univ-nav-link">
-              <span>🖨️ Blank Score Sheets</span>
-            </Link>
-            <Link href="/admin/delegations" prefetch={true} className="univ-nav-link">
-              <span>📋 Delegations</span>
-            </Link>
-            <Link href="/registration-desk" className="univ-nav-link">
-              <span>✅ Registration Desk</span>
-            </Link>
-            <Link href="/admin/audit" prefetch={true} className="univ-nav-link">
-              <span>📜 Audit Log</span>
-            </Link>
-              </>
-            )}
-          </div>
+          <AdminNav isFinance={isFinance} />
 
           <div className="univ-nav-auth">
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', color: '#0f172a', fontSize: '0.825rem', fontWeight: 700, padding: '0.35rem 0.85rem', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '8px' }}>
