@@ -1,4 +1,5 @@
 import bcrypt from 'bcryptjs';
+import { createHash } from 'crypto';
 
 const ADJECTIVES = [
   'swift', 'bold', 'brave', 'sharp', 'rapid', 'stellar', 'golden', 'silver',
@@ -26,4 +27,12 @@ export async function hashPassword(plain: string): Promise<string> {
 
 export async function verifyPassword(plain: string, hash: string): Promise<boolean> {
   return bcrypt.compare(plain, hash);
+}
+
+/**
+ * Short fingerprint of a stored password hash (PED tokens carry it): when the password is reset
+ * the hash changes, the fingerprint no longer matches, and the old token stops working.
+ */
+export function passwordFingerprint(storedHash: string): string {
+  return createHash('sha256').update(String(storedHash)).digest('hex').slice(0, 16);
 }

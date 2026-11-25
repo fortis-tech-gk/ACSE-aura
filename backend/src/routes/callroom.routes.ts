@@ -7,6 +7,7 @@ import { assertEventScope, ProgressionError } from '../utils/progression';
 import { isLoginThrottled, recordLoginFailure, clearLoginFailures, THROTTLE_MESSAGE } from '../utils/login-throttle';
 import { verifyPassword } from '../utils/passphrase';
 import { invalidateCache } from '../middleware/cache';
+import { notifyPedsCallRoomClosed } from '../utils/ped-alerts';
 
 export const callRoomRouter = Router();
 
@@ -102,6 +103,7 @@ callRoomRouter.post('/override-close', requireRole(['meet_admin', 'referee']), a
       .eq('id', heatId);
     invalidateCache('live');
     invalidateCache('schedule');
+    notifyPedsCallRoomClosed(heatId);
     return res.json({ success: true, result: data, closedBy: official.display_name });
   } catch (err: any) {
     return res.status(err instanceof ProgressionError ? err.status : 500).json({ error: err.message });
@@ -422,6 +424,7 @@ callRoomRouter.post('/advance/:heatId', async (req: AuthenticatedRequest, res: R
     });
 
     if (error) return res.status(400).json({ error: error.message });
+    notifyPedsCallRoomClosed(heatId);
     return res.json({ success: true, result: data });
   } catch (err: any) {
     return res.status(500).json({ error: err.message });

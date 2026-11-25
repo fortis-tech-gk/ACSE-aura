@@ -137,6 +137,14 @@ export default function LoginScreen() {
             <Button title="Scan the QR on my ID card" icon="qr" variant="secondary" onPress={() => router.push('/scan')} />
           </Card>
 
+          <Card style={s.pedCard}>
+            <View style={{ flex: 1 }}>
+              <Text style={s.pedTitle}>College PED?</Text>
+              <Muted style={{ fontSize: 13 }}>Call room attendance, reserves, relay runners and results for your college.</Muted>
+            </View>
+            <Button title="Log in as PED" icon="person" variant="secondary" onPress={() => router.push('/ped/login')} />
+          </Card>
+
           <Button title="Directions to the venue" icon="location" variant="ghost" onPress={openVenueDirections} />
 
           <Muted style={{ textAlign: 'center', fontSize: 12.5 }}>
@@ -161,4 +169,6 @@ const s = StyleSheet.create({
   orRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   line: { flex: 1, height: 1, backgroundColor: colors.border },
   or: { color: colors.muted, fontWeight: '700' },
+  pedCard: { gap: 12, padding: 16 },
+  pedTitle: { fontSize: 16, fontWeight: '900', color: colors.navy },
 });

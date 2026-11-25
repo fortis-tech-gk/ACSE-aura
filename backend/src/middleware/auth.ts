@@ -13,6 +13,8 @@ const EFFECTIVE_JWT_SECRET: string = JWT_SECRET || 'vtu-athletics-dev-secret-cha
 
 export type UserRole =
   | 'squad_manager'
+  /** College PED in the athletes app: one login for both squads of the college */
+  | 'ped'
   | 'meet_admin'
   | 'finance_desk'
   | 'accreditation_volunteer'
@@ -32,14 +34,16 @@ export interface TokenPayload {
   gender?: 'men' | 'women';
   squadCode?: string;
   scopeEventIds?: string[];
+  /** PED login: fingerprint of the squad password used — a password reset logs the PED out */
+  pwv?: string;
 }
 
 export interface AuthenticatedRequest extends Request {
   user?: TokenPayload;
 }
 
-export function generateToken(payload: TokenPayload): string {
-  return jwt.sign(payload, EFFECTIVE_JWT_SECRET, { expiresIn: '7d' });
+export function generateToken(payload: TokenPayload, expiresIn: '7d' | '21d' = '7d'): string {
+  return jwt.sign(payload, EFFECTIVE_JWT_SECRET, { expiresIn });
 }
 
 /**

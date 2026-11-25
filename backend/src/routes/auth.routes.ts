@@ -3,6 +3,7 @@ import { isLoginThrottled, recordLoginFailure, clearLoginFailures, THROTTLE_MESS
 import { supabase } from '../config/supabase';
 import { generateToken } from '../middleware/auth';
 import { verifyPassword } from '../utils/passphrase';
+import { passwordFingerprint } from '../utils/passphrase';
 
 export const authRouter = Router();
 
@@ -57,6 +58,89 @@ authRouter.post('/squad/login', async (req: Request, res: Response) => {
         collegeId: squad.college_id,
         collegeName,
       },
+    });
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message || 'Internal server error' });
+  }
+});
+
+/**
+ * POST /api/auth/ped/login   (AURA Athletes app — "Log in as PED")
+ * Body: { collegeCode: string, passphrase: string }
+ * One login for the whole college: the Men's OR the Women's squad passphrase opens both squads.
+ * collegeCode may also be a squad code (e.g. ACSCE-M / ACSCE-W).
+ */
+authRouter.post('/ped/login', async (req: Request, res: Response) => {
+  try {
+    // Letters / digits / hyphens only, so input can never act as a wildcard in ilike
+    let code = String(req.body?.collegeCode || '').trim().toUpperCase().replace(/[^A-Z0-9-]/g, '');
+    const passphrase = String(req.body?.passphrase || '').trim();
+    if (!code || !passphrase) {
+      return res.status(400).json({ error: 'Enter your college code and the Men\'s or Women\'s password.' });
+    }
+
+    const ip = req.ip || 'unknown';
+    const throttleKey = `ped|${code.replace(/-(M|W|G)$/, '')}`;
+    if (await isLoginThrottled('squad', throttleKey, ip, 8, 100)) {
+      return res.status(429).json({ error: THROTTLE_MESSAGE });
+    }
+
+    let { data: college } = await supabase.from('colleges').select('id, name, code').ilike('code', code).maybeSingle();
+    if (!college) {
+      // A squad code (ACSCE-M) or a college code with the Men / Women suffix
+      const { data: squadByCode } = await supabase.from('squads').select('college_id').eq('squad_code', code).maybeSingle();
+      let collegeId = squadByCode?.college_id || null;
+      if (!collegeId && /-(M|W|G)$/.test(code)) {
+        const base = code.replace(/-(M|W|G)$/, '');
+        const { data: c2 } = await supabase.from('colleges').select('id').ilike('code', base).maybeSingle();
+        collegeId = c2?.id || null;
+      }
+      if (collegeId) {
+        const { data: c3 } = await supabase.from('colleges').select('id, name, code').eq('id', collegeId).maybeSingle();
+        college = c3;
+      }
+    }
+
+    const fail = async () => {
+      await recordLoginFailure('squad', throttleKey, ip);
+      return res.status(401).json({ error: 'Wrong college code or password. Use the Men\'s or the Women\'s registration password.' });
+    };
+    if (!college) return fail();
+
+    const { data: squads } = await supabase.from('squads').select('id, gender, passphrase_hash').eq('college_id', college.id);
+    // Issued passphrases are lowercase; tolerate an auto-capitalised first letter on phones
+    const tries = Array.from(new Set([passphrase, passphrase.toLowerCase()]));
+    let matched: string | null = null;
+    for (const sq of squads || []) {
+      for (const t of tries) {
+        if (sq.passphrase_hash && (await verifyPassword(t, sq.passphrase_hash))) {
+          matched = sq.passphrase_hash;
+          break;
+        }
+      }
+      if (matched) break;
+    }
+    if (!matched) return fail();
+    await clearLoginFailures('squad', throttleKey);
+
+    // 21 days: a PED who logs in a week before must not be logged out during the meet. The token
+    // carries a fingerprint of the password used, so resetting that password logs the PED out.
+    const token = generateToken(
+      {
+        role: 'ped',
+        entityId: college.id,
+        collegeId: college.id,
+        squadCode: college.code,
+        displayName: college.name,
+        pwv: passwordFingerprint(matched),
+      },
+      '21d'
+    );
+    return res.json({
+      success: true,
+      token,
+      college: { id: college.id, name: college.name, code: college.code },
+      squads: (squads || []).map((s: any) => ({ id: s.id, gender: s.gender })),
     });
   } catch (err: any) {
     return res.status(500).json({ error: err.message || 'Internal server error' });

@@ -6,6 +6,7 @@ import * as Notifications from 'expo-notifications';
 import { useFonts } from 'expo-font';
 import { Cinzel_700Bold, Cinzel_900Black } from '@expo-google-fonts/cinzel';
 import { AthleteSessionProvider, useAthleteSession } from '@/lib/athlete-session';
+import { PedSessionProvider } from '@/lib/ped-session';
 import { APP_VARIANT } from '@/lib/config';
 
 // Show reminders and pushes even while the app is open
@@ -54,6 +55,7 @@ export default function RootLayout() {
   return (
     <SafeAreaProvider>
       <AthleteSessionProvider>
+        <PedSessionProvider>
         <PushRefresh />
         <VariantGuard />
         <StatusBar style="light" />
@@ -67,7 +69,10 @@ export default function RootLayout() {
           <Stack.Screen name="settings" />
           <Stack.Screen name="certificate" />
           <Stack.Screen name="officials" />
+          {/* College PED login (one login for the Men's and Women's squads) */}
+          <Stack.Screen name="ped" />
         </Stack>
+        </PedSessionProvider>
       </AthleteSessionProvider>
     </SafeAreaProvider>
   );

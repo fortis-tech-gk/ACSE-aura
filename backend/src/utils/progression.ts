@@ -22,6 +22,7 @@ import { supabase } from '../config/supabase';
 import { invalidateCache } from '../middleware/cache';
 import { sendPushToProfiles } from './push';
 import type { TokenPayload } from '../middleware/auth';
+import { notifyPedsResults } from './ped-alerts';
 
 /** VTU rule: the first 2 of each first-round heat qualify on place (Q); fastest losers (q) fill the lanes */
 export const QUALIFY_PER_HEAT = 2;
@@ -364,6 +365,7 @@ export async function finalizeHeat(
   invalidateCache('live');
   invalidateCache('leaderboard');
   invalidateCache('schedule');
+  notifyPedsResults(heatId);
 
   return {
     success: true,

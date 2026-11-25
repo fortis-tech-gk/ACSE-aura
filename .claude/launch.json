@@ -56,6 +56,15 @@
         "cd frontend/mobile && APP_VARIANT=officials EXPO_PUBLIC_API_URL=http://localhost:5055/api exec npx expo start --web --clear --port 8083"
       ],
       "port": 8083
+    },
+    {
+      "name": "athletes-web-local",
+      "runtimeExecutable": "bash",
+      "runtimeArgs": [
+        "-c",
+        "cd frontend/mobile && APP_VARIANT=athletes EXPO_PUBLIC_API_URL=http://localhost:5055/api exec npx expo start --web --clear --port 8084"
+      ],
+      "port": 8084
     }
   ]
 }

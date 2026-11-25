@@ -1,4 +1,4 @@
-import { createHash } from 'crypto';
+import { createHash, timingSafeEqual } from 'crypto';
 import express, { Request, Response, NextFunction } from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
@@ -24,6 +24,8 @@ import { publicRouter } from './routes/public.routes';
 import { athleteRouter } from './routes/athlete.routes';
 import { cateringRouter } from './routes/catering.routes';
 import { officialsRouter } from './routes/officials.routes';
+import { pedRouter } from './routes/ped.routes';
+import { runPedReminderTick } from './utils/ped-alerts';
 
 dotenv.config();
 
@@ -157,6 +159,24 @@ app.use('/api/leaderboard', leaderboardRouter);
 app.use('/api/athlete', athleteRouter);
 app.use('/api/catering', cateringRouter);
 app.use('/api/officials', officialsRouter);
+app.use('/api/ped', pedRouter);
+
+// PED call room alerts (30 / 20 / 10 min before the call room time). Cloud Run idles when there
+// is no traffic, so Cloud Scheduler calls this every minute with the X-Cron-Secret header
+// (PED_CRON_SECRET). Each alert is claimed in ped_alerts_sent, so repeats are harmless.
+const PED_CRON_SECRET = process.env.PED_CRON_SECRET || '';
+app.post('/api/internal/ped-alerts/tick', async (req: Request, res: Response) => {
+  const given = Buffer.from(String(req.headers['x-cron-secret'] || ''));
+  const want = Buffer.from(PED_CRON_SECRET);
+  if (!PED_CRON_SECRET || given.length !== want.length || !timingSafeEqual(given, want)) {
+    return res.status(403).json({ error: 'Forbidden' });
+  }
+  try {
+    return res.json({ success: true, ...(await runPedReminderTick()) });
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message });
+  }
+});
 app.use('/api', publicRouter);
 
 // 7. Global 404 handler
@@ -174,6 +194,15 @@ app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
 });
 
 // 9. Start Server with Graceful Shutdown
+// While a production instance is up, also check every minute on its own (the cron call covers idle
+// time). Off elsewhere, so a laptop pointed at a real database never sends real pushes.
+if (process.env.NODE_ENV === 'production' || process.env.PED_ALERT_TIMER === '1') {
+  const pedTimer = setInterval(() => {
+    runPedReminderTick().catch((err) => console.warn('PED alert tick failed:', err?.message));
+  }, 60_000);
+  pedTimer.unref();
+}
+
 const server = app.listen(PORT, () => {
   console.log(`=============================================`);
   console.log(`🚀 VTU SportsOS Backend API running`);

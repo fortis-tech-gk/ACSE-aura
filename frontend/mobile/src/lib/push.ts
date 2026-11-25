@@ -21,23 +21,24 @@ function projectId(): string | undefined {
   );
 }
 
-export async function registerPushToken(authToken: string): Promise<void> {
+/** `path`: '/athlete/push-token' (athlete login) or '/ped/push-token' (college PED login) */
+export async function registerPushToken(authToken: string, path = '/athlete/push-token'): Promise<void> {
   try {
     if (!Device.isDevice || !projectId()) return;
     if ((await getNotificationPermission()) !== 'granted') return;
     await ensureNotificationChannel();
     const { data } = await Notifications.getExpoPushTokenAsync({ projectId: projectId() });
-    await api('/athlete/push-token', { method: 'POST', token: authToken, body: { token: data, platform: Platform.OS } });
+    await api(path, { method: 'POST', token: authToken, body: { token: data, platform: Platform.OS } });
     await AsyncStorage.setItem(PUSH_TOKEN_KEY, data);
   } catch {
     // Offline or not configured: local reminders still work; retried on next refresh
   }
 }
 
-export async function unregisterPushToken(authToken: string): Promise<void> {
+export async function unregisterPushToken(authToken: string, path = '/athlete/push-token'): Promise<void> {
   try {
     const token = await AsyncStorage.getItem(PUSH_TOKEN_KEY);
-    if (token) await api('/athlete/push-token', { method: 'DELETE', token: authToken, body: { token }, timeoutMs: 5000 });
+    if (token) await api(path, { method: 'DELETE', token: authToken, body: { token }, timeoutMs: 5000 });
   } catch {
     // best effort
   } finally {

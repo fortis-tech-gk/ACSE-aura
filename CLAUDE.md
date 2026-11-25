@@ -76,6 +76,7 @@ frontend/web/
 - **Relay Events**:
   - **Rule 3 & 24**: Mutual exclusivity between divisional relays — an athlete can participate in **at most one** divisional relay (either `4x100m` OR `4x400m`, never both).
   - **No relay team building (removed 16-11-2026)**: PEDs only tick on the athlete form whether an athlete runs a relay (4x100m / 4x400m / Mixed). There is no Relay Teams page, no leg/reserve assignment, and incomplete relays never block payment. Do not re-add a lineup step or a relay-readiness gate.
+  - **Meet-time changes by the PED (athletes app, 26-11-2026)**: after registration, a college PED logs in to the AURA Athletes app (college code + the Men's OR Women's passphrase, one login for both squads) and can (a) swap a reserve into an individual event in place of a college athlete — a reserve who already has 2 individual events must give one up — and (b) pick the 4 running members / legs of each relay. Both close at **22:00 IST the day before the event** (`ped_swap_reserve` / `ped_set_relay_runners`, migration 0053; API `backend/src/routes/ped.routes.ts`). This is not part of web registration; the no-lineup rule above still applies to the website.
   - **Cap**: max 6 athletes nominated per divisional relay per squad; max 6 per college for the Mixed Relay.
   - **Rule 27 (4x400m Mixed Relay)**: Unrestricted across individual events; the W-M-W-M running order is settled on the day, not in registration.
 - **Half Marathon (21km)**:

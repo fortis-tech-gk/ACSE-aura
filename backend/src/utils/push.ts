@@ -25,8 +25,25 @@ export async function sendPushToProfiles(profileIds: string[], message: PushMess
     .eq('app', 'athletes')
     .in('profile_id', ids);
   if (error || !rows || rows.length === 0) return 0;
+  return sendToTokens(rows.map((r: any) => r.expo_push_token as string), message);
+}
 
-  const tokens = rows.map((r: any) => r.expo_push_token as string);
+/** Push to the PED phones of these colleges (PED login in the athletes app) */
+export async function sendPushToColleges(collegeIds: string[], message: PushMessage): Promise<number> {
+  const ids = Array.from(new Set(collegeIds.filter(Boolean)));
+  if (ids.length === 0) return 0;
+
+  const { data: rows, error } = await supabase
+    .from('device_push_tokens')
+    .select('expo_push_token')
+    .eq('app', 'athletes')
+    .is('profile_id', null)
+    .in('college_id', ids);
+  if (error || !rows || rows.length === 0) return 0;
+  return sendToTokens(rows.map((r: any) => r.expo_push_token as string), message);
+}
+
+async function sendToTokens(tokens: string[], message: PushMessage): Promise<number> {
   let sent = 0;
   for (let i = 0; i < tokens.length; i += CHUNK) {
     const batch = tokens.slice(i, i + CHUNK);

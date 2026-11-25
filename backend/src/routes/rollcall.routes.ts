@@ -8,6 +8,7 @@ import { signPhotoFieldsDeep, signPhotoUrl } from '../utils/photo-links';
 import { sendPushToProfiles } from '../utils/push';
 import { fetchAll } from '../utils/fetch-all';
 import { istIso } from './officials.routes';
+import { notifyPedsRollCallClosed } from '../utils/ped-alerts';
 
 /**
  * Event roll call (first round of an event, 25-11-2026):
@@ -297,6 +298,8 @@ rollCallRouter.post('/prepare', async (req: AuthenticatedRequest, res: Response)
 
     invalidateCache('live');
     invalidateCache('schedule');
+    // College PEDs: who did not report and is now DNS
+    notifyPedsRollCallClosed(eventId, stage);
 
     // Tell each athlete their heat and lane (best effort)
     const heatIds: string[] = (data as any)?.heats_created || [];
