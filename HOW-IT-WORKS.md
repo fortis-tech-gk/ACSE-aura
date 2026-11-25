@@ -103,7 +103,7 @@ college amount once.
   office. Only an admin can unlock a squad.
 
 ### Deadlines
-Registration closes on **25 November 2026**. The admin closes it, and after that nothing can be added.
+Registration is open without a fine until **29 November 2026**, and until **30 November 2026** with a late fine of ₹1,000. The admin closes it after that, and then nothing can be added.
 
 ---
 

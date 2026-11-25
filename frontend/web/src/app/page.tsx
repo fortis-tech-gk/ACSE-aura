@@ -14,6 +14,7 @@ import TransitRoutes from './TransitRoutes';
 import LeadershipAndRanks from './LeadershipAndRanks';
 import WelcomeBanner from './WelcomeBanner';
 import { Navbar } from '@/components/layout/Navbar';
+import { RegistrationDeadlineNotice } from '@/components/layout/RegistrationDeadlineNotice';
 import './home.css';
 import { SITE_URL, SITE_DESCRIPTION } from '@/lib/site';
 
@@ -76,6 +77,8 @@ export default function HomePage() {
       {/* 1. OFFICIAL UNIVERSITY IDENTITY & NAVIGATION */}
       <Navbar />
 
+      <RegistrationDeadlineNotice />
+
       {/* First-visit announcement banner (dismissed state kept in localStorage) */}
       <WelcomeBanner />
 
@@ -125,7 +128,7 @@ export default function HomePage() {
                 <div className="meta-strip-sep" aria-hidden="true" />
                 <div className="meta-strip-item">
                   <span className="meta-strip-label">REGISTRATION DEADLINE</span>
-                  <span className="meta-strip-val">25-11-2026</span>
+                  <span className="meta-strip-val">29-11-2026 (till 30-11-2026 with ₹1,000 late fine)</span>
                 </div>
               </div>
 

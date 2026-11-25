@@ -94,7 +94,7 @@ export default function CountdownTimer() {
         </div>
         <div className="param-row">
           <span className="param-title">Registration Deadline</span>
-          <span className="param-detail">25-11-2026</span>
+          <span className="param-detail">29-11-2026 (till 30-11-2026 with ₹1,000 late fine)</span>
         </div>
       </div>
 

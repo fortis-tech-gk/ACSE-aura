@@ -1,5 +1,6 @@
 import { requireSquad } from '@/lib/auth-guard';
 import { OfficialBanner } from '@/components/layout/OfficialBanner';
+import { RegistrationDeadlineNotice } from '@/components/layout/RegistrationDeadlineNotice';
 import { SquadNav } from './SquadNav';
 import '@/components/layout/Navbar.css';
 import './dashboard/dashboard.css';
@@ -23,6 +24,8 @@ export default async function SquadLayout({
     <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', background: '#f8fafc', width: '100%', maxWidth: '100%', overflowX: 'clip' }}>
       {/* 1. Official Top Banner with Bilingual Crest & Dual Emblems (ACSCE left, VTU right) */}
       <OfficialBanner portalBadge="INSTITUTION DELEGATION PORTAL &bull; 28TH VTU ATHLETIC MEET 2026" />
+
+      <RegistrationDeadlineNotice />
 
       {/* 2. Responsive Sticky Navigation Bar with Active Tabs */}
       <SquadNav
