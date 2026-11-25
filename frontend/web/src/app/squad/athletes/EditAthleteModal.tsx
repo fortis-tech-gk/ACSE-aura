@@ -5,6 +5,7 @@ import React, { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { updateAthleteAction, UpdateAthleteResult } from '@/app/actions/athletes';
 import { validateDateOfBirth, EARLIEST_DOB } from '@/lib/eligibility';
+import { validateIdNumber, normalizeIdNumber, idTypeOf, type IdType } from '@/lib/aadhaar';
 
 export interface EditableAthlete {
   id: string;
@@ -39,6 +40,7 @@ export default function EditAthleteModal({ athlete, onClose, onSaved }: Props) {
   const [joiningDate, setJoiningDate] = useState(toDateInput(athlete.college_joining_date));
   const [semStartDate, setSemStartDate] = useState(toDateInput(athlete.sem_start_date));
   const [aadhaarNumber, setAadhaarNumber] = useState(athlete.aadhaar_number || '');
+  const [idType, setIdType] = useState<IdType>(idTypeOf(athlete.aadhaar_number));
   const [phone, setPhone] = useState(athlete.phone || '');
   const [dateOfBirth, setDateOfBirth] = useState(toDateInput(athlete.date_of_birth || ''));
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
@@ -91,9 +93,10 @@ export default function EditAthleteModal({ athlete, onClose, onSaved }: Props) {
     setError(null);
 
     const cleanUsn = usn.trim().toUpperCase();
-    const cleanAadhaar = aadhaarNumber.replace(/[\s-]/g, '');
+    const cleanAadhaar = normalizeIdNumber(aadhaarNumber);
     if (!sslcName.trim()) return setError('Full name is required.');
-    if (!/^\d{12}$/.test(cleanAadhaar)) return setError('Aadhaar Number must be exactly 12 numeric digits.');
+    const idError = validateIdNumber(idType, cleanAadhaar);
+    if (idError) return setError(idError);
     if (!/^[6-9]\d{9}$/.test(phone)) return setError("Enter the student's 10-digit mobile number (e.g. 9876543210).");
     const dobError = validateDateOfBirth(dateOfBirth);
     if (dobError) return setError(dobError);
@@ -111,6 +114,7 @@ export default function EditAthleteModal({ athlete, onClose, onSaved }: Props) {
     formData.set('collegeJoiningDate', joiningDate);
     formData.set('semStartDate', semStartDate);
     formData.set('aadhaarNumber', cleanAadhaar);
+    formData.set('idType', idType);
     formData.set('phone', phone);
     formData.set('dateOfBirth', dateOfBirth);
     if (photoPreview) formData.set('photoData', photoPreview);
@@ -271,13 +275,27 @@ export default function EditAthleteModal({ athlete, onClose, onSaved }: Props) {
               </select>
             </div>
             <div>
-              <label style={labelStyle} htmlFor="edit-aadhaar">Aadhaar Number *</label>
+              <label style={labelStyle} htmlFor="edit-id-type">ID Proof *</label>
+              <select
+                id="edit-id-type"
+                value={idType}
+                onChange={(e) => setIdType(e.target.value as IdType)}
+                style={{ ...inputStyle, marginBottom: '0.5rem' }}
+              >
+                <option value="aadhaar">Aadhaar Card</option>
+                <option value="passport">Passport (NRI / foreign)</option>
+              </select>
+              <label style={labelStyle} htmlFor="edit-aadhaar">{idType === 'passport' ? 'Passport Number *' : 'Aadhaar Number *'}</label>
               <input
                 id="edit-aadhaar"
                 value={aadhaarNumber}
-                onChange={(e) => setAadhaarNumber(e.target.value.replace(/[^\d\s-]/g, ''))}
-                inputMode="numeric"
-                maxLength={14}
+                onChange={(e) => setAadhaarNumber(
+                  idType === 'passport'
+                    ? e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '')
+                    : e.target.value.replace(/[^\d\s-]/g, ''),
+                )}
+                inputMode={idType === 'passport' ? 'text' : 'numeric'}
+                maxLength={idType === 'passport' ? 15 : 14}
                 style={inputStyle}
                 required
               />

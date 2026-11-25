@@ -109,7 +109,7 @@ const STEPS: Step[] = [
           <tbody>
             <tr><td style={td}>Full name</td><td style={td}>Exactly as printed on the SSLC (10th) marks card</td></tr>
             <tr><td style={td}>USN</td><td style={td}>VTU USN, e.g. <code>1RV21CS001</code>. First-year students without a USN can enter a temporary one (any text). Each USN can be registered only once in the whole championship</td></tr>
-            <tr><td style={td}>Aadhaar number</td><td style={td}>Exactly 12 digits. Each Aadhaar can be registered only once in the whole championship</td></tr>
+            <tr><td style={td}>Aadhaar / Passport number</td><td style={td}>Aadhaar: exactly 12 digits. NRI / foreign students without an Aadhaar choose &quot;Passport&quot; as the ID proof and enter their passport number (6–15 letters/digits). Each number can be registered only once in the whole championship</td></tr>
             <tr><td style={td}>Student phone number</td><td style={td}>The student&apos;s own 10-digit mobile number (e.g. 9876543210)</td></tr>
             <tr><td style={td}>Semester</td><td style={td}>Current semester (1–10)</td></tr>
             <tr><td style={td}>Blood group</td><td style={td}>e.g. O+, B−</td></tr>

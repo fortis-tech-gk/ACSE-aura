@@ -232,8 +232,13 @@ export default function AmendmentsManager({ athletes, initialAmendments }: Props
 
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
               <div className="form-group">
-                <label className="form-label" htmlFor="newAadhaar">Aadhaar Number</label>
-                <input id="newAadhaar" name="newAadhaar" type="text" inputMode="numeric" required maxLength={14} placeholder="12 digits" className="input-field" />
+                <label className="form-label" htmlFor="newIdType">ID Proof</label>
+                <select id="newIdType" name="newIdType" defaultValue="aadhaar" className="input-field" style={{ marginBottom: '0.4rem' }}>
+                  <option value="aadhaar">Aadhaar Card</option>
+                  <option value="passport">Passport (NRI / foreign)</option>
+                </select>
+                <label className="form-label" htmlFor="newAadhaar">Aadhaar / Passport Number</label>
+                <input id="newAadhaar" name="newAadhaar" type="text" required maxLength={15} placeholder="12-digit Aadhaar or passport no." className="input-field" />
               </div>
               <div className="form-group">
                 <label className="form-label" htmlFor="newPhone">Student Mobile</label>

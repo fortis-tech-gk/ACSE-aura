@@ -6,7 +6,7 @@ import { revalidatePath } from 'next/cache';
 import { rosterEditBlockReason } from '@/lib/roster-window';
 import { validateDateOfBirth } from '@/lib/eligibility';
 import { getEventsCatalogue, getEventsByCodes } from '@/lib/events-catalogue';
-import { validateAadhaar } from '@/lib/aadhaar';
+import { validateIdNumber, normalizeIdNumber, type IdType } from '@/lib/aadhaar';
 import { signAthletePhoto, signAthletePhotos } from '@/lib/photo-links';
 
 export interface AddAthleteResult {
@@ -91,7 +91,8 @@ export async function addAthleteAction(formData: FormData): Promise<AddAthleteRe
   const bloodGroup = (formData.get('bloodGroup') as string || '').trim();
   const collegeJoiningDate = formData.get('collegeJoiningDate') as string;
   const semStartDate = formData.get('semStartDate') as string;
-  const aadhaarNumber = (formData.get('aadhaarNumber') as string || '').trim().replace(/[\s-]/g, '');
+  const idType: IdType = formData.get('idType') === 'passport' ? 'passport' : 'aadhaar';
+  const aadhaarNumber = normalizeIdNumber(formData.get('aadhaarNumber') as string);
   const dateOfBirth = (formData.get('dateOfBirth') as string || '').trim();
   const phone = normalizePhone(formData.get('phone'));
 
@@ -113,10 +114,10 @@ export async function addAthleteAction(formData: FormData): Promise<AddAthleteRe
 
   // Identification Validation
   if (!sslcName || !usn || !semester || !bloodGroup || !collegeJoiningDate || !semStartDate || !aadhaarNumber) {
-    return { success: false, error: 'All student identification fields (including 12-digit Aadhaar Number) are mandatory.' };
+    return { success: false, error: 'All student identification fields (including Aadhaar / Passport Number) are mandatory.' };
   }
 
-  const aadhaarError = validateAadhaar(aadhaarNumber);
+  const aadhaarError = validateIdNumber(idType, aadhaarNumber);
   if (aadhaarError) {
     return { success: false, error: aadhaarError };
   }
@@ -183,7 +184,7 @@ export async function addAthleteAction(formData: FormData): Promise<AddAthleteRe
   if (existingAadhaar) {
     return {
       success: false,
-      error: 'This Aadhaar number is already registered for another athlete in the championship. Check the number, or contact the Meet Directorate if this is a mistake.',
+      error: 'This Aadhaar / Passport number is already registered for another athlete in the championship. Check the number, or contact the Meet Directorate if this is a mistake.',
     };
   }
 
@@ -658,7 +659,8 @@ export async function updateAthleteAction(formData: FormData): Promise<UpdateAth
     const bloodGroup = (formData.get('bloodGroup') as string || '').trim();
     const collegeJoiningDate = (formData.get('collegeJoiningDate') as string || '').trim();
     const semStartDate = (formData.get('semStartDate') as string || '').trim();
-    const aadhaarNumber = (formData.get('aadhaarNumber') as string || '').trim().replace(/[\s-]/g, '');
+    const idType: IdType = formData.get('idType') === 'passport' ? 'passport' : 'aadhaar';
+  const aadhaarNumber = normalizeIdNumber(formData.get('aadhaarNumber') as string);
     const dateOfBirth = (formData.get('dateOfBirth') as string || '').trim();
     const phone = normalizePhone(formData.get('phone'));
     const photoData = (formData.get('photoData') as string | null) || '';
@@ -675,9 +677,9 @@ export async function updateAthleteAction(formData: FormData): Promise<UpdateAth
     if (!owned) return { success: false, error: 'Athlete not found in your squad roster.' };
 
     if (!sslcName || !usn || !semester || !bloodGroup || !collegeJoiningDate || !semStartDate || !aadhaarNumber) {
-      return { success: false, error: 'All student identification fields (including 12-digit Aadhaar Number) are mandatory.' };
+      return { success: false, error: 'All student identification fields (including Aadhaar / Passport Number) are mandatory.' };
     }
-    const aadhaarError = validateAadhaar(aadhaarNumber);
+    const aadhaarError = validateIdNumber(idType, aadhaarNumber);
     if (aadhaarError) {
       return { success: false, error: aadhaarError };
     }
@@ -712,7 +714,7 @@ export async function updateAthleteAction(formData: FormData): Promise<UpdateAth
       supabaseAdmin.from('profiles').select('id, sslc_name').eq('usn', usn).neq('id', profileId).maybeSingle(),
     ]);
     if (aadhaarClash) {
-      return { success: false, error: 'This Aadhaar number is already registered for another athlete in the championship. Check the number, or contact the Meet Directorate if this is a mistake.' };
+      return { success: false, error: 'This Aadhaar / Passport number is already registered for another athlete in the championship. Check the number, or contact the Meet Directorate if this is a mistake.' };
     }
     if (usnClash) {
       return { success: false, error: 'This USN is already registered for another athlete in the championship. Check the USN, or contact the Meet Directorate if this is a mistake.' };
@@ -768,7 +770,7 @@ export async function updateAthleteAction(formData: FormData): Promise<UpdateAth
     if (updErr) {
       await removeUploadedPhoto(newPhotoPath);
       if (updErr.code === '23505') {
-        return { success: false, error: 'Another athlete is already registered with this USN or Aadhaar number.' };
+        return { success: false, error: 'Another athlete is already registered with this USN or Aadhaar / Passport number.' };
       }
       return { success: false, error: updErr.message };
     }

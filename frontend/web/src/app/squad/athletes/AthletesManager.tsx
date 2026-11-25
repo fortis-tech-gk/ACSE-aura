@@ -13,6 +13,7 @@ import RegistrationReportModal from '@/components/invoice/RegistrationReportModa
 import EditAthleteModal from './EditAthleteModal';
 import DobQuickFill from './DobQuickFill';
 import { validateDateOfBirth, EARLIEST_DOB } from '@/lib/eligibility';
+import { validateIdNumber, normalizeIdNumber, type IdType } from '@/lib/aadhaar';
 import Link from 'next/link';
 import Image from 'next/image';
 
@@ -150,6 +151,7 @@ export default function AthletesManager({
   const [joiningDate, setJoiningDate] = useState('');
   const [semStartDate, setSemStartDate] = useState('');
   const [aadhaarNumber, setAadhaarNumber] = useState('');
+  const [idType, setIdType] = useState<IdType>('aadhaar');
   const [phone, setPhone] = useState('');
   const [dateOfBirth, setDateOfBirth] = useState('');
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
@@ -305,6 +307,7 @@ export default function AthletesManager({
     setJoiningDate('');
     setSemStartDate('');
     setAadhaarNumber('');
+    setIdType('aadhaar');
     setPhone('');
     setDateOfBirth('');
     setPhotoPreview(null);
@@ -350,10 +353,11 @@ export default function AthletesManager({
       return;
     }
 
-    // 2. Validate Aadhaar
-    const cleanAadhaar = aadhaarNumber.trim().replace(/[\s-]/g, '');
-    if (!/^\d{12}$/.test(cleanAadhaar)) {
-      setError('Aadhaar Number must be exactly 12 numeric digits.');
+    // 2. Validate Aadhaar (or passport number for NRI / foreign students)
+    const cleanAadhaar = normalizeIdNumber(aadhaarNumber);
+    const idError = validateIdNumber(idType, cleanAadhaar);
+    if (idError) {
+      setError(idError);
       setLoading(false);
       return;
     }
@@ -367,7 +371,7 @@ export default function AthletesManager({
 
     // Check duplicate Aadhaar in local roster
     if (athletes.some((a) => a.aadhaar_number === cleanAadhaar)) {
-      setError(`An athlete with Aadhaar '${cleanAadhaar}' is already registered in this squad roster.`);
+      setError(`An athlete with ${idType === 'passport' ? 'Passport' : 'Aadhaar'} '${cleanAadhaar}' is already registered in this squad roster.`);
       setLoading(false);
       return;
     }
@@ -459,6 +463,7 @@ export default function AthletesManager({
     formData.set('collegeJoiningDate', joiningDate);
     formData.set('semStartDate', semStartDate);
     formData.set('aadhaarNumber', cleanAadhaar);
+    formData.set('idType', idType);
     formData.set('phone', phone);
     formData.set('dateOfBirth', dateOfBirth);
     formData.set('event1Id', event1);
@@ -755,7 +760,7 @@ export default function AthletesManager({
                   <th style={{ padding: '1rem', fontWeight: 600 }}>Bib / Status</th>
                   <th style={{ padding: '1rem', fontWeight: 600 }}>Athlete Name (SSLC)</th>
                   <th style={{ padding: '1rem', fontWeight: 600 }}>USN &amp; Sem</th>
-                  <th style={{ padding: '1rem', fontWeight: 600 }}>Aadhaar</th>
+                  <th style={{ padding: '1rem', fontWeight: 600 }}>Aadhaar / Passport</th>
                   <th style={{ padding: '1rem', fontWeight: 600 }}>Blood</th>
                   <th style={{ padding: '1rem', fontWeight: 600 }}>Events Registered</th>
                   <th style={{ padding: '1rem', fontWeight: 600 }}>Reserve Event</th>
@@ -1280,20 +1285,39 @@ export default function AthletesManager({
                       {/* Aadhaar Number & Student Photo Upload */}
                       <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '1rem', alignItems: 'flex-start', borderTop: '1px solid var(--border-color)', paddingTop: '1rem' }}>
                         <div>
-                          <label style={labelStyle}>Aadhaar Number (12 Digits) *</label>
+                          <label style={labelStyle} htmlFor="add-id-type">ID Proof *</label>
+                          <select
+                            id="add-id-type"
+                            value={idType}
+                            onChange={(e) => { setIdType(e.target.value as IdType); setAadhaarNumber(''); }}
+                            style={{ ...inputStyle, marginBottom: '0.5rem' }}
+                          >
+                            <option value="aadhaar">Aadhaar Card (Indian students)</option>
+                            <option value="passport">Passport (NRI / foreign students)</option>
+                          </select>
+                          <label style={labelStyle} htmlFor="add-id-number">
+                            {idType === 'passport' ? 'Passport Number *' : 'Aadhaar Number (12 Digits) *'}
+                          </label>
                           <input
+                            id="add-id-number"
                             type="text"
                             required
-                            maxLength={12}
-                            pattern="\d{12}"
-                            placeholder="123456789012"
+                            inputMode={idType === 'passport' ? 'text' : 'numeric'}
+                            maxLength={idType === 'passport' ? 15 : 12}
+                            placeholder={idType === 'passport' ? 'e.g. K1234567' : '123456789012'}
                             value={aadhaarNumber}
-                            onChange={(e) => setAadhaarNumber(e.target.value.replace(/\D/g, ''))}
+                            onChange={(e) => setAadhaarNumber(
+                              idType === 'passport'
+                                ? e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '')
+                                : e.target.value.replace(/\D/g, ''),
+                            )}
                             style={{ ...inputStyle, fontFamily: 'monospace', letterSpacing: '0.08em', fontWeight: 700 }}
                             autoComplete="off"
                           />
                           <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', display: 'block', marginTop: '0.25rem' }}>
-                            12 digits. Unique per championship athlete.
+                            {idType === 'passport'
+                              ? 'Only for students without an Aadhaar. As printed on the passport. Unique per championship athlete.'
+                              : '12 digits. Unique per championship athlete.'}
                           </span>
 
                           <label style={{ ...labelStyle, marginTop: '0.9rem' }} htmlFor="add-phone">Student Phone Number *</label>

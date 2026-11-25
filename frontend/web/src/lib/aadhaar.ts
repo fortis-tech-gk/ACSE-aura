@@ -41,3 +41,35 @@ export function validateAadhaar(aadhaar: string): string | null {
   }
   return null;
 }
+
+/**
+ * NRI / foreign students who have no Aadhaar register with their passport number instead. Both are
+ * stored in `profiles.aadhaar_number` (it is the championship-wide identity key); a 12-digit
+ * numeric value is an Aadhaar, anything else is a passport number.
+ */
+export type IdType = 'aadhaar' | 'passport';
+
+export const PASSPORT_REGEX = /^[A-Z0-9]{6,15}$/;
+
+/** Strips spaces / hyphens and upper-cases, so the same ID always compares equal. */
+export function normalizeIdNumber(raw: string): string {
+  return (raw || '').trim().replace(/[\s-]/g, '').toUpperCase();
+}
+
+export function idTypeOf(stored: string | null | undefined): IdType {
+  return /^\d{12}$/.test(stored || '') || !stored ? 'aadhaar' : 'passport';
+}
+
+/** Returns an error message, or null when the ID number (Aadhaar or passport) is acceptable. */
+export function validateIdNumber(idType: IdType, value: string): string | null {
+  if (idType === 'passport') {
+    if (!PASSPORT_REGEX.test(value)) {
+      return 'Passport Number must be 6–15 letters/digits (as printed on the passport, no spaces).';
+    }
+    if (/^\d{12}$/.test(value)) {
+      return 'A 12-digit number is an Aadhaar number — choose "Aadhaar" as the ID type.';
+    }
+    return null;
+  }
+  return validateAadhaar(value);
+}

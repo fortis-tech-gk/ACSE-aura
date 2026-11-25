@@ -4,7 +4,7 @@ import { supabaseAdmin } from '@/lib/supabase';
 import { requireAdmin } from '@/lib/auth-guard';
 import { revalidatePath } from 'next/cache';
 import { validateDateOfBirth } from '@/lib/eligibility';
-import { validateAadhaar } from '@/lib/aadhaar';
+import { validateIdNumber, normalizeIdNumber } from '@/lib/aadhaar';
 
 /**
  * Executes the master registration lock and generates contiguous bid/chest numbers
@@ -104,7 +104,8 @@ export async function substituteAthleteAction(formData: FormData) {
   const newJoiningDate = formData.get('newJoiningDate') as string;
   const newSemStartDate = formData.get('newSemStartDate') as string;
   const newDob = (formData.get('newDateOfBirth') as string || '').trim();
-  const newAadhaar = (formData.get('newAadhaar') as string || '').trim().replace(/[\s-]/g, '');
+  const newIdType = formData.get('newIdType') === 'passport' ? 'passport' : 'aadhaar';
+  const newAadhaar = normalizeIdNumber(formData.get('newAadhaar') as string);
   let newPhone = String(formData.get('newPhone') || '').replace(/[\s-]/g, '');
   if (newPhone.startsWith('+91')) newPhone = newPhone.slice(3);
   else if (newPhone.length === 12 && newPhone.startsWith('91')) newPhone = newPhone.slice(2);
@@ -123,7 +124,7 @@ export async function substituteAthleteAction(formData: FormData) {
   if (newSemStartDate < newJoiningDate) return { success: false, error: 'Present year start date cannot be earlier than the joining date.' };
   const dobError = validateDateOfBirth(newDob);
   if (dobError) return { success: false, error: dobError };
-  const aadhaarError = validateAadhaar(newAadhaar);
+  const aadhaarError = validateIdNumber(newIdType, newAadhaar);
   if (aadhaarError) return { success: false, error: aadhaarError };
   if (!/^[6-9]\d{9}$/.test(newPhone)) return { success: false, error: "Enter the student's 10-digit mobile number." };
   if (!photo || typeof photo.arrayBuffer !== 'function' || photo.size === 0) {
@@ -141,7 +142,7 @@ export async function substituteAthleteAction(formData: FormData) {
   ]);
   if (!slot) return { success: false, error: 'Withdrawn slot not found.' };
   if (dupUsn) return { success: false, error: 'This USN is already registered for another athlete in the championship.' };
-  if (dupAadhaar) return { success: false, error: 'This Aadhaar number is already registered for another athlete in the championship.' };
+  if (dupAadhaar) return { success: false, error: 'This Aadhaar / Passport number is already registered for another athlete in the championship.' };
 
   await supabaseAdmin.storage.createBucket('athlete-photos', { public: false }).catch(() => {});
   const path = `${slot.squad_id}/${Date.now()}_${newUsn}.${ext}`;
