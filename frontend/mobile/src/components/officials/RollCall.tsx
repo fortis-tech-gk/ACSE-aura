@@ -6,7 +6,6 @@ import { useHeat } from '@/lib/officials/useHeat';
 import { useOfficialsLayout } from '@/lib/officials/layout';
 import { athleteIdFromQr } from '@/lib/officials/scan-logic';
 import { confirm, notify } from '@/lib/officials/confirm';
-import { STAGE } from '@/lib/officials/heats';
 import type { AthleteRef, OpPayload } from '@/lib/officials/types';
 import { ScanPanel } from './ScanPanel';
 import { Button, Card, Muted, OfflineBanner, Pill, colors, shadow } from '@/components/ui';
@@ -57,6 +56,7 @@ export function RollCall({ eventId, stage }: { eventId: string; stage: string })
   const isOpen = rc?.status === 'OPEN';
   const drawn = rc?.status === 'DRAWN';
   const field = !!data?.event.category.startsWith('field');
+  const relay = data?.event.category === 'relay';
 
   /** Server status, then what is saved on the device but not sent yet */
   const statusOf = useMemo(() => {
@@ -137,7 +137,7 @@ export function RollCall({ eventId, stage }: { eventId: string; stage: string })
     setBusy(false);
     if (r.status === 'ok') {
       const res = r.data?.result || {};
-      notify('Heats prepared', `${res.num_heats ?? '?'} heat${res.num_heats === 1 ? '' : 's'} · ${res.reported ?? counts.present} athletes · ${res.dns ?? 0} DNS. Sent to the referee.`);
+      notify('Heats prepared', `${res.num_heats ?? '?'} heat${res.num_heats === 1 ? '' : 's'} · ${res.reported ?? counts.present} ${relay ? 'teams' : 'athletes'} · ${res.dns ?? 0} DNS. Sent to the referee.`);
     }
   }
 
@@ -223,7 +223,7 @@ export function RollCall({ eventId, stage }: { eventId: string; stage: string })
       <OfflineBanner offline={offline} lastSyncedAt={savedAt} note="Scans are saved on this device and sent when the network is back. Preparing heats needs the internet." />
       <View style={s.head}>
         <Text style={s.title}>{data.event.name}</Text>
-        <Muted>{`${STAGE[data.stage] || data.stage} · roll call`}</Muted>
+        <Muted>{`${data.stage === 'FINAL' ? 'Final' : 'First round'} · roll call`}</Muted>
       </View>
 
       {!rc && (

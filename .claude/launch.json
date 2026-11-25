@@ -38,6 +38,24 @@
         "cd frontend/mobile && APP_VARIANT=athletes EXPO_PUBLIC_API_URL=https://aura-api-staging-wgebilkjsa-el.a.run.app/api exec npx expo start --web --clear --port 8082"
       ],
       "port": 8082
+    },
+    {
+      "name": "api-local-staging",
+      "runtimeExecutable": "bash",
+      "runtimeArgs": [
+        "-c",
+        "cd backend && set -a && . ../frontend/web/.env.stag && set +a && SUPABASE_URL=$NEXT_PUBLIC_SUPABASE_URL JWT_SECRET=local-rollcall-test PORT=5055 NODE_ENV=development exec npx tsx src/server.ts"
+      ],
+      "port": 5055
+    },
+    {
+      "name": "officials-web-local",
+      "runtimeExecutable": "bash",
+      "runtimeArgs": [
+        "-c",
+        "cd frontend/mobile && APP_VARIANT=officials EXPO_PUBLIC_API_URL=http://localhost:5055/api exec npx expo start --web --clear --port 8083"
+      ],
+      "port": 8083
     }
   ]
 }
