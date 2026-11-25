@@ -474,6 +474,11 @@ export async function generateTrackHeatsAction(): Promise<{
 }> {
   const admin = await requireAdmin();
 
+  const { data: ms } = await supabaseAdmin.from('meet_settings').select('photo_finish_mode').limit(1).maybeSingle();
+  if ((ms as any)?.photo_finish_mode === 'MANUAL') {
+    return { success: false, error: 'Photo finish MANUAL mode is on: the vendor makes the heats. Enter them in Admin > Photo Finish, or switch back to App mode there.' };
+  }
+
   const { data: trackEvents, error: evErr } = await supabaseAdmin
     .from('events')
     .select('id, name, code, max_lanes, start_type, heats(status)')

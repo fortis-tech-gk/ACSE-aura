@@ -17,6 +17,7 @@ const ADMIN_LINKS: { href: string; label: string }[] = [
   { href: '/admin/payments', label: '💳 Payment Verification' },
   { href: '/admin/id-cards', label: '🪪 ID Cards Studio' },
   { href: '/admin/heats', label: '⏱️ Track Heats' },
+  { href: '/admin/photo-finish', label: '📸 Photo Finish' },
   { href: '/admin/results', label: '✏️ Results & Corrections' },
   { href: '/admin/score-sheets', label: '🖨️ Blank Score Sheets' },
   { href: '/admin/delegations', label: '📋 Delegations' },

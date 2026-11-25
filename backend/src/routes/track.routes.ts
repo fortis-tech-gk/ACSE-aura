@@ -119,6 +119,12 @@ trackRouter.post('/qualify', requireRole(['meet_admin']), async (req: Authentica
       return res.status(400).json({ error: 'eventId is required.' });
     }
 
+    // Photo finish MANUAL mode: the vendor makes every round, the app must not build one
+    const { data: modeRow } = await supabase.from('meet_settings').select('photo_finish_mode').limit(1).maybeSingle();
+    if (modeRow?.photo_finish_mode === 'MANUAL') {
+      return res.status(409).json({ error: 'Photo finish MANUAL mode is on: enter the next round (lane and bib) in Admin > Photo Finish.' });
+    }
+
     const { data, error } = await supabase.rpc('qualify_next_round', {
       p_event_id: eventId,
       p_current_stage: currentStage,

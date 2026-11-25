@@ -243,15 +243,6 @@ async function buildNextRound(heat: HeatRow, roundHeats: HeatRow[]) {
   const started = (existing || []).some((h: any) => h.status !== 'SCHEDULED' || (h.heat_athletes || []).some((a: any) => (Array.isArray(a.track_results) ? a.track_results.length : a.track_results)));
   if (started) return { nextStage, skipped: 'The next round has already started — not rebuilt.' };
 
-  const perHeat = seedHeats(qualified.map((q) => (q.profileId || q.relayTeamId)!), nHeats);
-
-  // Replace any not-started draft of the next round, then create it
-  if ((existing || []).length) {
-    const { error } = await supabase.from('heats').delete().in('id', (existing || []).map((h: any) => h.id));
-    if (error) throw new ProgressionError(`Could not clear the old ${nextStage} draft: ${error.message}`);
-  }
-  const relay = ev.category === 'relay';
-
   // Q / q marks on this round's start list (cleared first, in case the round is rebuilt)
   const roundIds = roundHeats.map((h) => h.id);
   await supabase.from('heat_athletes').update({ qualified_as: null }).in('heat_id', roundIds);
@@ -262,6 +253,22 @@ async function buildNextRound(heat: HeatRow, roundHeats: HeatRow[]) {
       if (qErr) throw new ProgressionError(`Could not mark the qualifiers: ${qErr.message}`);
     }
   }
+
+  // Photo finish MANUAL mode: the vendor makes the next round too. Only the Q / q marks are set here;
+  // the admin types lane + bib of the next round in Admin > Photo Finish.
+  const { data: modeRow } = await supabase.from('meet_settings').select('photo_finish_mode').limit(1).maybeSingle();
+  if (modeRow?.photo_finish_mode === 'MANUAL') {
+    return { nextStage, manual: true, qualified: qualified.length, note: 'Manual photo finish mode: enter the next round (lane and bib) in Admin > Photo Finish.' };
+  }
+
+  const perHeat = seedHeats(qualified.map((q) => (q.profileId || q.relayTeamId)!), nHeats);
+
+  // Replace any not-started draft of the next round, then create it
+  if ((existing || []).length) {
+    const { error } = await supabase.from('heats').delete().in('id', (existing || []).map((h: any) => h.id));
+    if (error) throw new ProgressionError(`Could not clear the old ${nextStage} draft: ${error.message}`);
+  }
+  const relay = ev.category === 'relay';
 
   const created: { heatId: string; heatNumber: number; entries: number }[] = [];
   for (let n = 0; n < nHeats; n++) {
