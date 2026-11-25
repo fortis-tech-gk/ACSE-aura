@@ -11,8 +11,9 @@ export const metadata = {
 export default async function AdminAmendmentsPage() {
   await requireAdmin();
 
-  // Every athlete (paged: one request returns at most 1,000)
-  const athletes = await fetchAllRows<any>(() =>
+  // Only athletes WITH a bib number can be withdrawn or have their voided slot reused, so only
+  // those are read (none before bibs are assigned). Amendments are read at the same time.
+  const [athletes, amendments] = await Promise.all([fetchAllRows<any>(() =>
     supabaseAdmin
     .from('profiles')
     .select(`
@@ -25,9 +26,10 @@ export default async function AdminAmendmentsPage() {
         squad_code
       )
     `)
+    .not('bid_number', 'is', null)
     .order('bid_number', { ascending: true })
     .order('id')
-  );
+  ), listAmendmentsAction()]);
 
   const formattedAthletes = athletes.map((a: any) => {
     const s = Array.isArray(a.squads) ? a.squads[0] : a.squads;
@@ -40,8 +42,6 @@ export default async function AdminAmendmentsPage() {
       accreditation_status: a.accreditation_status,
     };
   });
-
-  const amendments = await listAmendmentsAction();
 
   return (
     <div className="container" id="admin-amendments-page">

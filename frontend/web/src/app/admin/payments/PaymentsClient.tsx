@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { normalizePaymentStatus, creditedAmount } from '@/lib/payment-status';
-import { verifySquadPaymentAction } from '@/app/actions/admin-operations';
+import { verifySquadPaymentAction, getSquadRosterAction } from '@/app/actions/admin-operations';
 
 interface Props {
   squads: any[];
@@ -22,6 +22,15 @@ export default function PaymentsClient({ squads }: Props) {
   // Amount Finance actually finds credited in the bank statement for the UTR
   const [amountReceived, setAmountReceived] = useState('');
   const [actionError, setActionError] = useState<string | null>(null);
+  // Athletes of the open squad: read when the squad is opened, not for every squad on page load
+  const [roster, setRoster] = useState<{ squadId: string; athletes: any[] | null; error?: string } | null>(null);
+
+  async function openSquad(sq: any) {
+    setSelectedSquad(sq);
+    setRoster({ squadId: sq.id, athletes: null });
+    const res = await getSquadRosterAction(sq.id).catch((e) => ({ athletes: [], error: String(e?.message || e) }));
+    setRoster((cur) => (cur && cur.squadId === sq.id ? { squadId: sq.id, athletes: res.athletes, error: res.error } : cur));
+  }
 
   // Filter squads
   const filteredSquads = squads.filter((sq) => {
@@ -168,7 +177,7 @@ export default function PaymentsClient({ squads }: Props) {
             ) : (
               filteredSquads.map((sq) => {
                 const status = normalizePaymentStatus(sq.payment_status);
-                const athleteCount = sq.profiles?.length || 0;
+                const athleteCount = sq.athleteCount || 0;
                 const payment = sq.latestPayment;
 
                 return (
@@ -278,7 +287,7 @@ export default function PaymentsClient({ squads }: Props) {
                       <button
                         type="button"
                         onClick={() => {
-                          setSelectedSquad(sq);
+                          openSquad(sq);
                           setShowRejectInput(false);
                           setAmountReceived('');
                           setRejectionReason(sq.latestPayment?.rejection_reason || '');
@@ -414,7 +423,7 @@ export default function PaymentsClient({ squads }: Props) {
               {/* Participants Details Table */}
               <div style={{ marginTop: '1rem' }}>
                 <div style={{ fontSize: '0.85rem', fontWeight: 700, color: '#0f172a', marginBottom: '0.5rem' }}>
-                  Registered Participants in Delegation ({selectedSquad.profiles?.length || 0})
+                  Registered Participants in Delegation ({selectedSquad.athleteCount || 0})
                 </div>
                 <div style={{ border: '1px solid #e2e8f0', borderRadius: '8px', overflow: 'hidden', maxHeight: '220px', overflowY: 'auto' }}>
                   <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.8rem' }}>
@@ -427,14 +436,26 @@ export default function PaymentsClient({ squads }: Props) {
                       </tr>
                     </thead>
                     <tbody>
-                      {selectedSquad.profiles?.length === 0 ? (
+                      {!roster?.athletes ? (
+                        <tr>
+                          <td colSpan={4} style={{ padding: '1rem', textAlign: 'center', color: '#64748b' }}>
+                            Loading athletes…
+                          </td>
+                        </tr>
+                      ) : roster.error ? (
+                        <tr>
+                          <td colSpan={4} style={{ padding: '1rem', textAlign: 'center', color: '#b91c1c' }}>
+                            Could not load the athletes: {roster.error}
+                          </td>
+                        </tr>
+                      ) : roster.athletes.length === 0 ? (
                         <tr>
                           <td colSpan={4} style={{ padding: '1rem', textAlign: 'center', color: '#94a3b8' }}>
                             No athletes registered in this contingent.
                           </td>
                         </tr>
                       ) : (
-                        selectedSquad.profiles.map((p: any) => (
+                        roster.athletes.map((p: any) => (
                           <tr key={p.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
                             <td style={{ padding: '0.45rem 0.75rem', fontWeight: 600, color: '#0f172a' }}>
                               {p.sslc_name}

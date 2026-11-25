@@ -1,8 +1,7 @@
 import { requireAdmin } from '@/lib/auth-guard';
 import { supabaseAdmin } from '@/lib/supabase';
 import Link from 'next/link';
-import { fetchAllRows } from '@/lib/db-fetch-all';
-import { CertificatesView, type Placer, type Athlete } from './certificates-view';
+import { CertificatesView, type Placer } from './certificates-view';
 
 export const metadata = {
   title: 'Official Certificates Generator — VTU SportsOS',
@@ -11,36 +10,24 @@ export const metadata = {
 export default async function AdminCertificatesPage() {
   await requireAdmin();
 
-  // Fetch all awarded points/placers (1st, 2nd, 3rd)
-  const { data: placersRaw } = await supabaseAdmin
-    .from('team_points')
-    .select(`
-      id,
-      place,
-      points,
-      created_at,
-      events(id, name, code, gender, category),
-      colleges(id, name, code, district),
-      profiles(id, sslc_name, usn, bid_number)
-    `)
-    .lte('place', 3)
-    .order('created_at', { ascending: false });
-
-  // Every accredited athlete for Participation Certificates (paged: one request returns at most 1,000)
-  const athletesRaw = await fetchAllRows<any>(() =>
+  // Merit placers (a few hundred at most) and the accredited-athlete COUNT, read together. The
+  // participation athletes themselves are read only when that tab is opened.
+  const [{ data: placersRaw }, { count: participationCount }] = await Promise.all([
     supabaseAdmin
-    .from('profiles')
-    .select(`
-      id,
-      sslc_name,
-      usn,
-      bid_number,
-      squads(colleges(name, code, district))
-    `)
-    .eq('accreditation_status', 'ACCREDITED')
-    .order('sslc_name')
-    .order('id')
-  );
+      .from('team_points')
+      .select(`
+        id,
+        place,
+        points,
+        created_at,
+        events(id, name, code, gender, category),
+        colleges(id, name, code, district),
+        profiles(id, sslc_name, usn, bid_number)
+      `)
+      .lte('place', 3)
+      .order('created_at', { ascending: false }),
+    supabaseAdmin.from('profiles').select('id', { count: 'exact', head: true }).eq('accreditation_status', 'ACCREDITED'),
+  ]);
 
   const placers: Placer[] = ((placersRaw || []) as any[]).map((p) => ({
     id: p.id,
@@ -51,20 +38,6 @@ export default async function AdminCertificatesPage() {
     colleges: Array.isArray(p.colleges) ? p.colleges[0] : p.colleges,
     profiles: Array.isArray(p.profiles) ? p.profiles[0] : p.profiles,
   }));
-
-  const athletes: Athlete[] = ((athletesRaw || []) as any[]).map((a) => {
-    const squad = Array.isArray(a.squads) ? a.squads[0] : a.squads;
-    const college = squad && Array.isArray(squad.colleges) ? squad.colleges[0] : squad?.colleges;
-    return {
-      id: a.id,
-      sslc_name: a.sslc_name,
-      usn: a.usn,
-      bid_number: a.bid_number,
-      squads: {
-        colleges: college,
-      },
-    };
-  });
 
   return (
     <div className="container" id="admin-certificates-container">
@@ -93,7 +66,7 @@ export default async function AdminCertificatesPage() {
 
       <CertificatesView
         placers={placers}
-        athletes={athletes}
+        participationCount={participationCount || 0}
       />
     </div>
   );

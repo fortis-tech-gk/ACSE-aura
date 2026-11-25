@@ -1,57 +1,39 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import AthleteIdCard from '@/app/components/idcard/AthleteIdCard';
 import { idFontVars } from '@/app/components/idcard/fonts';
+import type { AthleteFilters } from '@/lib/admin-athletes';
+import { useUrlFilters } from '../useUrlFilters';
 
 interface Props {
-  athletes: any[];
+  /** athletes matching the filters (filtered on the server), or null until a college / search is chosen */
+  athletes: any[] | null;
+  filters: AthleteFilters;
+  loadAll: boolean;
+  colleges: { code: string; name: string }[];
+  totalAthletes: number;
 }
 
-export default function IdCardsClient({ athletes }: Props) {
-  const [selectedCollege, setSelectedCollege] = useState('ALL');
-  const [selectedGender, setSelectedGender] = useState('ALL');
-  const [searchQuery, setSearchQuery] = useState('');
-  const [onlyAssignedBibs, setOnlyAssignedBibs] = useState(false);
+export default function IdCardsClient({ athletes, filters, loadAll, colleges, totalAthletes }: Props) {
+  const { set, pending } = useUrlFilters();
+  const selectedCollege = loadAll ? 'all' : filters.college || '';
+  const selectedGender = filters.gender || 'ALL';
+  const onlyAssignedBibs = Boolean(filters.bibOnly);
+  const filteredAthletes = athletes || [];
 
-  // Derive college list
-  const collegesList = useMemo(() => {
-    const map = new Map<string, string>();
-    athletes.forEach((a) => {
-      const code = a.squads?.colleges?.code || a.squads?.squad_code;
-      const name = a.squads?.colleges?.name || code;
-      if (code && !map.has(code)) {
-        map.set(code, `${code} - ${name}`);
-      }
-    });
-    return Array.from(map.entries()).sort((a, b) => a[0].localeCompare(b[0]));
-  }, [athletes]);
-
-  // Filtered list
-  const filteredAthletes = useMemo(() => {
-    return athletes.filter((a) => {
-      if (onlyAssignedBibs && !a.bid_number) return false;
-
-      if (selectedCollege !== 'ALL') {
-        const colCode = a.squads?.colleges?.code || a.squads?.squad_code;
-        if (colCode !== selectedCollege) return false;
-      }
-
-      if (selectedGender !== 'ALL') {
-        if (a.squads?.gender !== selectedGender) return false;
-      }
-
-      if (searchQuery.trim()) {
-        const q = searchQuery.toLowerCase().trim();
-        const name = (a.sslc_name || '').toLowerCase();
-        const usn = (a.usn || '').toLowerCase();
-        const bib = String(a.bid_number || '');
-        if (!name.includes(q) && !usn.includes(q) && !bib.includes(q)) return false;
-      }
-
-      return true;
-    });
-  }, [athletes, selectedCollege, selectedGender, searchQuery, onlyAssignedBibs]);
+  // Search box: typed locally, sent to the server after a short pause
+  const [searchQuery, setSearchQuery] = useState(filters.q || '');
+  const lastSent = useRef(filters.q || '');
+  useEffect(() => {
+    const q = searchQuery.trim();
+    if (q === lastSent.current) return;
+    const t = setTimeout(() => {
+      lastSent.current = q;
+      set({ q });
+    }, 400);
+    return () => clearTimeout(t);
+  }, [searchQuery]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <div>
@@ -91,20 +73,22 @@ export default function IdCardsClient({ athletes }: Props) {
 
           <select
             value={selectedCollege}
-            onChange={(e) => setSelectedCollege(e.target.value)}
+            onChange={(e) => set({ college: e.target.value })}
             className="filter-control"
+            id="idc-college"
           >
-            <option value="ALL">All Colleges ({collegesList.length})</option>
-            {collegesList.map(([code, label]) => (
-              <option key={code} value={code}>
-                {label}
+            <option value="">— Choose a college —</option>
+            <option value="all">All colleges ({totalAthletes} athletes, slow to build)</option>
+            {colleges.map((c) => (
+              <option key={c.code} value={c.code}>
+                {c.code} - {c.name}
               </option>
             ))}
           </select>
 
           <select
             value={selectedGender}
-            onChange={(e) => setSelectedGender(e.target.value)}
+            onChange={(e) => set({ gender: e.target.value })}
             className="filter-control"
           >
             <option value="ALL">All Genders</option>
@@ -116,7 +100,7 @@ export default function IdCardsClient({ athletes }: Props) {
             <input
               type="checkbox"
               checked={onlyAssignedBibs}
-              onChange={(e) => setOnlyAssignedBibs(e.target.checked)}
+              onChange={(e) => set({ bib: e.target.checked ? '1' : null })}
             />
             <span>Only Athletes with Bib #</span>
           </label>
@@ -128,7 +112,19 @@ export default function IdCardsClient({ athletes }: Props) {
       </div>
 
       {/* ID Cards — one 4×6″ portrait card per printed page */}
-      {filteredAthletes.length === 0 ? (
+      {pending ? (
+        <div style={{ background: '#ffffff', borderRadius: '12px', padding: '3rem 1rem', textAlign: 'center', color: '#2563eb', border: '1px solid var(--border-color)', fontWeight: 600 }}>
+          Building ID cards…
+        </div>
+      ) : athletes === null ? (
+        <div style={{ background: '#ffffff', borderRadius: '12px', padding: '3rem 1rem', textAlign: 'center', color: '#94a3b8', border: '1px solid var(--border-color)' }}>
+          <div style={{ fontSize: '2.5rem', marginBottom: '0.5rem' }}>🪪</div>
+          <div style={{ fontWeight: 600, color: '#475569' }}>Choose a college or search for an athlete</div>
+          <div style={{ fontSize: '0.8rem', marginTop: '0.2rem' }}>
+            Cards are built only for the athletes you pick. Choose &quot;All colleges&quot; to print the whole meet.
+          </div>
+        </div>
+      ) : filteredAthletes.length === 0 ? (
         <div style={{ background: '#ffffff', borderRadius: '12px', padding: '3rem 1rem', textAlign: 'center', color: '#94a3b8', border: '1px solid var(--border-color)' }}>
           <div style={{ fontSize: '2.5rem', marginBottom: '0.5rem' }}>🪪</div>
           <div style={{ fontWeight: 600, color: '#475569' }}>No athletes match selection</div>

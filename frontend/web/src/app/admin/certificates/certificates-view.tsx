@@ -2,6 +2,7 @@
 
 import React, { useState } from 'react';
 import QRCode from 'react-qr-code';
+import { listParticipationAthletesAction } from '@/app/actions/certificates';
 
 export interface Placer {
   id: string;
@@ -45,12 +46,24 @@ export interface Athlete {
 
 export function CertificatesView({
   placers,
-  athletes,
+  participationCount,
 }: {
   placers: Placer[];
-  athletes: Athlete[];
+  participationCount: number;
 }) {
   const [certType, setCertType] = useState<'merit' | 'participation'>('merit');
+  // Accredited athletes are read the first time the Participation tab is opened
+  const [athletes, setAthletes] = useState<Athlete[] | null>(null);
+  const [athletesError, setAthletesError] = useState<string | null>(null);
+
+  function openParticipation() {
+    setCertType('participation');
+    if (athletes) return;
+    setAthletesError(null);
+    listParticipationAthletesAction()
+      .then(setAthletes)
+      .catch((e) => setAthletesError(String(e?.message || e)));
+  }
   const [search, setSearch] = useState('');
   const [selectedPlacerId, setSelectedPlacerId] = useState<string | null>(null);
 
@@ -65,7 +78,7 @@ export function CertificatesView({
     return matchesSearch && matchesSelected;
   });
 
-  const filteredAthletes = athletes.filter((a) => {
+  const filteredAthletes = (athletes || []).filter((a) => {
     const q = search.toLowerCase();
     return (
       a.sslc_name.toLowerCase().includes(q) ||
@@ -111,7 +124,7 @@ export function CertificatesView({
               🏅 Merit Certificates ({placers.length})
             </button>
             <button
-              onClick={() => setCertType('participation')}
+              onClick={openParticipation}
               style={{
                 padding: '6px 14px',
                 borderRadius: '6px',
@@ -123,7 +136,7 @@ export function CertificatesView({
                 color: '#fff',
               }}
             >
-              📜 Participation Certificates ({athletes.length})
+              📜 Participation Certificates ({athletes ? athletes.length : participationCount})
             </button>
           </div>
 
@@ -229,6 +242,15 @@ export function CertificatesView({
         )
       ) : (
         /* Participation Certificates */
+        athletesError ? (
+          <div className="glass-panel text-center" style={{ padding: '3rem' }}>
+            <p style={{ color: '#fca5a5' }}>Could not load the accredited athletes: {athletesError}</p>
+          </div>
+        ) : !athletes ? (
+          <div className="glass-panel text-center" style={{ padding: '3rem' }}>
+            <p style={{ color: 'var(--text-secondary)' }}>Loading {participationCount} participation certificates…</p>
+          </div>
+        ) : (
         <div className="certificates-container">
           {filteredAthletes.map((ath) => {
             const qrPayload = JSON.stringify({
@@ -288,6 +310,7 @@ export function CertificatesView({
             );
           })}
         </div>
+        )
       )}
 
       {/* Embedded High-Resolution Certificate Print Styles */}

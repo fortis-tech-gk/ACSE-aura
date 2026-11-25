@@ -1,88 +1,51 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import * as XLSX from 'xlsx';
 import { normalizePaymentStatus } from '@/lib/payment-status';
 import { buildExportRows, exportFileStamp, type ExportRow } from '@/lib/athlete-export';
+import type { AthleteFilters } from '@/lib/admin-athletes';
+import { exportAthletesAction } from '@/app/actions/admin-operations';
+import { useUrlFilters } from '../useUrlFilters';
 import AthletesPdfReport from './AthletesPdfReport';
 
+const PAGE_SIZE = 50;
+
 interface Props {
+  /** one page of athletes matching the filters (filtered on the server) */
   athletes: any[];
+  filteredTotal: number;
+  totalAthletes: number;
+  page: number;
+  filters: AthleteFilters;
+  colleges: { code: string; name: string }[];
+  events: { id: string; name: string; code: string }[];
 }
 
-export default function AthletesClient({ athletes }: Props) {
-  // Filter states
-  const [searchQuery, setSearchQuery] = useState('');
-  const [selectedCollege, setSelectedCollege] = useState('ALL');
-  const [selectedGender, setSelectedGender] = useState('ALL');
-  const [selectedStatus, setSelectedStatus] = useState('ALL');
-  const [selectedEvent, setSelectedEvent] = useState('ALL');
+export default function AthletesClient({ athletes, filteredTotal, totalAthletes, page, filters, colleges, events }: Props) {
+  const { set, pending } = useUrlFilters();
+  const selectedCollege = filters.college || 'ALL';
+  const selectedGender = filters.gender || 'ALL';
+  const selectedStatus = filters.status || 'ALL';
+  const selectedEvent = filters.event || 'ALL';
   const [pdfReport, setPdfReport] = useState<{ title: string; filters: string; rows: ExportRow[] } | null>(null);
+  const [exporting, setExporting] = useState<string | null>(null);
 
-  // Derive unique college list
-  const collegesList = useMemo(() => {
-    const map = new Map<string, string>();
-    athletes.forEach((a) => {
-      const code = a.squads?.colleges?.code || a.squads?.squad_code;
-      const name = a.squads?.colleges?.name || code;
-      if (code && !map.has(code)) {
-        map.set(code, `${code} - ${name}`);
-      }
-    });
-    return Array.from(map.entries()).sort((a, b) => a[0].localeCompare(b[0]));
-  }, [athletes]);
+  // Search box: typed locally, sent to the server after a short pause
+  const [searchQuery, setSearchQuery] = useState(filters.q || '');
+  const lastSent = useRef(filters.q || '');
+  useEffect(() => {
+    const q = searchQuery.trim();
+    if (q === lastSent.current) return;
+    const t = setTimeout(() => {
+      lastSent.current = q;
+      set({ q });
+    }, 350);
+    return () => clearTimeout(t);
+  }, [searchQuery]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Derive unique events list
-  const eventsList = useMemo(() => {
-    const set = new Set<string>();
-    athletes.forEach((a) => {
-      a.registrations?.forEach((r: any) => {
-        if (r.events?.name) set.add(r.events.name);
-      });
-    });
-    return Array.from(set).sort();
-  }, [athletes]);
-
-  // Filtered athletes computation
-  const filteredAthletes = useMemo(() => {
-    return athletes.filter((a) => {
-      // Search query
-      if (searchQuery.trim()) {
-        const q = searchQuery.toLowerCase().trim();
-        const name = (a.sslc_name || '').toLowerCase();
-        const usn = (a.usn || '').toLowerCase();
-        const bib = String(a.bid_number || '');
-        const col = (a.squads?.colleges?.name || '').toLowerCase();
-        if (!name.includes(q) && !usn.includes(q) && !bib.includes(q) && !col.includes(q)) {
-          return false;
-        }
-      }
-
-      // College filter
-      if (selectedCollege !== 'ALL') {
-        const colCode = a.squads?.colleges?.code || a.squads?.squad_code;
-        if (colCode !== selectedCollege) return false;
-      }
-
-      // Gender filter
-      if (selectedGender !== 'ALL') {
-        if (a.squads?.gender !== selectedGender) return false;
-      }
-
-      // Status filter
-      if (selectedStatus !== 'ALL') {
-        if (normalizePaymentStatus(a.squads?.payment_status) !== selectedStatus) return false;
-      }
-
-      // Event filter
-      if (selectedEvent !== 'ALL') {
-        const hasEvent = a.registrations?.some((r: any) => r.events?.name === selectedEvent);
-        if (!hasEvent) return false;
-      }
-
-      return true;
-    });
-  }, [athletes, searchQuery, selectedCollege, selectedGender, selectedStatus, selectedEvent]);
+  const pageCount = Math.max(1, Math.ceil(filteredTotal / PAGE_SIZE));
+  const eventName = events.find((e) => e.id === selectedEvent)?.name || selectedEvent;
 
   // Downloads are sorted by college, then gender, then name (easier to read than newest-first)
   function sortForExport(list: any[]) {
@@ -100,16 +63,31 @@ export default function AthletesClient({ athletes }: Props) {
   function filterSummary(useFilters: boolean): string {
     if (!useFilters) return 'None (entire roster)';
     const parts: string[] = [];
-    if (searchQuery.trim()) parts.push(`Search "${searchQuery.trim()}"`);
+    if (filters.q) parts.push(`Search "${filters.q}"`);
     if (selectedCollege !== 'ALL') parts.push(`College ${selectedCollege}`);
     if (selectedGender !== 'ALL') parts.push(selectedGender === 'men' ? 'Men' : 'Women');
     if (selectedStatus !== 'ALL') parts.push(`Payment ${selectedStatus}`);
-    if (selectedEvent !== 'ALL') parts.push(`Event ${selectedEvent}`);
+    if (selectedEvent !== 'ALL') parts.push(`Event ${eventName}`);
     return parts.length ? parts.join(' • ') : 'None (all athletes)';
   }
 
+  // Every matching athlete is read only when a download is clicked
+  async function loadForExport(useFilters: boolean, key: string): Promise<any[] | null> {
+    setExporting(key);
+    try {
+      return await exportAthletesAction(useFilters ? filters : null);
+    } catch (err) {
+      alert(`Could not load the athletes for the download: ${err instanceof Error ? err.message : err}`);
+      return null;
+    } finally {
+      setExporting(null);
+    }
+  }
+
   // Excel (.xlsx): "Athletes" sheet with a filter arrow on every column + a "Report Info" sheet
-  function handleExport(dataset: any[], filename: string, useFilters: boolean) {
+  async function handleExport(filename: string, useFilters: boolean, key: string) {
+    const dataset = await loadForExport(useFilters, key);
+    if (!dataset) return;
     if (dataset.length === 0) {
       alert('No athlete records available to export.');
       return;
@@ -144,13 +122,30 @@ export default function AthletesClient({ athletes }: Props) {
   }
 
   // PDF: opens a printable A4-landscape report ("Save as PDF" in the print dialog)
-  function handlePdf(dataset: any[], title: string, useFilters: boolean) {
+  async function handlePdf(title: string, useFilters: boolean, key: string) {
+    const dataset = await loadForExport(useFilters, key);
+    if (!dataset) return;
     if (dataset.length === 0) {
       alert('No athlete records available to export.');
       return;
     }
     setPdfReport({ title, filters: filterSummary(useFilters), rows: buildExportRows(sortForExport(dataset)) });
   }
+
+  const exportBtn = (key: string, label: string, icon: string, primary: boolean, onClick: () => void, id: string) => (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={exporting !== null}
+      className={`btn-admin ${primary ? 'btn-admin-primary' : 'btn-admin-secondary'}`}
+      id={id}
+    >
+      <span>{exporting === key ? '⏳' : icon}</span>
+      <span>{exporting === key ? 'Preparing…' : label}</span>
+    </button>
+  );
+
+  const anyFilter = Boolean(filters.q || selectedCollege !== 'ALL' || selectedGender !== 'ALL' || selectedStatus !== 'ALL' || selectedEvent !== 'ALL');
 
   return (
     <div>
@@ -164,47 +159,15 @@ export default function AthletesClient({ athletes }: Props) {
         {/* Downloads: entire roster or the current filtered view, as Excel or PDF */}
         <div className="admin-actions-group" style={{ flexWrap: 'wrap' }}>
           <div className="athlete-export-group">
-            <span className="athlete-export-label">Entire roster ({athletes.length})</span>
-            <button
-              type="button"
-              onClick={() => handleExport(athletes, `ACS-AURA_Athletes_All_${exportFileStamp()}`, false)}
-              className="btn-admin btn-admin-secondary"
-              id="btn-export-entire"
-            >
-              <span>📥</span>
-              <span>Excel</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => handlePdf(athletes, 'Athletes List — Entire Roster', false)}
-              className="btn-admin btn-admin-secondary"
-              id="btn-export-entire-pdf"
-            >
-              <span>📄</span>
-              <span>PDF</span>
-            </button>
+            <span className="athlete-export-label">Entire roster ({totalAthletes})</span>
+            {exportBtn('all-xlsx', 'Excel', '📥', false, () => handleExport(`ACS-AURA_Athletes_All_${exportFileStamp()}`, false, 'all-xlsx'), 'btn-export-entire')}
+            {exportBtn('all-pdf', 'PDF', '📄', false, () => handlePdf('Athletes List — Entire Roster', false, 'all-pdf'), 'btn-export-entire-pdf')}
           </div>
 
           <div className="athlete-export-group">
-            <span className="athlete-export-label">Filtered view ({filteredAthletes.length})</span>
-            <button
-              type="button"
-              onClick={() => handleExport(filteredAthletes, `ACS-AURA_Athletes_Filtered_${exportFileStamp()}`, true)}
-              className="btn-admin btn-admin-primary"
-              id="btn-export-filtered"
-            >
-              <span>📊</span>
-              <span>Excel</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => handlePdf(filteredAthletes, 'Athletes List — Filtered View', true)}
-              className="btn-admin btn-admin-primary"
-              id="btn-export-filtered-pdf"
-            >
-              <span>📄</span>
-              <span>PDF</span>
-            </button>
+            <span className="athlete-export-label">Filtered view ({filteredTotal})</span>
+            {exportBtn('f-xlsx', 'Excel', '📊', true, () => handleExport(`ACS-AURA_Athletes_Filtered_${exportFileStamp()}`, true, 'f-xlsx'), 'btn-export-filtered')}
+            {exportBtn('f-pdf', 'PDF', '📄', true, () => handlePdf('Athletes List — Filtered View', true, 'f-pdf'), 'btn-export-filtered-pdf')}
           </div>
         </div>
       </div>
@@ -215,7 +178,7 @@ export default function AthletesClient({ athletes }: Props) {
           {/* Search Input */}
           <input
             type="text"
-            placeholder="🔍 Search name, USN, bib #..."
+            placeholder="🔍 Search name, USN, bib #, college..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="filter-control"
@@ -226,14 +189,14 @@ export default function AthletesClient({ athletes }: Props) {
           {/* College Filter */}
           <select
             value={selectedCollege}
-            onChange={(e) => setSelectedCollege(e.target.value)}
+            onChange={(e) => set({ college: e.target.value })}
             className="filter-control"
             id="filter-college"
           >
-            <option value="ALL">All Colleges ({collegesList.length})</option>
-            {collegesList.map(([code, label]) => (
-              <option key={code} value={code}>
-                {label}
+            <option value="ALL">All Colleges ({colleges.length})</option>
+            {colleges.map((c) => (
+              <option key={c.code} value={c.code}>
+                {c.code} - {c.name}
               </option>
             ))}
           </select>
@@ -241,7 +204,7 @@ export default function AthletesClient({ athletes }: Props) {
           {/* Gender Filter */}
           <select
             value={selectedGender}
-            onChange={(e) => setSelectedGender(e.target.value)}
+            onChange={(e) => set({ gender: e.target.value })}
             className="filter-control"
             id="filter-gender"
           >
@@ -253,7 +216,7 @@ export default function AthletesClient({ athletes }: Props) {
           {/* Status Filter */}
           <select
             value={selectedStatus}
-            onChange={(e) => setSelectedStatus(e.target.value)}
+            onChange={(e) => set({ status: e.target.value })}
             className="filter-control"
             id="filter-status"
           >
@@ -267,29 +230,27 @@ export default function AthletesClient({ athletes }: Props) {
           {/* Event Filter */}
           <select
             value={selectedEvent}
-            onChange={(e) => setSelectedEvent(e.target.value)}
+            onChange={(e) => set({ event: e.target.value })}
             className="filter-control"
             id="filter-event"
           >
-            <option value="ALL">All Events ({eventsList.length})</option>
-            {eventsList.map((ev) => (
-              <option key={ev} value={ev}>
-                {ev}
+            <option value="ALL">All Events ({events.length})</option>
+            {events.map((ev) => (
+              <option key={ev.id} value={ev.id}>
+                {ev.name}
               </option>
             ))}
           </select>
         </div>
 
         {/* Clear Filters Button */}
-        {(searchQuery || selectedCollege !== 'ALL' || selectedGender !== 'ALL' || selectedStatus !== 'ALL' || selectedEvent !== 'ALL') && (
+        {anyFilter && (
           <button
             type="button"
             onClick={() => {
               setSearchQuery('');
-              setSelectedCollege('ALL');
-              setSelectedGender('ALL');
-              setSelectedStatus('ALL');
-              setSelectedEvent('ALL');
+              lastSent.current = '';
+              set({ q: null, college: null, gender: null, status: null, event: null });
             }}
             className="btn-admin btn-admin-secondary"
             style={{ padding: '0.45rem 0.75rem', fontSize: '0.8rem' }}
@@ -302,8 +263,15 @@ export default function AthletesClient({ athletes }: Props) {
       {/* Roster Counter Summary */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.75rem', fontSize: '0.825rem', color: '#64748b' }}>
         <span>
-          Showing <strong style={{ color: '#0f172a' }}>{filteredAthletes.length}</strong> of{' '}
-          <strong style={{ color: '#0f172a' }}>{athletes.length}</strong> athletes
+          {pending ? (
+            <strong style={{ color: '#2563eb' }}>Loading…</strong>
+          ) : (
+            <>
+              Showing <strong style={{ color: '#0f172a' }}>{athletes.length === 0 ? 0 : `${(page - 1) * PAGE_SIZE + 1}–${(page - 1) * PAGE_SIZE + athletes.length}`}</strong> of{' '}
+              <strong style={{ color: '#0f172a' }}>{filteredTotal}</strong> matching
+              {anyFilter && <> ({totalAthletes} athletes in total)</>}
+            </>
+          )}
         </span>
         {selectedCollege !== 'ALL' && (
           <span>
@@ -313,7 +281,7 @@ export default function AthletesClient({ athletes }: Props) {
       </div>
 
       {/* Athletes Data Table */}
-      <div className="admin-table-container">
+      <div className="admin-table-container" style={{ opacity: pending ? 0.55 : 1, transition: 'opacity 0.15s' }}>
         <table className="admin-table stack-mobile">
           <thead>
             <tr>
@@ -327,7 +295,7 @@ export default function AthletesClient({ athletes }: Props) {
             </tr>
           </thead>
           <tbody>
-            {filteredAthletes.length === 0 ? (
+            {athletes.length === 0 ? (
               <tr>
                 <td colSpan={7} style={{ textAlign: 'center', padding: '3rem 1rem', color: '#94a3b8' }}>
                   <div style={{ fontSize: '2rem', marginBottom: '0.5rem' }}>🔍</div>
@@ -338,7 +306,7 @@ export default function AthletesClient({ athletes }: Props) {
                 </td>
               </tr>
             ) : (
-              filteredAthletes.map((athlete) => {
+              athletes.map((athlete) => {
                 const status = normalizePaymentStatus(athlete.squads?.payment_status);
                 return (
                   <tr key={athlete.id}>
@@ -384,7 +352,7 @@ export default function AthletesClient({ athletes }: Props) {
                           }}
                         >
                           {athlete.photo_url ? (
-                            <img
+                            <img loading="lazy"
                               src={athlete.photo_url}
                               alt={athlete.sslc_name}
                               style={{ width: '100%', height: '100%', objectFit: 'cover' }}
@@ -489,6 +457,20 @@ export default function AthletesClient({ athletes }: Props) {
           </tbody>
         </table>
       </div>
+      {/* Pages */}
+      {pageCount > 1 && (
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.75rem', margin: '1rem 0' }}>
+          <button type="button" className="btn-admin btn-admin-secondary" disabled={page <= 1 || pending} onClick={() => set({ page: page - 1 })} id="athletes-prev">
+            ← Previous
+          </button>
+          <span style={{ fontSize: '0.85rem', color: '#475569' }}>
+            Page <strong>{page}</strong> of <strong>{pageCount}</strong>
+          </span>
+          <button type="button" className="btn-admin btn-admin-secondary" disabled={page >= pageCount || pending} onClick={() => set({ page: page + 1 })} id="athletes-next">
+            Next →
+          </button>
+        </div>
+      )}
       {pdfReport && (
         <AthletesPdfReport
           title={pdfReport.title}

@@ -4,7 +4,7 @@ import { supabaseAdmin } from '@/lib/supabase';
 import { requireAdmin, requireFinance } from '@/lib/auth-guard';
 import { revalidatePath } from 'next/cache';
 import { calculateFeesForSquads, emptySquadFees, reviewPayment } from '@/lib/payments';
-import { fetchAllRows } from '@/lib/db-fetch-all';
+import { searchAthletesPage, searchAllAthletes, type AthleteFilters } from '@/lib/admin-athletes';
 import { signPaymentProofLinks } from '@/lib/payment-proofs';
 import { normalizePaymentStatus, totalCredited } from '@/lib/payment-status';
 import { tryMakeAthleteQrToken } from '@/lib/athlete-qr';
@@ -259,50 +259,61 @@ export async function generateBibNumbersAction(): Promise<{
 }
 
 /**
- * 4. Lists all athletes with full profile and event details for Athletes Management.
+ * 4. Athletes Management / ID Cards: one page of athletes that match the filters (the filtering
+ * runs in the database; only the rows shown are read, and only their photos are signed).
  */
-export async function listAllAthletesAction() {
+export async function listAthletesPageAction(filters: AthleteFilters, page = 1) {
   await requireAdmin();
+  const { rows, total } = await searchAthletesPage(filters, page);
+  return { rows: await signAthletePhotos(rows), total };
+}
 
-  // profiles.* so newer columns (date_of_birth, phone) are included when present.
-  // Paged: a single request returns at most 1,000 athletes.
-  const data = await fetchAllRows<any>(() =>
-    supabaseAdmin
+/**
+ * Every athlete matching the filters (or the whole roster) for the Excel / PDF downloads —
+ * read only when a download button is clicked. Aadhaar / passport numbers leave the server
+ * masked to their last 4 characters (the export shows only those).
+ */
+export async function exportAthletesAction(filters: AthleteFilters | null) {
+  await requireAdmin();
+  const rows = await searchAllAthletes(filters || {}, 'aadhaar_number');
+  return rows.map((a: any) => ({ ...a, aadhaar_number: a.aadhaar_number ? String(a.aadhaar_number).slice(-4) : null }));
+}
+
+/** ID Cards Studio: every athlete matching the filters, with signed photos and QR tokens. */
+export async function listIdCardAthletesAction(filters: AthleteFilters) {
+  await requireAdmin();
+  const rows = await searchAllAthletes(filters);
+  return signAthletePhotos(rows.map((a: any) => ({ ...a, qr_token: tryMakeAthleteQrToken(a.id) })));
+}
+
+/** Payment Verification modal: one squad's athletes, read when the squad is opened. */
+export async function getSquadRosterAction(squadId: string) {
+  await requireFinance();
+  const { data, error } = await supabaseAdmin
     .from('profiles')
-    .select(`
-      *,
-      squads (
-        id,
-        gender,
-        squad_code,
-        payment_status,
-        ped_name,
-        ped_phone,
-        ped_email,
-        colleges (
-          name,
-          code,
-          district
-        )
-      ),
-      registrations (
-        id,
-        kind,
-        event_id,
-        events (
-          id,
-          name,
-          code,
-          category
-        )
-      )
-    `)
-    .order('created_at', { ascending: false })
-    .order('id')
-  );
+    .select('id, sslc_name, usn, bid_number, registrations(id, kind, events(name, code))')
+    .eq('squad_id', squadId)
+    .order('sslc_name');
+  if (error) return { athletes: [], error: error.message };
+  return { athletes: data || [] };
+}
 
-  // Photos are in a private bucket: hand the admin pages short-lived signed links
-  return signAthletePhotos(data.map((a: any) => ({ ...a, qr_token: tryMakeAthleteQrToken(a.id) })));
+/**
+ * Delegation check-in sheets: every squad with its athletes and events. Fees, payments and proof
+ * links are not needed here (they made this page as slow as Payment Verification).
+ */
+export async function listDelegationsAction() {
+  await requireAdmin();
+  const { data, error } = await supabaseAdmin
+    .from('squads')
+    .select(`
+      id, gender, squad_code, ped_name, ped_phone, ped_email,
+      colleges (name, code, district, region),
+      profiles (id, sslc_name, usn, semester, bid_number, registrations (kind, events (name, code)))
+    `)
+    .order('squad_code', { ascending: true });
+  if (error) throw new Error(error.message);
+  return data || [];
 }
 
 /**
@@ -324,22 +335,7 @@ export async function listPaymentsForAdminAction() {
       roster_locked,
       payment_status,
       colleges (*),
-      profiles (
-        id,
-        sslc_name,
-        usn,
-        semester,
-        blood_group,
-        bid_number,
-        registrations (
-          id,
-          kind,
-          events (
-            name,
-            code
-          )
-        )
-      ),
+      profiles (count),
       payments (*)
     `)
     .order('squad_code', { ascending: true });
@@ -385,8 +381,11 @@ export async function listPaymentsForAdminAction() {
           ? { ...collegeLatest, fromGender: squadGender.get(collegeLatest.squad_id) || null }
           : null;
 
+      const { profiles, ...rest } = sq;
       return {
-        ...sq,
+        ...rest,
+        // athletes are read only when the squad is opened (getSquadRosterAction)
+        athleteCount: Number(profiles?.[0]?.count || 0),
         payments: sortedPayments,
         expectedFee,
         ownFee: fees.totalAmount,

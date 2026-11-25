@@ -11,7 +11,7 @@ export default async function AdminSchedulePage() {
   await requireAdmin();
 
   // Fetch all sessions with schedule items and events
-  const { data: sessions } = await supabaseAdmin
+  const [{ data: sessions }, { data: events }] = await Promise.all([supabaseAdmin
     .from('schedule_sessions')
     .select(`
       id,
@@ -30,13 +30,13 @@ export default async function AdminSchedulePage() {
       )
     `)
     .order('session_date', { ascending: true })
-    .order('start_time', { ascending: true });
-
-  // Fetch all events for the heat draw generator modal
-  const { data: events } = await supabaseAdmin
+    .order('start_time', { ascending: true }),
+    // all events for the heat draw generator modal (read at the same time)
+    supabaseAdmin
     .from('events')
     .select('id, name, code, gender, category, start_type')
-    .order('name');
+    .order('name'),
+  ]);
 
   const normalizedSessions = (sessions || []).map((s: any) => ({
     ...s,
