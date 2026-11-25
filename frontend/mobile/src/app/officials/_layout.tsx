@@ -13,6 +13,7 @@ export default function OfficialsLayout() {
         <Stack.Screen name="login" />
         <Stack.Screen name="history" />
         <Stack.Screen name="heat/[id]" />
+        <Stack.Screen name="rollcall/[eventId]" />
       </Stack>
     </OfficialSessionProvider>
   );

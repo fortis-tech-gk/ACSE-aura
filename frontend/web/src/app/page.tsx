@@ -676,7 +676,7 @@ export default function HomePage() {
                   </li>
                   <li>
                     <span className="check" aria-hidden="true">&bull;</span>
-                    <span>Points matrix (Individual 5-3-1), Relay &amp; Team Championships(10-6-</span>
+                    <span>Points matrix: individual 5-3-1; combined events &amp; relays 10-6-2; Best Athlete by World Athletics scoring tables</span>
                   </li>
                 </ul>
               </div>
@@ -761,11 +761,11 @@ export default function HomePage() {
             <div className="regulation-card">
               <div className="reg-card-header">
                 <span className="reg-norm-code">NORM 05</span>
-                <span className="reg-badge-quota">POINTS: 10-6-2 &amp; 5-3-1</span>
+                <span className="reg-badge-quota">POINTS: 5-3-1 &amp; 10-6-2</span>
               </div>
               <h3 className="reg-card-title">Championship Points &amp; Scoring Matrix</h3>
               <p className="reg-card-desc">
-                <strong>Athlete (individual events):</strong> 1st = 5 pts, 2nd = 3 pts, 3rd = 1 pt. <strong>College team (every event, relays included):</strong> 1st = 10 pts, 2nd = 6 pts, 3rd = 2 pts. Colleges are ranked by total team points.
+                <strong>College championships (Overall, Best Men&rsquo;s and Best Women&rsquo;s College):</strong> individual events 1st = 5, 2nd = 3, 3rd = 1; combined events (Decathlon, Heptathlon) and relays 1st = 10, 2nd = 6, 3rd = 2. The 4&times;400m Mixed Relay counts for the Overall Championship only. <strong>Best Male / Female Athlete:</strong> World Athletics scoring-table points of the athlete&rsquo;s best performance in a final (the final counts, not the heats).
               </p>
             </div>
 

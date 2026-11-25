@@ -17,7 +17,7 @@ officialsRouter.use(
 );
 
 const IST_OFFSET = '+05:30';
-function istIso(date?: string | null, time?: string | null): string | null {
+export function istIso(date?: string | null, time?: string | null): string | null {
   if (!date || !time) return null;
   const t = String(time).slice(0, 8);
   const iso = `${date}T${t.length === 5 ? `${t}:00` : t}${IST_OFFSET}`;

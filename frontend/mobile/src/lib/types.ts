@@ -80,7 +80,17 @@ export type PerformanceResult = {
 
 export type AthletePerformance = {
   serverTime: string;
-  summary: { golds: number; silvers: number; bronzes: number; individualPoints: number; eventsCompleted: number };
+  summary: {
+    golds: number;
+    silvers: number;
+    bronzes: number;
+    individualPoints: number;
+    eventsCompleted: number;
+    /** World Athletics score of the best final performance (Best Athlete ranking) */
+    waPoints?: number | null;
+    bestAthleteRank?: number | null;
+    bestAthleteEvent?: string | null;
+  };
   official: { eventId: string; eventName: string; eventCode: string; isRelay: boolean; isMixed: boolean; place: number; points: number }[];
   results: PerformanceResult[];
   collegeStanding: { overallRank: number | null; overallPoints: number | null; divisionRank: number | null; divisionPoints: number | null; colleges: number } | null;
@@ -105,7 +115,12 @@ export type BestAthleteRow = {
   bid_number: number | null;
   college_name: string;
   college_code: string;
+  /** World Athletics score of the best final performance */
   total_points: number | string;
+  best_event?: string | null;
+  best_mark?: number | string | null;
+  best_mark_unit?: 'seconds' | 'metres' | 'points' | null;
+  second_points?: number | null;
   golds: number;
   silvers: number;
   bronzes: number;

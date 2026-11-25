@@ -3,9 +3,14 @@
  *
  *   1. The heat is marked COMPLETED (results become public on /api/live/results).
  *   2. When every heat of that round is done, the next round is built automatically
- *      (VTU rule: the first 2 of each heat qualify — no fastest-time qualifiers; ties for
- *      2nd place both go through). The next round is the next stage on the schedule for that
- *      event (HEATS → SEMI_FINAL → FINAL), or FINAL when no semi-final is scheduled.
+ *      World Athletics style: "Q" on place (the first 2 of each heat; from semi-finals 3 + 2 / 2 + 2
+ *      …), then "q" — the fastest losers fill the remaining lanes of the next round. Ties for a Q
+ *      place all go through; a tie for the last q place is settled by drawing lots. The next round
+ *      is the next stage on the schedule (HEATS → SEMI_FINAL → FINAL), or FINAL when none is
+ *      scheduled; more qualifiers than lanes for a final means a semi-final first.
+ *      Next-round heats and lanes follow the WA ranking: heat winners by time, then 2nd places by
+ *      time, …, then the q athletes by time; the best 4 draw lanes 3–6, the next 2 lanes 7–8, the
+ *      last 2 lanes 1–2.
  *   3. When every section of the FINAL is done, championship points are awarded. A final run
  *      in several sections (e.g. 5000m) is ranked across all sections by time.
  *   4. Live results, leaderboard and schedule caches are cleared, and qualified athletes get a
@@ -18,7 +23,7 @@ import { invalidateCache } from '../middleware/cache';
 import { sendPushToProfiles } from './push';
 import type { TokenPayload } from '../middleware/auth';
 
-/** VTU rule (docs/rules/vtu_rules.txt): top 2 from each heat, no time qualifiers */
+/** VTU rule: the first 2 of each first-round heat qualify on place (Q); fastest losers (q) fill the lanes */
 export const QUALIFY_PER_HEAT = 2;
 const STAGE_ORDER = ['HEATS', 'SEMI_FINAL', 'FINAL'] as const;
 const DONE = ['COMPLETED', 'OFFICIAL'];
@@ -98,7 +103,7 @@ async function trackFinishers(heatIds: string[]) {
   return (data || [])
     .map((r: any) => {
       const tr = Array.isArray(r.track_results) ? r.track_results[0] : r.track_results;
-      return { heatId: r.heat_id as string, profileId: r.profile_id as string | null, relayTeamId: r.relay_team_id as string | null, status: tr?.status, time: tr?.time_seconds != null ? Number(tr.time_seconds) : null };
+      return { heatAthleteId: r.id as string, heatId: r.heat_id as string, profileId: r.profile_id as string | null, relayTeamId: r.relay_team_id as string | null, status: tr?.status, time: tr?.time_seconds != null ? Number(tr.time_seconds) : null };
     })
     .filter((r) => r.status === 'FINISHED' && r.time != null)
     .sort((a, b) => a.time! - b.time!);
@@ -140,25 +145,53 @@ export function assignLanes(seeded: string[], lanes: boolean, maxLanes: number):
 }
 
 type Finisher = { heatId: string; profileId: string | null; relayTeamId: string | null; time: number | null };
+export type Qualified<F extends Finisher> = F & { qual: 'Q' | 'q'; placeInHeat: number };
 
-/** First QUALIFY_PER_HEAT finishers of each heat (ties for the last place all qualify), fastest first */
-export function pickQualifiers<F extends Finisher>(heatIds: string[], finishers: F[]): F[] {
-  const out: F[] = [];
-  for (const id of heatIds) {
-    const inHeat = finishers.filter((f) => f.heatId === id && f.time != null).sort((a, b) => a.time! - b.time!);
-    const cut = inHeat[QUALIFY_PER_HEAT - 1]?.time;
-    out.push(...inHeat.filter((f, i) => i < QUALIFY_PER_HEAT || (cut != null && f.time === cut)));
-  }
-  return out.sort((a, b) => a.time! - b.time!);
+/**
+ * How many qualify on place from each heat of a round, and how many places the next round has.
+ *  - From the first round: the first QUALIFY_PER_HEAT (2) of each heat; the next round is filled up
+ *    to its lanes (nextHeats × lanes) with the fastest losers.
+ *  - From semi-finals into the final (World Athletics standard, 8 lanes): 2 semis → first 3 + 2
+ *    fastest, 3 semis → first 2 + 2 fastest, 4 semis → first 2, 5+ semis → winners + fastest.
+ */
+export function qualifyPlan(stage: string, heatsInRound: number, nextHeats: number, lanes: number): { perHeat: number; slots: number } {
+  const slots = Math.max(1, nextHeats) * lanes;
+  if (stage !== 'SEMI_FINAL') return { perHeat: QUALIFY_PER_HEAT, slots };
+  const s = Math.max(1, heatsInRound);
+  if (s === 1) return { perHeat: lanes, slots };
+  if (s === 2) return { perHeat: Math.max(1, Math.floor(lanes / 2) - 1), slots };
+  return { perHeat: Math.max(1, Math.floor(lanes / s)), slots };
 }
 
-/** Fastest `max` finishers; runners on exactly the same time are ordered by a draw of lots (so a tie at the cut-off never adds a 9th). */
-export function capFinalists<F extends Finisher>(qualified: F[], max: number): F[] {
-  return qualified
-    .map((q) => ({ q, lot: Math.random() }))
-    .sort((a, b) => a.q.time! - b.q.time! || a.lot - b.lot)
-    .slice(0, max)
-    .map((x) => x.q);
+/**
+ * Q / q qualifiers of a finished round, in World Athletics ranking order (heat winners by time,
+ * then 2nd places by time, …, then the q athletes by time).
+ *  - Q: place in heat <= perHeat. Equal times share a place, so a tie for the last Q place all go through.
+ *  - q: the fastest of the rest, until `slots` are filled. A tie for the last q place is settled by lot.
+ *  - If ties make Q alone overflow the slots, the last Q place is settled by lot too.
+ */
+export function qualifyRound<F extends Finisher>(heatIds: string[], finishers: F[], perHeat: number, slots: number, lot: () => number = Math.random): Qualified<F>[] {
+  const withPlace: Qualified<F>[] = [];
+  for (const id of heatIds) {
+    const inHeat = finishers.filter((f) => f.heatId === id && f.time != null).sort((a, b) => a.time! - b.time!);
+    inHeat.forEach((f, i) => {
+      const place = i > 0 && inHeat[i - 1].time === f.time ? withPlace[withPlace.length - 1].placeInHeat : i + 1;
+      withPlace.push({ ...f, placeInHeat: place, qual: place <= perHeat ? 'Q' : 'q' });
+    });
+  }
+  const byLot = <T extends Qualified<F>>(list: T[], key: (x: T) => number[]) =>
+    list
+      .map((x) => ({ x, k: key(x), r: lot() }))
+      .sort((a, b) => {
+        for (let i = 0; i < a.k.length; i++) if (a.k[i] !== b.k[i]) return a.k[i] - b.k[i];
+        return a.r - b.r;
+      })
+      .map((y) => y.x);
+
+  const bigQ = byLot(withPlace.filter((f) => f.qual === 'Q'), (f) => [f.placeInHeat, f.time!]).slice(0, slots);
+  const room = Math.max(0, slots - bigQ.length);
+  const smallQ = byLot(withPlace.filter((f) => f.qual === 'q'), (f) => [f.time!]).slice(0, room);
+  return [...bigQ, ...smallQ];
 }
 
 /** Serpentine seeding of ids (best first) into n heats: 1,2,3 / 6,5,4 / 7,8,9 … */
@@ -182,8 +215,9 @@ async function buildNextRound(heat: HeatRow, roundHeats: HeatRow[]) {
   const maxLanes = ev.max_lanes || 8;
 
   const finishers = await trackFinishers(roundHeats.map((h) => h.id));
-  let qualified = pickQualifiers(roundHeats.map((h) => h.id), finishers);
-  if (!qualified.length) throw new ProgressionError('No finishers to qualify for the next round.');
+  if (!finishers.length) throw new ProgressionError('No finishers to qualify for the next round.');
+  // Qualifiers on place alone, to decide whether a semi-final is needed
+  const onPlace = qualifyRound(roundHeats.map((h) => h.id), finishers, heat.stage === 'HEATS' ? QUALIFY_PER_HEAT : maxLanes, Number.MAX_SAFE_INTEGER).filter((f) => f.qual === 'Q').length;
 
   // Next stage on the schedule for this event (fallback: FINAL)
   const { data: items } = await supabase.from('schedule_items').select('id, stage').eq('event_id', ev.id);
@@ -194,10 +228,14 @@ async function buildNextRound(heat: HeatRow, roundHeats: HeatRow[]) {
   // (800m is a "waterfall" start run in lanes too, so it counts; 1500m and up are mass starts.)
   // 1500m is a mass start but is drawn in heats of 8, so its rounds are capped the same way.
   const inLanes = lanes || ev.start_type === 'waterfall' || ev.start_type === 'mass';
-  if (inLanes && nextStage === 'FINAL' && heat.stage === 'HEATS' && qualified.length > maxLanes) nextStage = 'SEMI_FINAL';
-  // A final never has more than maxLanes runners: when ties at the cut-off push it over, keep the
-  // fastest maxLanes and settle equal times by a draw of lots.
-  if (inLanes && nextStage === 'FINAL' && qualified.length > maxLanes) qualified = capFinalists(qualified, maxLanes);
+  if (inLanes && nextStage === 'FINAL' && heat.stage === 'HEATS' && onPlace > maxLanes) nextStage = 'SEMI_FINAL';
+  // Semi-finals: enough heats for every Q (12 Q → 2 semis of 8; the other 4 places go to q).
+  // A final is one race of maxLanes. Non-lane races (none today) stay one race.
+  const nHeats = inLanes && nextStage !== 'FINAL' ? Math.max(1, Math.ceil(onPlace / maxLanes)) : 1;
+  const plan = inLanes
+    ? qualifyPlan(heat.stage, roundHeats.length, nHeats, maxLanes)
+    : { perHeat: heat.stage === 'HEATS' ? QUALIFY_PER_HEAT : maxLanes, slots: Number.MAX_SAFE_INTEGER };
+  const qualified = qualifyRound(roundHeats.map((h) => h.id), finishers, plan.perHeat, plan.slots);
   const scheduleItemId = (items || []).find((i: any) => i.stage === nextStage)?.id ?? null;
 
   // Already built and under way? Leave it alone.
@@ -205,8 +243,6 @@ async function buildNextRound(heat: HeatRow, roundHeats: HeatRow[]) {
   const started = (existing || []).some((h: any) => h.status !== 'SCHEDULED' || (h.heat_athletes || []).some((a: any) => (Array.isArray(a.track_results) ? a.track_results.length : a.track_results)));
   if (started) return { nextStage, skipped: 'The next round has already started — not rebuilt.' };
 
-  // How many heats: one per max_lanes runners for lane races; a single race otherwise
-  const nHeats = inLanes && nextStage !== 'FINAL' ?Math.max(1, Math.ceil(qualified.length / maxLanes)) : 1;
   const perHeat = seedHeats(qualified.map((q) => (q.profileId || q.relayTeamId)!), nHeats);
 
   // Replace any not-started draft of the next round, then create it
@@ -215,6 +251,18 @@ async function buildNextRound(heat: HeatRow, roundHeats: HeatRow[]) {
     if (error) throw new ProgressionError(`Could not clear the old ${nextStage} draft: ${error.message}`);
   }
   const relay = ev.category === 'relay';
+
+  // Q / q marks on this round's start list (cleared first, in case the round is rebuilt)
+  const roundIds = roundHeats.map((h) => h.id);
+  await supabase.from('heat_athletes').update({ qualified_as: null }).in('heat_id', roundIds);
+  for (const mark of ['Q', 'q'] as const) {
+    const ids = qualified.filter((x) => x.qual === mark).map((x) => x.heatAthleteId);
+    if (ids.length) {
+      const { error: qErr } = await supabase.from('heat_athletes').update({ qualified_as: mark }).in('id', ids);
+      if (qErr) throw new ProgressionError(`Could not mark the qualifiers: ${qErr.message}`);
+    }
+  }
+
   const created: { heatId: string; heatNumber: number; entries: number }[] = [];
   for (let n = 0; n < nHeats; n++) {
     const { data: h, error } = await supabase

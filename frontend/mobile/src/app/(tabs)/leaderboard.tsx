@@ -4,6 +4,7 @@ import { useAthleteSession } from '@/lib/athlete-session';
 import { useCachedFetch } from '@/lib/useCachedFetch';
 import type { BestAthleteRow, LiveLeaderboard, StandingRow } from '@/lib/types';
 import { AppHeader, Card, Muted, OfflineBanner, Screen, Segmented, colors } from '@/components/ui';
+import { fmtMark } from '@/lib/format';
 
 type View_ = 'overall' | 'men' | 'women' | 'athletes';
 const TABS: { key: View_; label: string }[] = [
@@ -108,7 +109,7 @@ export default function LeaderboardScreen() {
         athletes.map((group) => (
           <Card key={group.title} style={{ gap: 8 }}>
             <Text style={s.groupTitle}>{group.title}</Text>
-            {group.list.length === 0 && <Muted>No individual points yet.</Muted>}
+            {group.list.length === 0 && <Muted>No finals scored yet.</Muted>}
             {group.list.slice(0, 10).map((a) => {
               const isMe = a.profile_id === me?.athlete.id;
               return (
@@ -123,6 +124,12 @@ export default function LeaderboardScreen() {
                       {a.college_code}
                       {a.bid_number ? ` · Bib ${a.bid_number}` : ''} · 🥇{a.golds} 🥈{a.silvers} 🥉{a.bronzes}
                     </Muted>
+                    {a.best_event && (
+                      <Muted style={{ fontSize: 12 }}>
+                        {a.best_event}
+                        {a.best_mark != null && a.best_mark_unit ? ` · ${fmtMark(Number(a.best_mark), a.best_mark_unit)}` : ''}
+                      </Muted>
+                    )}
                   </View>
                   <Text style={s.athPts}>{pts(a.total_points)}</Text>
                 </View>
@@ -131,11 +138,11 @@ export default function LeaderboardScreen() {
           </Card>
         ))}
 
-      {data && view !== 'athletes' && (
+      {data && (
         <Muted style={{ fontSize: 12 }}>
-          {view === 'overall'
-            ? 'Overall includes individual and relay points (Mixed Relay does not score).'
-            : `${view === 'men' ? "Men's" : "Women's"} team: individual events of the division only.`}
+          {view === 'athletes'
+            ? 'Best Athlete: World Athletics scoring-table points of the best performance in a final (the final counts, not the heats). Ties go to the second-best performance.'
+            : `${view === 'overall' ? 'Overall: every event' : `${view === 'men' ? "Men's" : "Women's"} college: the division's events, relays included`}. Individual 5 / 3 / 1, combined events and relays 10 / 6 / 2. Mixed Relay counts for Overall only.`}
         </Muted>
       )}
     </Screen>

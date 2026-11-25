@@ -99,12 +99,13 @@ export default function PerformanceScreen() {
             <MedalCount label="Bronze" color="#c4844f" n={sum.bronzes} />
           </View>
           <View style={s.statsRow}>
-            <Stat tone="navy" label="My points" value={String(sum.individualPoints)} />
+            <Stat tone="navy" label="WA score" value={sum.waPoints != null ? String(sum.waPoints) : '—'} />
             <Stat tone="navy" label="College" value={cs?.overallRank ? `#${cs.overallRank}` : '—'} />
             <Stat tone="navy" label="Division" value={cs?.divisionRank ? `#${cs.divisionRank}` : '—'} />
           </View>
           <Muted style={{ color: colors.onNavyMuted, fontSize: 12 }}>
-            Points: 5 / 3 / 1 for individual 1st–3rd. Relay points count for your college only.
+            {sum.bestAthleteRank ? `Best Athlete ranking: #${sum.bestAthleteRank}${sum.bestAthleteEvent ? ` (${sum.bestAthleteEvent})` : ''}. ` : ''}
+            WA score = World Athletics points of your best final. Your college scores 5 / 3 / 1 for an individual 1st–3rd, 10 / 6 / 2 for combined events and relays.
           </Muted>
         </Card>
       )}

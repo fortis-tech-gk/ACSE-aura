@@ -570,6 +570,7 @@ athleteRouter.get('/performance', authenticate, requireRole(['athlete']), async 
 
     // College standing (same rules as the public leaderboard)
     let collegeStanding: any = null;
+    let bestAthlete: { rank: number; waPoints: number; event: string | null } | null = null;
     try {
       const { data: standings } = await supabase.rpc('get_championship_standings');
       const s: any = standings || {};
@@ -583,6 +584,9 @@ athleteRouter.get('/performance', authenticate, requireRole(['athlete']), async 
         divisionPoints: division ? Number(division.total_points) : null,
         colleges: (s.combined || []).length,
       };
+      // Best Male / Female Athlete: World Athletics score of the best final performance
+      const me = [...(s.best_male_athletes || []), ...(s.best_female_athletes || [])].find((r: any) => r.profile_id === athleteId);
+      if (me) bestAthlete = { rank: me.rank, waPoints: Number(me.total_points) || 0, event: me.best_event ?? null };
     } catch {
       // standings optional
     }
@@ -595,6 +599,9 @@ athleteRouter.get('/performance', authenticate, requireRole(['athlete']), async 
         silvers: official.filter((o: any) => o.place === 2).length,
         bronzes: official.filter((o: any) => o.place === 3).length,
         individualPoints: individual.reduce((sum: number, o: any) => sum + o.points, 0),
+        waPoints: bestAthlete?.waPoints ?? null,
+        bestAthleteRank: bestAthlete?.rank ?? null,
+        bestAthleteEvent: bestAthlete?.event ?? null,
         eventsCompleted: results.filter((r) => r.value != null || r.status).length,
       },
       official,

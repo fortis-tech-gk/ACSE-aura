@@ -49,8 +49,9 @@ leaderboardRouter.get('/college/:collegeId', cacheResponse(15), async (req, res:
 
     if (ptsErr) return res.status(400).json({ error: ptsErr.message });
 
-    // College points are 10-6-2 for any event (athlete's own 5-3-1 is separate); mixed relay scores nothing.
-    const collegePts = (p: any) => (String(p.events?.code || '').toUpperCase() === '4X400M-MIX' ? 0 : ({ 1: 10, 2: 6, 3: 2 } as Record<number, number>)[p.place] || 0);
+    // Stored points are the college points (0048): individual 5-3-1, combined events and relays
+    // 10-6-2 (ties share); the mixed relay's 10-6-2 counts for Overall only.
+    const collegePts = (p: any) => Number(p.points) || 0;
     const totalPoints = (points || []).reduce((acc, p) => acc + collegePts(p), 0);
     const golds = (points || []).filter((p) => p.place === 1).length;
     const silvers = (points || []).filter((p) => p.place === 2).length;

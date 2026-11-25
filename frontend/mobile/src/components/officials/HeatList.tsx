@@ -65,6 +65,8 @@ export function HeatList({ mode }: { mode: 'callroom' | 'referee' }) {
         </View>
       )}
 
+      {mode === 'callroom' && <RollCallList day={activeDay} />}
+
       {mode === 'referee' && next && <NextHeatBrief heat={next} />}
       {mode === 'referee' && data && !next && heats.length > 0 && (
         <Card style={{ backgroundColor: colors.greenSoft, borderColor: colors.greenSoft }}>
@@ -86,7 +88,9 @@ export function HeatList({ mode }: { mode: 'callroom' | 'referee' }) {
           <Muted>
             {heats.length
               ? 'Every heat on this day has its results.'
-              : 'Heats appear here once the meet office has made the heat draw for an event.'}
+              : mode === 'callroom'
+                ? 'First rounds start with the roll call above. Semi-finals and finals appear here once they are built from the results.'
+                : 'Heats appear here once the call room has prepared them from the roll call.'}
           </Muted>
         </Card>
       )}
@@ -127,6 +131,70 @@ export function HeatList({ mode }: { mode: 'callroom' | 'referee' }) {
       <Pressable onPress={reload} accessibilityRole="button">
         <Muted style={{ textAlign: 'center', fontSize: 12 }}>{loading ? 'Refreshing…' : 'Tap to refresh · updates every 30 s'}</Muted>
       </Pressable>
+    </View>
+  );
+}
+
+type RollCallSummary = {
+  eventId: string;
+  eventName: string;
+  kind: HeatSummary['kind'];
+  stage: string;
+  startAt: string | null;
+  callRoomAt: string | null;
+  state: 'NOT_OPEN' | 'OPEN' | 'DRAWN' | 'UNDER_WAY';
+  entries: number;
+  reported: number;
+  numHeats: number | null;
+};
+
+const RC_STATE: Record<RollCallSummary['state'], { label: string; tone: 'grey' | 'blue' | 'amber' | 'green' }> = {
+  NOT_OPEN: { label: 'Roll call not open', tone: 'grey' },
+  OPEN: { label: 'Roll call open', tone: 'amber' },
+  DRAWN: { label: 'Heats prepared', tone: 'green' },
+  UNDER_WAY: { label: 'Under way', tone: 'blue' },
+};
+
+/**
+ * First rounds waiting for their roll call: everyone in the event reports, then the call room
+ * prepares the heats from who is present. Shown above the per-heat call rooms (later rounds).
+ */
+function RollCallList({ day }: { day: string | null }) {
+  const { token } = useOfficialSession();
+  const { wide } = useOfficialsLayout();
+  const { data } = useCachedFetch<{ rollCalls: RollCallSummary[] }>('@aura/off-rollcalls', '/callroom/rollcalls', { token, enabled: !!token, pollMs: 30_000 });
+  const list = (data?.rollCalls || []).filter((r) => (r.state === 'NOT_OPEN' || r.state === 'OPEN') && (!day || dayKey(r.startAt) === day));
+  if (!list.length) return null;
+  return (
+    <View style={{ gap: 10 }}>
+      <SectionLabel>Roll call · first rounds</SectionLabel>
+      <View style={wide ? s.grid : { gap: 10 }}>
+        {list.map((r) => {
+          const st = RC_STATE[r.state];
+          const title = `${r.eventName} · roll call`;
+          return (
+            <Pressable
+              key={`${r.eventId}|${r.stage}`}
+              onPress={() => router.push({ pathname: '/officials/rollcall/[eventId]', params: { eventId: r.eventId, stage: r.stage, title } } as unknown as Href)}
+              accessibilityRole="button"
+              style={({ pressed }) => [s.heat, wide && s.heatWide, pressed && { opacity: 0.8 }]}
+            >
+              <View style={s.iconTile}>
+                <Icon name={KIND_ICON[r.kind] || 'run'} size={22} color={colors.navy} />
+              </View>
+              <View style={{ flex: 1, gap: 4, minWidth: 0 }}>
+                <Text style={s.title} numberOfLines={2}>{title}</Text>
+                <Muted style={{ fontSize: 13 }}>{whenLine(r)}</Muted>
+                <View style={s.row}>
+                  <Pill label={st.label} tone={st.tone} />
+                  {r.state === 'OPEN' && <Pill label={`${r.reported}/${r.entries} present`} tone={r.entries && r.reported === r.entries ? 'green' : 'grey'} />}
+                </View>
+              </View>
+              <Icon name="chevron" size={22} color={colors.muted} />
+            </Pressable>
+          );
+        })}
+      </View>
     </View>
   );
 }
