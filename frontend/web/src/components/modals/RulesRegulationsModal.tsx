@@ -27,7 +27,7 @@ const CHAMPIONSHIP_RULES: RuleItem[] = [
   {
     id: 2,
     category: 'eligibility',
-    title: 'Minimum Contingent Strength (Rule 23)',
+    title: 'Minimum Contingent Strength (Rule 2)',
     desc: 'A college team must consist of a minimum of 08 Athletes (Men / Women) in the team delegation to be eligible for institutional participation.',
     important: true,
   },
@@ -40,8 +40,8 @@ const CHAMPIONSHIP_RULES: RuleItem[] = [
   {
     id: 4,
     category: 'relay',
-    title: 'Event Participation Limits & Blocked Reserve',
-    desc: 'An athlete can participate in any two (2) individual events and one regular relay (4x100m or 4x400m). If an athlete registers for both Event 1 and Event 2, reserve selection is strictly BLOCKED.',
+    title: 'Event Participation Limits & Reserve (Rule 3 & 7)',
+    desc: 'An athlete can participate in any two (2) individual events and one divisional relay (4x100m or 4x400m). The 4x400m Mixed Relay and the Half Marathon are common events. Only one (1) reserve is allowed for individual events, and it is allowed even when the athlete has both Event 1 and Event 2 (Organising Committee amendment, 07-11-2026).',
     important: true,
   },
   {
@@ -55,7 +55,7 @@ const CHAMPIONSHIP_RULES: RuleItem[] = [
     id: 6,
     category: 'relay',
     title: 'Relay Squad Size & Composition',
-    desc: 'Colleges can enter up to 3 relay teams with up to 6 members per relay team (4 active runners + 2 reserves). Only 1 divisional relay team per student member is permitted. Relay substitutes can be updated until call room reporting.',
+    desc: 'Colleges can enter up to 3 relay teams with up to 6 members per relay team (4 active runners + 2 reserves). Only 1 divisional relay team per student member is permitted. Relay substitutes can be changed by the Call Room Official up to 24 hours before the race start.',
   },
   {
     id: 7,
@@ -72,7 +72,7 @@ const CHAMPIONSHIP_RULES: RuleItem[] = [
   {
     id: 9,
     category: 'relay',
-    title: 'Reserve Nomination Condition (Rule 36)',
+    title: 'Reserve Nomination Condition (Rule 14)',
     desc: 'A reserve participant should also be a participant in at least one individual event. Relay-only athletes cannot register as individual reserves.',
   },
   {
@@ -85,8 +85,8 @@ const CHAMPIONSHIP_RULES: RuleItem[] = [
   {
     id: 11,
     category: 'technical',
-    title: 'Track Progression Rule (Preliminary Heats)',
-    desc: 'The top 2 athletes from each preliminary heat automatically advance to the Finals (Q1 and Q2). Advancement is strictly position-based; qualification is NOT based on fastest times.',
+    title: 'Track Progression & Time Qualifiers',
+    desc: 'First round: the first 2 of each heat qualify (Q) and the fastest losers (q) fill the remaining lanes of the next round. Semi-finals to final follow World Athletics rules (2 semi-finals: 3 Q + 2 q; 3 semi-finals: 2 Q + 2 q; 4 semi-finals: 2 Q). The next round is seeded by World Athletics ranking (winners, then 2nd places, then q), with the best 4 in lanes 3-6. Before the first round every entrant reports to the call room, which prepares the heats from the athletes present; absent athletes are DNS.',
     important: true,
   },
   {
@@ -124,7 +124,7 @@ const CHAMPIONSHIP_RULES: RuleItem[] = [
     id: 17,
     category: 'scoring',
     title: 'Championship Points Scoring Matrix',
-    desc: 'Team/Relay Events: 1st (Gold) = 10 pts, 2nd (Silver) = 6 pts, 3rd (Bronze) = 2 pts (awarded to the 4 running members). Individual Events: 1st = 5 pts, 2nd = 3 pts, 3rd = 1 pt. Mixed relay points count toward Overall Championship only.',
+    desc: 'College championships (Overall, Best Men\u2019s College, Best Women\u2019s College): individual events 1st = 5, 2nd = 3, 3rd = 1 pts; combined events (Decathlon, Heptathlon) and relays 1st = 10, 2nd = 6, 3rd = 2 pts. Overall = every event; Men\u2019s / Women\u2019s College = that division\u2019s events, relays included. The 4x400m Mixed Relay (10-6-2) counts for the Overall Championship only. Best Male / Female Athlete = World Athletics scoring-table points of the athlete\u2019s best single performance in a final.',
   },
   {
     id: 18,

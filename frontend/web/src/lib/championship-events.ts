@@ -107,7 +107,7 @@ export const OFFICIAL_CHAMPIONSHIP_RULES = [
   {
     num: 3,
     title: 'Event Quotas, Standalone Events & Reserve Rule',
-    text: 'Every kind of relay (4x100m, 4x400m, 4x400m Mixed Relay) and 21km Road Half Marathon can be entered as standalone disciplines. An athlete may register for up to 2 individual events and may nominate 1 reserve event , even when registered for both Event 1 and Event 2. The reserve must be a different event. Athletes can still participate in 4x400m Mixed Relay and Half Marathon unrestricted.',
+    text: 'Every kind of relay (4x100m, 4x400m, 4x400m Mixed Relay) and 21km Road Half Marathon can be entered as standalone disciplines. An athlete may register for any 2 individual events and 1 divisional relay (4x100m or 4x400m). The 4x400m Mixed Relay and the Half Marathon are common events open to everyone. Only 1 reserve is allowed for individual events, even when registered for both Event 1 and Event 2; the reserve must be a different event and the athlete must also be a participant in one of the events.',
   },
   {
     num: 4,
@@ -127,12 +127,12 @@ export const OFFICIAL_CHAMPIONSHIP_RULES = [
   {
     num: 7,
     title: 'Official Championship Points Scoring Matrix',
-    text: 'Individual Events: 1st Place = 5 pts, 2nd Place = 3 pts, 3rd Place = 1 pt. Relay Events (4x100m & 4x400m): 1st Place = 10 pts, 2nd Place = 6 pts, 3rd Place = 2 pts.',
+    text: 'Individual Events: 1st Place = 5 pts, 2nd Place = 3 pts, 3rd Place = 1 pt. Combined Events (Decathlon, Heptathlon) and Relay Events (4x100m & 4x400m): 1st Place = 10 pts, 2nd Place = 6 pts, 3rd Place = 2 pts. Overall Championship counts every event; Best Men\u2019s / Women\u2019s College counts that division\u2019s events, relays included.',
   },
   {
     num: 8,
     title: 'Championship Trophies & Major Awards',
-    text: 'Five official championship trophies will be conferred: (1) Best Male Athlete (Individual Champion – Men), (2) Best Female Athlete (Individual Champion – Women), (3) Best Men’s College Team (Team Championship – Men: Champions & Runners-up), (4) Best Women’s College Team (Team Championship – Women: Champions & Runners-up), and (5) Overall Championship Trophy (Combined Institution Winner).',
+    text: 'Five official championship trophies will be conferred: (1) Best Male Athlete (Individual Champion – Men), (2) Best Female Athlete (Individual Champion – Women) \u2013 decided by World Athletics scoring-table points of the athlete\u2019s best single performance in a final \u2013 (3) Best Men’s College Team (Team Championship – Men: Champions & Runners-up), (4) Best Women’s College Team (Team Championship – Women: Champions & Runners-up), and (5) Overall Championship Trophy (Combined Institution Winner).',
   },
   {
     num: 9,
@@ -162,6 +162,6 @@ export const OFFICIAL_CHAMPIONSHIP_RULES = [
   {
     num: 14,
     title: 'Mixed Relay Championship Points',
-    text: 'Mixed relay points will be considered for the Overall Championship Trophy only, and not for the Men or Women championships.',
+    text: 'The 4x400m Mixed Relay scores 10-6-2 for the Overall Championship Trophy only, and not for the Men or Women championships.',
   },
 ];

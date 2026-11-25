@@ -39,7 +39,7 @@ interface Props {
     pedEmail?: string;
   };
   athletes: ReportAthlete[];
-  /** Athletes of the college's other division: Rule 23 (min 8) counts men + women together */
+  /** Athletes of the college's other division: Rule 2 (min 8) counts men + women together */
   siblingAthleteCount?: number;
 }
 
@@ -305,31 +305,31 @@ export default function RegistrationReportModal({
             </table>
           </div>
 
-          {/* 6. MANDATORY DOCUMENT CHECKLIST AS PER VTU RULE 40-48 */}
+          {/* 6. MANDATORY DOCUMENT CHECKLIST AS PER THE OFFICIAL RULES &amp; REGULATIONS */}
           <div className="report-rules-box">
             <div className="sec-lbl" style={{ marginBottom: '0.35rem' }}>
-              MANDATORY SCRUTINY &amp; REPORTING CHECKLIST (VTU RULES 40–48)
+              MANDATORY SCRUTINY &amp; REPORTING CHECKLIST (OFFICIAL RULES &amp; REGULATIONS)
             </div>
             <div className="rules-check-grid">
               <div className="rule-item">
                 <span className="check-box">☑</span>
-                <span><strong>Bonafide Regular Student:</strong> Enrolled in degree course with active VTU USN (Rule 10).</span>
+                <span><strong>Bonafide Regular Student:</strong> Enrolled in degree course with active VTU USN (Who can participate).</span>
               </div>
               <div className="rule-item">
                 <span className="check-box">☑</span>
-                <span><strong>Academic Proof:</strong> Attested copies of PUC / Degree certificates and valid College ID Card (Rule 44 &amp; 46).</span>
+                <span><strong>Academic Proof:</strong> Attested copy of SSLC / D.O.B. certificate, attested copy of PUC / Degree certificates and valid College ID Card (Reporting &amp; Registration d, e, f).</span>
               </div>
               <div className="rule-item">
                 <span className="check-box">☑</span>
-                <span><strong>Aadhaar Card:</strong> Self-attested copy of 12-digit Aadhaar Card attached for each athlete (Rule 47).</span>
+                <span><strong>Aadhaar Card:</strong> Self-attested copy of 12-digit Aadhaar Card attached for each athlete (item g).</span>
               </div>
               <div className="rule-item">
                 <span className="check-box">☑</span>
-                <span><strong>Half Marathon Fitness:</strong> Mandatory Medical Fitness Certificate attached for 21km road runners (Rule 48).</span>
+                <span><strong>Half Marathon Fitness:</strong> Mandatory Medical Fitness Certificate attached for 21km road runners (item h).</span>
               </div>
               <div className="rule-item">
                 <span className="check-box">☑</span>
-                <span><strong>Marchpast Assembly:</strong> College team uniform &amp; flag required for compulsory opening marchpast (Rule 60).</span>
+                <span><strong>Marchpast Assembly:</strong> College team uniform &amp; flag required for compulsory opening marchpast (Please note, item 3).</span>
               </div>
             </div>
           </div>
@@ -769,11 +769,30 @@ export default function RegistrationReportModal({
             -webkit-print-color-adjust: exact !important;
             print-color-adjust: exact !important;
           }
+
+          /* Tighter sheet so a normal roster fits one page; never cut a row or block in half */
+          .report-table th { padding: 0.28rem 0.4rem !important; }
+          .report-table td { padding: 0.22rem 0.4rem !important; }
+          .report-table thead { display: table-header-group; }
+          .report-table tr,
+          .report-rules-box,
+          .report-cert-text,
+          .report-signatures,
+          .report-footer-note {
+            break-inside: avoid;
+            page-break-inside: avoid;
+          }
+          .report-rules-box { padding: 0.5rem 0.75rem !important; margin-bottom: 0.6rem !important; }
+          .report-cert-text { padding: 0.45rem 0.7rem !important; margin-bottom: 0.8rem !important; }
         }
       `}</style>
       <style jsx global>{`
         @media print {
           /* Print only the report: hide the portal banner, navigation and everything else on the page */
+          @page {
+            size: A4 portrait;
+            margin: 8mm;
+          }
           body > *:not(.report-modal-overlay) {
             display: none !important;
           }

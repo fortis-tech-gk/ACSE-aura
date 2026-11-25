@@ -59,7 +59,7 @@ interface Props {
   totalDues?: number;
   /** Mixed-relay nominations from the other division of this college */
   siblingMixedCount?: number;
-  /** Athletes registered by the other division of this college (Rule 23 counts the whole college) */
+  /** Athletes registered by the other division of this college (Rule 2 counts the whole college) */
   siblingAthleteCount?: number;
   collegeName?: string;
   paymentStatus?: string;
@@ -417,9 +417,9 @@ export default function AthletesManager({
     }
 
     // 1 reserve event is allowed with one or both individual events (it is not blocked by Event 2).
-    // Rule 36: A reserve participant must also be a participant of one of the regular events
+    // Rule 14: A reserve participant must also be a participant of one of the regular events
     if (!event1 && !event2 && reserveEvent) {
-      setError('VTU Regulation (Rule 36): A reserve event can only be nominated if the athlete is registered for an individual regular event.');
+      setError('VTU Regulation (Rule 14): A reserve event can only be nominated if the athlete is registered for an individual regular event.');
       setLoading(false);
       return;
     }
@@ -1399,7 +1399,7 @@ export default function AthletesManager({
                       {(() => {
                         const isRelaySelected = Boolean(relayChoice === '4x100' || relayChoice === '4x400' || isMixedRelay);
                         const isStandaloneAllowed = Boolean(isRelaySelected || isHalfMarathon);
-                        // A reserve needs at least one individual event (Rule 36); it is allowed with 1 or 2 events.
+                        // A reserve needs at least one individual event (Rule 14); it is allowed with 1 or 2 events.
                         const isReserveNotApplicable = !event1 && !event2;
                         const isReserveBlocked = isReserveNotApplicable;
 
@@ -1466,7 +1466,7 @@ export default function AthletesManager({
                             }}>
                               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem', alignItems: 'center' }}>
                                 <label style={{ ...labelStyle, marginBottom: 0, fontWeight: 700 }}>
-                                  Reserve Event {isReserveNotApplicable ? '(Requires Event 1 Selection — Rule 36)' : '(Optional — 1 Reserve)'}
+                                  Reserve Event {isReserveNotApplicable ? '(Requires Event 1 Selection — Rule 14)' : '(Optional — 1 Reserve)'}
                                 </label>
                                 <span style={{ fontSize: '0.875rem', fontWeight: 700, color: isReserveBlocked ? 'var(--text-muted)' : 'var(--success)' }}>
                                   {isReserveBlocked ? 'N/A' : 'FREE'}
@@ -1484,7 +1484,7 @@ export default function AthletesManager({
                               >
                                 <option value="">
                                   {isReserveNotApplicable
-                                    ? '-- Select Event 1 First to Nominate Reserve (Rule 36) --'
+                                    ? '-- Select Event 1 First to Nominate Reserve (Rule 14) --'
                                     : '-- None (No Reserve Discipline) --'}
                                 </option>
                                 {!isReserveBlocked && individualEvents
@@ -1497,7 +1497,7 @@ export default function AthletesManager({
                               </select>
                               <span style={{ fontSize: '0.75rem', color: isReserveBlocked ? 'var(--danger)' : 'var(--text-secondary)', display: 'block', marginTop: '0.35rem' }}>
                                 {isReserveNotApplicable
-                                  ? 'Per VTU Rule 36: A reserve participant must also be a participant in at least one individual regular event.'
+                                  ? 'Per VTU Rule 14: A reserve participant must also be a participant in at least one individual regular event.'
                                   : 'One free reserve event, allowed even with both Event 1 and Event 2. It must be a different event.'}
                               </span>
                             </div>
@@ -1666,7 +1666,7 @@ export default function AthletesManager({
                               </div>
                               {isHalfMarathon && (
                                 <div style={{ fontSize: '0.725rem', color: '#b45309', fontWeight: 700, marginTop: '0.35rem' }}>
-                                  ⚠️ Note: Medical Fitness Certificate is mandatory for 21km Road Half Marathon participants and must be submitted during reporting (VTU Rule 48).
+                                  ⚠️ Note: Medical Fitness Certificate is mandatory for 21km Road Half Marathon participants and must be submitted during reporting (Reporting &amp; Registration, item h).
                                 </div>
                               )}
                             </div>

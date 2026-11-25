@@ -69,12 +69,12 @@ export default async function SquadDashboardPage() {
 
   // Calculations
   const totalAthletes = formattedAthletes.length;
-  // Rule 23 (min 8) applies to the whole college: both squads together. There is no upper limit.
+  // Rule 2 (min 8) applies to the whole college: both squads together. There is no upper limit.
   const minQuota = COLLEGE_MIN_ATHLETES;
   const collegeTotal = Math.max(collegeStrength.total, totalAthletes);
   const siblingAthletes = Math.max(0, collegeTotal - totalAthletes);
   const siblingLabel = isMen ? 'women' : 'men';
-  // Progress towards the Rule 23 minimum (full once the college has 8 athletes)
+  // Progress towards the Rule 2 minimum (full once the college has 8 athletes)
   const quotaPercent = Math.min(100, Math.round((collegeTotal / minQuota) * 100));
 
   // Same fee calculation as the payment page: ₹100 per regular / Half Marathon entry and,
@@ -237,8 +237,8 @@ export default async function SquadDashboardPage() {
             <div style={{ marginTop: '0.45rem', paddingTop: '0.35rem', borderTop: '1px dashed #e2e8f0', fontSize: '0.72rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
               <span style={{ color: collegeTotal >= minQuota ? '#16a34a' : '#d97706', fontWeight: 600 }}>
                 {collegeTotal >= minQuota
-                  ? `✓ Rule 23: Min ${minQuota} athletes per college met`
-                  : `⚠️ Rule 23: Min ${minQuota} per college (${minQuota - collegeTotal} more needed)`}
+                  ? `✓ Rule 2: Min ${minQuota} athletes per college met`
+                  : `⚠️ Rule 2: Min ${minQuota} per college (${minQuota - collegeTotal} more needed)`}
               </span>
               <span style={{ color: '#94a3b8' }}>Men + Women together</span>
             </div>

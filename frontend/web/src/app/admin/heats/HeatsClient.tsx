@@ -92,7 +92,7 @@ export default function HeatsClient({ heats }: Props) {
       >
         <span style={{ fontSize: '1.25rem' }}>ℹ️</span>
         <div>
-          <strong>VTU Track Progression Rule (Preliminary Heats):</strong> Top 2 athletes from each heat qualify automatically for the final (Q1 and Q2). Progression is strictly position-based, <strong>NOT based on fastest times</strong> for preliminary heats.
+          <strong>Track Progression Rule:</strong> the first 2 of each heat qualify (Q) and the fastest losers (q) fill the lanes of the next round. Semi-finals to final follow World Athletics rules (2 semis: 3 Q + 2 q; 3 semis: 2 Q + 2 q; 4 semis: 2 Q).
         </div>
       </div>
 
