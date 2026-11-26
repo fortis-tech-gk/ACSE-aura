@@ -58,7 +58,10 @@ jobs:
         with:
           distribution: temurin
           java-version: 17
-      - uses: android-actions/setup-android@v3
+      # The ubuntu-latest image already has the Android SDK (ANDROID_HOME, licences accepted);
+      # android-actions/setup-android@v3 fails there trying to install the retired 'tools' package.
+      - name: Android SDK on the runner
+        run: echo "ANDROID_HOME=$ANDROID_HOME"; ls "$ANDROID_HOME/build-tools" | tail -3
       - run: npm ci
       - name: API address for ${{ inputs.target }}
         run: |
