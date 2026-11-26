@@ -8,6 +8,8 @@ import { validateDateOfBirth } from '@/lib/eligibility';
 import { getEventsCatalogue, getEventsByCodes } from '@/lib/events-catalogue';
 import { validateIdNumber, normalizeIdNumber, type IdType } from '@/lib/aadhaar';
 import { signAthletePhoto, signAthletePhotos } from '@/lib/photo-links';
+import { syncCollegePaymentStatus } from '@/lib/payments';
+import { contentMatches, storagePathFromUrl } from '@/lib/upload-check';
 
 export interface AddAthleteResult {
   success: boolean;
@@ -49,7 +51,10 @@ async function removeUploadedPhoto(path: string | null) {
 
 /** "YYYY-MM-DD" that is a real calendar date */
 function isRealDate(v: string): boolean {
-  return /^\d{4}-\d{2}-\d{2}$/.test(v) && !isNaN(new Date(v + 'T00:00:00Z').getTime());
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(v)) return false;
+  const d = new Date(v + 'T00:00:00Z');
+  // JS rolls 2005-02-30 over to 2 March: the date must come back unchanged
+  return !isNaN(d.getTime()) && d.toISOString().slice(0, 10) === v;
 }
 
 /**
@@ -358,6 +363,9 @@ export async function addAthleteAction(formData: FormData): Promise<AddAthleteRe
 
       const bytes = await photoFile.arrayBuffer();
       const buffer = Buffer.from(bytes);
+      if (!contentMatches(buffer, Object.keys(ALLOWED_MIME_TYPES))) {
+        return { success: false, error: 'The photo file is not a real JPG, PNG or WebP image. Please choose the photo again.' };
+      }
       const storagePath = `${session.squadId}/${Date.now()}_${usn}.${safeExt}`;
 
       const { data: uploadResult, error: uploadErr } = await supabaseAdmin.storage
@@ -387,6 +395,9 @@ export async function addAthleteAction(formData: FormData): Promise<AddAthleteRe
         const buffer = Buffer.from(match[2], 'base64');
         if (buffer.length > MAX_FILE_SIZE) {
           return { success: false, error: 'Photo size exceeds the maximum limit of 5MB.' };
+        }
+        if (!contentMatches(buffer, Object.keys(ALLOWED_MIME_TYPES))) {
+          return { success: false, error: 'The photo file is not a real JPG, PNG or WebP image. Please choose the photo again.' };
         }
 
         const storagePath = `${session.squadId}/${Date.now()}_${usn}.${safeExt}`;
@@ -535,6 +546,8 @@ export async function addAthleteAction(formData: FormData): Promise<AddAthleteRe
     return { success: false, error: regErr.message };
   }
 
+    // A new entry raises the fee: a fully paid college goes back to "balance due"
+    await syncCollegePaymentStatus(session.squadId);
     revalidatePath('/squad/athletes');
     revalidatePath('/squad/dashboard');
     revalidatePath('/squad/payment');
@@ -558,7 +571,7 @@ export async function deleteAthleteAction(profileId: string): Promise<{ success:
     getRosterMutationBlock(session.squadId),
     supabaseAdmin
       .from('profiles')
-      .select('id, bid_number')
+      .select('id, bid_number, photo_url')
       .eq('id', profileId)
       .eq('squad_id', session.squadId)
       .maybeSingle(),
@@ -577,28 +590,6 @@ export async function deleteAthleteAction(profileId: string): Promise<{ success:
     return {
       success: false,
       error: `This athlete already has bib number ${owned.bid_number}. Contact the VTU Directorate to withdraw or substitute them.`,
-    };
-  }
-
-  // The 4x400m Mixed Relay team is shared with the other squad of the college. If that squad's
-  // roster is frozen (payment submitted / verified), removing this athlete would silently break
-  // its paid lineup, which it can no longer repair — so refuse.
-  const { data: memberships } = await supabaseAdmin
-    .from('relay_members')
-    .select('relay_teams(squad_id, events(name), squads(roster_locked, gender))')
-    .eq('profile_id', profileId);
-  const lockedTeam = (memberships || [])
-    .map((m: any) => (Array.isArray(m.relay_teams) ? m.relay_teams[0] : m.relay_teams))
-    .find((t: any) => {
-      const sq = Array.isArray(t?.squads) ? t.squads[0] : t?.squads;
-      return t && t.squad_id !== session.squadId && false;
-    });
-  if (lockedTeam) {
-    const ev = Array.isArray(lockedTeam.events) ? lockedTeam.events[0] : lockedTeam.events;
-    const sq = Array.isArray(lockedTeam.squads) ? lockedTeam.squads[0] : lockedTeam.squads;
-    return {
-      success: false,
-      error: `This athlete runs in your college's ${ev?.name || 'Mixed Relay'} team, which the ${sq?.gender === 'women' ? "Women's" : "Men's"} squad has already paid for and locked. Removing them would break that team — contact the VTU Directorate.`,
     };
   }
 
@@ -624,7 +615,9 @@ export async function deleteAthleteAction(profileId: string): Promise<{ success:
 
   if (error) return { success: false, error: error.message };
 
-
+  // The athlete is gone: so is their passport photo (privacy; it was left in storage before)
+  await removeUploadedPhoto(storagePathFromUrl(owned.photo_url, 'athlete-photos'));
+  await syncCollegePaymentStatus(session.squadId);
   revalidatePath('/squad/athletes');
   revalidatePath('/squad/dashboard');
   revalidatePath('/squad/payment');
@@ -744,6 +737,9 @@ export async function updateAthleteAction(formData: FormData): Promise<UpdateAth
       const buffer = Buffer.from(match[2], 'base64');
       if (buffer.length > 5 * 1024 * 1024) {
         return { success: false, error: 'Photo size exceeds the maximum limit of 5MB.' };
+      }
+      if (!contentMatches(buffer, Object.keys(ALLOWED))) {
+        return { success: false, error: 'The photo file is not a real JPG, PNG or WebP image. Please choose the photo again.' };
       }
       const storagePath = `${session.squadId}/${Date.now()}_${usn}.${ext}`;
       const { data: uploadResult, error: uploadErr } = await supabaseAdmin.storage
@@ -1036,6 +1032,7 @@ export async function updateAthleteEventsAction(formData: FormData): Promise<{ s
       }
     }
 
+    await syncCollegePaymentStatus(session.squadId);
     revalidatePath('/squad/athletes');
     revalidatePath('/squad/dashboard');
     revalidatePath('/squad/payment');

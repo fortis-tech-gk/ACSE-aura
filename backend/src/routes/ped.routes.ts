@@ -1,5 +1,6 @@
 import { Router, Response } from 'express';
 import { supabase } from '../config/supabase';
+import { sendDbError, isTransientDbError } from '../utils/db-error';
 import { authenticate, requireRole, AuthenticatedRequest } from '../middleware/auth';
 import { invalidateCache } from '../middleware/cache';
 import { fetchAll } from '../utils/fetch-all';
@@ -93,6 +94,8 @@ async function startedEvents(eventIds: string[]): Promise<Set<string>> {
 function dbError(res: Response, error: any) {
   const msg = String(error?.message || 'Could not save the change.');
   if (error?.hint === 'GIVE_UP_REQUIRED') return res.status(409).json({ error: msg, code: 'GIVE_UP_REQUIRED' });
+  // Connection / timeout problems are "try again" (503), not a refused change
+  if (isTransientDbError(error)) return sendDbError(res, error);
   return res.status(400).json({ error: msg });
 }
 

@@ -331,6 +331,33 @@ export function splitCollegeFees(
     : { menFee: otherFee, womenFee: ownFee, ownFee, otherFee };
 }
 
+/**
+ * Re-derives payment_status for BOTH squads of the college from the CURRENT fee and the payments.
+ * Called after every roster change, so a college that adds an entry after verification goes back
+ * to SUBMITTED (balance due) instead of staying VERIFIED — bib numbers and check-in trust that
+ * status. Colleges with no payment yet (DRAFT) and rejected-only colleges are left as they are.
+ */
+export async function syncCollegePaymentStatus(squadId: string): Promise<void> {
+  try {
+    const { squadIds, combined } = await calculateCollegeFees(squadId);
+    const { data: payments, error } = await supabaseAdmin.from('payments').select('status, amount_received, amount_submitted').in('squad_id', squadIds);
+    if (error || !payments || payments.length === 0) return;
+    const verified = totalCredited(payments as any[]);
+    const pending = payments.filter((p: any) => p.status === 'SUBMITTED').length;
+    let status: 'VERIFIED' | 'SUBMITTED' | null = null;
+    if (verified > 0 && verified >= combined.totalAmount) status = 'VERIFIED';
+    else if (pending > 0 || verified > 0) status = 'SUBMITTED';
+    if (!status) return;
+    await supabaseAdmin
+      .from('squads')
+      .update({ payment_status: status, updated_at: new Date().toISOString() })
+      .in('id', squadIds)
+      .neq('payment_status', status);
+  } catch (err) {
+    console.warn('Payment status sync failed:', err);
+  }
+}
+
 export type PaymentDecision = 'VERIFIED' | 'REJECTED';
 
 /**

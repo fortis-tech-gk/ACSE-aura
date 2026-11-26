@@ -111,7 +111,7 @@ export default function PedContactCard({ initialName, initialPhone, initialEmail
           <Field label="Email ID of the PED" value={saved.email || '—'} />
         </dl>
       ) : (
-        <form onSubmit={handleSubmit} style={{ marginTop: '1rem' }}>
+        <form onSubmit={handleSubmit} method="post" style={{ marginTop: '1rem' }}>
           {error && (
             <div
               role="alert"

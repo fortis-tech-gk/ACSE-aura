@@ -1,5 +1,5 @@
 import { Router, Request, Response } from 'express';
-import { isLoginThrottled, recordLoginFailure, clearLoginFailures, THROTTLE_MESSAGE } from '../utils/login-throttle';
+import { isLoginThrottled, recordLoginFailure, clearLoginFailures, THROTTLE_MESSAGE, PIN_FAILS_PER_ROLE_IP, PIN_FAILS_PER_IP } from '../utils/login-throttle';
 import { supabase } from '../config/supabase';
 import { generateToken } from '../middleware/auth';
 import { verifyPassword } from '../utils/passphrase';
@@ -81,7 +81,7 @@ authRouter.post('/ped/login', async (req: Request, res: Response) => {
 
     const ip = req.ip || 'unknown';
     const throttleKey = `ped|${code.replace(/-(M|W|G)$/, '')}`;
-    if (await isLoginThrottled('squad', throttleKey, ip, 8, 100)) {
+    if (await isLoginThrottled('squad', throttleKey, ip, 8, 500)) {
       return res.status(429).json({ error: THROTTLE_MESSAGE });
     }
 
@@ -234,11 +234,12 @@ authRouter.post('/staff/pin-login', async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'Enter your PIN (digits only).' });
     }
 
-    // Throttle per role+device network (not per role alone — that would let anyone lock out
-    // every official of a role on meet day), plus an overall cap per IP.
+    // Throttle per role + network, plus an overall cap per IP. At the venue every official shares
+    // ONE public IP, so these are venue-scale (audit 26 Nov: 15/30 let 30 typos across any roles lock
+    // every official out for 15 minutes). A correct PIN clears the role's counter.
     const ip = req.ip || 'unknown';
     const pinKey = `${role}|${ip}`;
-    if (await isLoginThrottled('pin', pinKey, ip, 15, 30)) {
+    if (await isLoginThrottled('pin', pinKey, ip, PIN_FAILS_PER_ROLE_IP, PIN_FAILS_PER_IP)) {
       return res.status(429).json({ error: THROTTLE_MESSAGE });
     }
 

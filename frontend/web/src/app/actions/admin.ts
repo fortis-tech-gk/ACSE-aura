@@ -5,7 +5,7 @@ import { requireAdmin, forgetSquadStamp } from '@/lib/auth-guard';
 import { generateSquadPassphrase, hashPassphrase, hashPin } from '@/lib/passphrase';
 import bcrypt from 'bcryptjs';
 import { revalidatePath } from 'next/cache';
-import { calculateCollegeFees, getCollegeSquadIds } from '@/lib/payments';
+import { syncCollegePaymentStatus, calculateCollegeFees, getCollegeSquadIds } from '@/lib/payments';
 import { normalizePaymentStatus, totalCredited, type SquadPaymentStatus } from '@/lib/payment-status';
 
 export interface CreateCollegeResult {
@@ -199,6 +199,13 @@ export async function toggleSquadRosterLockAction(
 
   const { error } = await supabaseAdmin.from('squads').update(update).eq('id', squadId);
   if (error) return { success: false, error: error.message };
+  // One payment per college: the other division must carry the same status (it stayed VERIFIED
+  // with a balance due when only this squad was re-locked — audit 26 Nov M2)
+  if (locked) {
+    await syncCollegePaymentStatus(squadId);
+    const { data: after } = await supabaseAdmin.from('squads').select('payment_status').eq('id', squadId).maybeSingle();
+    if (after?.payment_status) update.payment_status = after.payment_status;
+  }
 
   try {
     const { error: auditErr } = await supabaseAdmin.from('admin_audit_logs').insert({

@@ -75,7 +75,8 @@ athleteRouter.post('/login', loginLimiter, async (req: Request, res: Response) =
       const bib = parseInt(bibRaw, 10);
       throttleKey = String(bib);
 
-      if (await isLoginThrottled('athlete', throttleKey, ip, 8, 1000)) {
+      // 8 wrong DOBs per bib; the per-IP cap is venue-scale (~4,000 athletes share one Wi-Fi IP)
+      if (await isLoginThrottled('athlete', throttleKey, ip, 8, 20000)) {
         return res.status(429).json({ error: THROTTLE_MESSAGE });
       }
 

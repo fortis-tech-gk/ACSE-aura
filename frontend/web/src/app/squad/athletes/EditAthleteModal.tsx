@@ -264,7 +264,7 @@ export default function EditAthleteModal({ athlete, onClose, onSaved, onEditEven
           </div>
         )}
 
-        <form onSubmit={handleSubmit} id="form-edit-athlete" style={{ display: 'flex', flexDirection: 'column', gap: '0.9rem' }}>
+        <form onSubmit={handleSubmit} method="post" id="form-edit-athlete" style={{ display: 'flex', flexDirection: 'column', gap: '0.9rem' }}>
           <div style={{ display: 'flex', gap: '1rem', alignItems: 'center', flexWrap: 'wrap' }}>
             <div
               style={{

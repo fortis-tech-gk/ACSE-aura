@@ -156,7 +156,7 @@ export default function SquadLoginPage() {
               </div>
             )}
 
-            <form onSubmit={handleSubmit} className="login-form" id="squad-login-form">
+            <form onSubmit={handleSubmit} method="post" className="login-form" id="squad-login-form">
               {/* Prompt 1: College Code */}
               <div>
                 <label htmlFor="collegeCode" className="login-label">

@@ -20,6 +20,7 @@
  */
 import { supabase } from '../config/supabase';
 import { invalidateCache } from '../middleware/cache';
+import { invalidateStandings } from './standings-cache';
 import { sendPushToProfiles } from './push';
 import type { TokenPayload } from '../middleware/auth';
 import { notifyPedsResults } from './ped-alerts';
@@ -240,7 +241,10 @@ async function buildNextRound(heat: HeatRow, roundHeats: HeatRow[]) {
   const scheduleItemId = (items || []).find((i: any) => i.stage === nextStage)?.id ?? null;
 
   // Already built and under way? Leave it alone.
-  const { data: existing } = await supabase.from('heats').select('id, status, heat_athletes(id, track_results(id))').eq('event_id', ev.id).eq('stage', nextStage);
+  const { data: existing } = await supabase.from('heats').select('id, status, heat_athletes(id, profile_id, relay_team_id, track_results(id))').eq('event_id', ev.id).eq('stage', nextStage);
+  // Who was already in an earlier build of the next round (already told "qualified")
+  const alreadyIn = new Set<string>();
+  for (const h of (existing || []) as any[]) for (const a of h.heat_athletes || []) alreadyIn.add(String(a.relay_team_id || a.profile_id));
   const started = (existing || []).some((h: any) => h.status !== 'SCHEDULED' || (h.heat_athletes || []).some((a: any) => (Array.isArray(a.track_results) ? a.track_results.length : a.track_results)));
   if (started) return { nextStage, skipped: 'The next round has already started — not rebuilt.' };
 
@@ -295,10 +299,14 @@ async function buildNextRound(heat: HeatRow, roundHeats: HeatRow[]) {
     created.push({ heatId: h.id, heatNumber: n + 1, entries: rows.length });
   }
 
-  // Tell the qualified athletes (relays: every runner of the team)
-  const profileIds = relay
-    ? ((await supabase.from('relay_members').select('profile_id').in('relay_team_id', qualified.map((q) => q.relayTeamId!))).data || []).map((m: any) => m.profile_id)
-    : qualified.map((q) => q.profileId!);
+  // Tell the qualified athletes (relays: every runner of the team) — only those not told already
+  // when this round was built before (a re-finalize rebuilds an unstarted round; audit 26 Nov L7)
+  const fresh = qualified.filter((q) => !alreadyIn.has(String(relay ? q.relayTeamId : q.profileId)));
+  const profileIds = !fresh.length
+    ? []
+    : relay
+      ? ((await supabase.from('relay_members').select('profile_id').in('relay_team_id', fresh.map((q) => q.relayTeamId!))).data || []).map((m: any) => m.profile_id)
+      : fresh.map((q) => q.profileId!);
   const stageName = nextStage === 'FINAL' ? 'the final' : 'the semi-final';
   sendPushToProfiles(profileIds, {
     title: `✅ Qualified — ${ev.name}`,
@@ -317,6 +325,42 @@ async function awardPoints(heat: HeatRow) {
   const { data, error } = await supabase.rpc('allocate_event_points', { p_event_id: heat.event_id, p_heat_id: heat.id });
   if (error) throw new ProgressionError(`Results saved, but points could not be awarded: ${error.message}`);
   return data;
+}
+
+/**
+ * Refuses to finalize a heat whose results are not in:
+ *  - track (incl. relays): every athlete who reported needs a time, DNS, DNF or DQ
+ *    (call-room no-shows / scratches are already DNS in call_room_inspections);
+ *  - field and combined events: at least one mark must be entered.
+ */
+async function assertResultsEntered(h: HeatRow) {
+  const { data, error } = await supabase
+    .from('heat_athletes')
+    .select('id, track_results(id), field_attempts(id), vertical_jump_attempts(id), combined_results(id), call_room_inspections(reported_status)')
+    .eq('heat_id', h.id);
+  if (error) throw new ProgressionError(`Could not check the results: ${error.message}`, 503);
+  const rows = (data || []) as any[];
+  const count = (v: any) => (Array.isArray(v) ? v.length : v ? 1 : 0);
+  const hasResult = (r: any) =>
+    count(r.track_results) + count(r.field_attempts) + count(r.vertical_jump_attempts) + count(r.combined_results) > 0;
+  const outAtCallRoom = (r: any) => {
+    const i = Array.isArray(r.call_room_inspections) ? r.call_room_inspections[0] : r.call_room_inspections;
+    return !!i?.reported_status && i.reported_status !== 'REPORTED';
+  };
+
+  if (!rows.some(hasResult)) {
+    throw new ProgressionError('No results are entered for this heat yet. Enter them first, or ask the meet office.', 409);
+  }
+  const category = h.events?.category || '';
+  if (isTrack(category) && category !== 'combined') {
+    const missing = rows.filter((r) => !hasResult(r) && !outAtCallRoom(r)).length;
+    if (missing > 0) {
+      throw new ProgressionError(
+        `${missing} athlete${missing === 1 ? '' : 's'} in this heat ${missing === 1 ? 'has' : 'have'} no result. Enter a time, DNS, DNF or DQ for each, then finalize.`,
+        409
+      );
+    }
+  }
 }
 
 /** Finalize a heat and run everything that follows from it. */
@@ -342,6 +386,9 @@ export async function finalizeHeat(
   }
   assertEventScope(user, h.event_id);
   if (user.role !== 'meet_admin') assertCallRoomClosed(h.status);
+  // A mis-tap must not finish a heat with no (or missing) results — it would lock the heat with
+  // nobody ranked (audit F-6 / 26 Nov M1). The meet office can still force it.
+  if (!DONE.includes(h.status) && user.role !== 'meet_admin') await assertResultsEntered(h);
 
   if (!DONE.includes(h.status)) {
     const { error: upErr } = await supabase.from('heats').update({ status: 'COMPLETED' }).eq('id', heatId);
@@ -362,6 +409,7 @@ export async function finalizeHeat(
     else nextRound = await buildNextRound(h, roundHeats);
   }
 
+  invalidateStandings(); // else the response cache refills from 10-s-old standings (audit 26 Nov M4)
   invalidateCache('live');
   invalidateCache('leaderboard');
   invalidateCache('schedule');

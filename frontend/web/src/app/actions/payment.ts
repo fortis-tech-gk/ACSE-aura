@@ -7,6 +7,7 @@ import { calculateCollegeFees, reviewPayment, sumSquadFees } from '@/lib/payment
 import { resolveHostUpiId, resolveHostAccountName } from '@/lib/payment-config';
 import { normalizePaymentStatus, totalCredited, creditedAmount, type SquadPaymentStatus } from '@/lib/payment-status';
 import { fetchAllRows } from '@/lib/db-fetch-all';
+import { contentMatches, storagePathFromUrl } from '@/lib/upload-check';
 
 export interface FeeBreakdown {
   regularEventsCount: number;
@@ -243,24 +244,12 @@ export async function submitPaymentAction(formData: FormData): Promise<{ success
     // ONE PAYMENT PER COLLEGE: the balance covers both divisions (Men + Women), a pending receipt
     // from either division blocks a second one, and paying locks both rosters.
     const { squadIds, combined: feeCalc } = await calculateCollegeFees(session.squadId);
-    const [{ data: lockRow }, { count: pendingCount }, { data: pastPayments }] =
-      await Promise.all([
-        supabaseAdmin
-          .from('squads')
-          .select('roster_locked, ped_name, ped_phone')
-          .eq('id', session.squadId)
-          .maybeSingle(),
-        supabaseAdmin
-          .from('payments')
-          .select('id', { count: 'exact', head: true })
-          .in('squad_id', squadIds)
-          .eq('status', 'SUBMITTED'),
-        supabaseAdmin
-          .from('payments')
-          .select('*')
-          .in('squad_id', squadIds)
-          .eq('status', 'VERIFIED'),
-      ]);
+    // Repeat payments are allowed (63dc82e): a pending receipt does not block another one
+    const { data: lockRow } = await supabaseAdmin
+      .from('squads')
+      .select('ped_name, ped_phone')
+      .eq('id', session.squadId)
+      .maybeSingle();
 
     // The invoice, registration report and Finance Desk need a reachable PED
     if (!String(lockRow?.ped_name || '').trim() || !String(lockRow?.ped_phone || '').trim()) {
@@ -315,6 +304,9 @@ export async function submitPaymentAction(formData: FormData): Promise<{ success
 
         const bytes = await screenshotFile.arrayBuffer();
         const buffer = Buffer.from(bytes);
+        if (!contentMatches(buffer, Object.keys(ALLOWED_MIME_TYPES))) {
+          return { success: false, error: 'The receipt file is not a real JPG, PNG, WebP or PDF. Please attach it again.' };
+        }
         const storagePath = `${session.squadId}/${Date.now()}_utr_${utrClean}.${safeExt}`;
 
         const { data: uploadResult, error: uploadErr } = await supabaseAdmin.storage
@@ -343,6 +335,9 @@ export async function submitPaymentAction(formData: FormData): Promise<{ success
           const buffer = Buffer.from(match[2], 'base64');
           if (buffer.length > MAX_FILE_SIZE) {
             return { success: false, error: 'Payment proof exceeds the maximum limit of 5MB.' };
+          }
+          if (!contentMatches(buffer, Object.keys(ALLOWED_MIME_TYPES))) {
+            return { success: false, error: 'The receipt file is not a real JPG, PNG, WebP or PDF. Please attach it again.' };
           }
 
           const storagePath = `${session.squadId}/${Date.now()}_utr_${utrClean}.${safeExt}`;
@@ -386,6 +381,9 @@ export async function submitPaymentAction(formData: FormData): Promise<{ success
     });
 
     if (error) {
+      // Nothing was saved: don't leave the uploaded receipt behind in storage
+      const orphan = storagePathFromUrl(screenshotUrl, 'payment-proofs');
+      if (orphan) await supabaseAdmin.storage.from('payment-proofs').remove([orphan]).then(() => {}, () => {});
       if (error.code === '23505') {
         return { success: false, error: `UTR Reference '${utrClean}' has already been used for an earlier payment submission. Each payment must have its own UTR.` };
       }

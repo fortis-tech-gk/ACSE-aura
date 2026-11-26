@@ -352,7 +352,7 @@ export default function CollegesManager({ initialColleges }: Props) {
               </div>
             )}
 
-            <form onSubmit={handleAddCollege} id="form-add-college">
+            <form onSubmit={handleAddCollege} method="post" id="form-add-college">
               <div className="form-group">
                 <label className="form-label" htmlFor="name">College Full Name</label>
                 <input id="name" name="name" type="text" required placeholder="e.g. Maharaja Institute of Technology Mysore" className="input-field" />

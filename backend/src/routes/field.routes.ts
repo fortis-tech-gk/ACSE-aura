@@ -79,6 +79,12 @@ fieldRouter.post('/attempt', async (req: AuthenticatedRequest, res: Response) =>
         error: 'heatAthleteId, roundNumber, and attemptType are required.',
       });
     }
+    if (attemptType === 'VALID') {
+      const m = Number(markMeters);
+      if (!Number.isFinite(m) || m <= 0) {
+        return res.status(400).json({ error: 'Enter the measured mark in metres (more than 0), or record a foul.' });
+      }
+    }
 
     const { data, error } = await supabase.rpc('submit_field_attempt', {
       p_heat_athlete_id: heatAthleteId,
@@ -150,7 +156,12 @@ fieldRouter.get('/standings/:heatId', async (req: AuthenticatedRequest, res: Res
     });
 
     if (error) return sendDbError(res, error);
-    return res.json(data);
+    // An athlete with no valid mark (all fouls / passes) is NM and takes no place (audit 26 Nov L14)
+    const out: any = data;
+    if (out && Array.isArray(out.standings)) {
+      out.standings = out.standings.map((r: any) => (r?.best_mark == null ? { ...r, rank: null, nm: true } : r));
+    }
+    return res.json(out);
   } catch (err: any) {
     return res.status(500).json({ error: err.message });
   }

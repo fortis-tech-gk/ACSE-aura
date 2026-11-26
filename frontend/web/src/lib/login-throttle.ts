@@ -16,7 +16,7 @@ const WINDOW_MINUTES = 15;
 /** Failures allowed per account (college+division / username / role) in the window */
 const KEY_LIMIT: Record<ThrottleScope, number> = { squad: 8, admin: 8, pin: 15 };
 /** Failures allowed per client IP in the window (college networks may share one IP) */
-const IP_LIMIT: Record<ThrottleScope, number> = { squad: 40, admin: 20, pin: 20 };
+const IP_LIMIT: Record<ThrottleScope, number> = { squad: 40, admin: 20, pin: 300 };
 
 export async function getClientIp(): Promise<string> {
   try {

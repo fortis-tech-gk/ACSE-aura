@@ -1208,7 +1208,7 @@ export default function AthletesManager({
               </div>
             )}
 
-            <form onSubmit={handleAddAthlete} id="form-add-athlete">
+            <form onSubmit={handleAddAthlete} method="post" id="form-add-athlete">
               <div className="athlete-modal-grid">
 
                 {/* Left Column: Form Fields */}

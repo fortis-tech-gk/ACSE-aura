@@ -29,3 +29,8 @@ export async function getChampionshipStandings(): Promise<any> {
   })();
   return inFlight;
 }
+
+/** Drop the cached standings on this instance (after a heat is finalized). */
+export function invalidateStandings(): void {
+  cached = null;
+}

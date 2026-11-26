@@ -500,7 +500,7 @@ export default function PaymentClient({ breakdown, fullBreakdown, payments, squa
               </div>
             )}
 
-            <form onSubmit={handleSubmit} id="form-submit-payment" style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+            <form onSubmit={handleSubmit} method="post" id="form-submit-payment" style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
               <div>
                 <label style={labelStyle} htmlFor="amount">Amount Transferred (₹) *</label>
                 <input

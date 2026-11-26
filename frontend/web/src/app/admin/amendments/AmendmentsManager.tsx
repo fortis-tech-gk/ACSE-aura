@@ -122,7 +122,7 @@ export default function AmendmentsManager({ athletes, initialAmendments }: Props
             Voids the athlete&apos;s bid number from race heats. The bid number will NOT be renumbered.
           </p>
 
-          <form onSubmit={handleWithdraw}>
+          <form onSubmit={handleWithdraw} method="post">
             <div className="form-group">
               <label className="form-label" htmlFor="amend-division-filter">Division</label>
               <DivisionSelect value={divisionFilter} onChange={setDivisionFilter} className="input-field" id="amend-division-filter" />
@@ -178,7 +178,7 @@ export default function AmendmentsManager({ athletes, initialAmendments }: Props
             Enrolls a replacement athlete inheriting the withdrawn athlete&apos;s existing bid number.
           </p>
 
-          <form onSubmit={handleSubstitute}>
+          <form onSubmit={handleSubstitute} method="post">
             <div className="form-group">
               <label className="form-label" htmlFor="withdrawnProfileId">Select Withdrawn Slot</label>
               <select

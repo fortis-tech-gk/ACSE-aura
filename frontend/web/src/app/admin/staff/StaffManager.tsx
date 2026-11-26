@@ -186,7 +186,7 @@ export default function StaffManager({ initialStaff }: Props) {
               </div>
             )}
 
-            <form onSubmit={handleAddStaff} id="form-add-staff">
+            <form onSubmit={handleAddStaff} method="post" id="form-add-staff">
               <div className="form-group">
                 <label className="form-label" htmlFor="displayName">Full Name / Desk Title</label>
                 <input id="displayName" name="displayName" type="text" required placeholder="e.g. Gate 1 Volunteer or Chief Track Marshal" className="input-field" />

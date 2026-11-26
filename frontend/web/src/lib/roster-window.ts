@@ -31,9 +31,6 @@ export function rosterEditBlockReason(registrationOpen: boolean, squad: RosterWi
   if (!registrationOpen) {
     return 'Championship registrations are officially closed by the VTU Directorate. Contact the Directorate to request a late entry.';
   }
-  if (!registrationOpen) {
-    return 'Championship registrations are officially closed by the VTU Directorate.';
-  }
   return String(squad.payment_status || '').toUpperCase() === 'VERIFIED'
     ? 'Roster Locked: Your entry fee payment has been verified. The squad roster is permanently frozen. Contact the VTU Directorate for an emergency unlock.'
     : 'Roster Locked & Payment Submitted: Athletes cannot be added or removed while the roster is frozen. Contact the VTU Directorate for an emergency unlock.';

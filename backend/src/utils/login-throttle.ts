@@ -7,6 +7,11 @@ import { supabase } from '../config/supabase';
 
 const WINDOW_MINUTES = 15;
 
+/** Failed PIN logins allowed per 15 minutes from one network (the venue shares ONE public IP):
+ *  per duty (role), and across all duties. A correct PIN clears that duty's counter. */
+export const PIN_FAILS_PER_ROLE_IP = 100;
+export const PIN_FAILS_PER_IP = 300;
+
 export async function isLoginThrottled(
   scope: string,
   key: string,

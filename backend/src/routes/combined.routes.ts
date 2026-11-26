@@ -44,8 +44,8 @@ combinedRouter.get('/heats/:heatId', async (req: AuthenticatedRequest, res: Resp
         .order('lane_number', { ascending: true }),
       supabase.rpc('compute_combined_standings', { p_event_id: ev?.id }),
     ]);
-    if (disc.error) return res.status(400).json({ error: disc.error.message });
-    if (ath.error) return res.status(400).json({ error: ath.error.message });
+    if (disc.error) return sendDbError(res, disc.error);
+    if (ath.error) return sendDbError(res, ath.error);
     if (!(disc.data || []).length) return res.status(400).json({ error: 'This event has no combined-event scoring table. Apply migration 0045.' });
 
     return res.json({

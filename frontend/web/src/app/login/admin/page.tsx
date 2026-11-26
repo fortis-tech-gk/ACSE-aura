@@ -52,7 +52,7 @@ export default function AdminLoginPage() {
           </div>
         )}
 
-        <form onSubmit={handleSubmit} id="admin-login-form">
+        <form onSubmit={handleSubmit} method="post" id="admin-login-form">
           <div className="form-group" style={{ marginBottom: '1.25rem' }}>
             <label className="form-label" htmlFor="username" style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, color: '#334155', marginBottom: '0.4rem' }}>
               Admin Username

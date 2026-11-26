@@ -4,7 +4,7 @@ import { signPhotoFieldsDeep, signPhotoUrl } from '../utils/photo-links';
 import { authenticate, requireRole, AuthenticatedRequest } from '../middleware/auth';
 import { resolveAthlete } from '../utils/athlete-resolve';
 import { assertEventScope, ProgressionError } from '../utils/progression';
-import { isLoginThrottled, recordLoginFailure, clearLoginFailures, THROTTLE_MESSAGE } from '../utils/login-throttle';
+import { isLoginThrottled, recordLoginFailure, clearLoginFailures, THROTTLE_MESSAGE, PIN_FAILS_PER_IP } from '../utils/login-throttle';
 import { verifyPassword } from '../utils/passphrase';
 import { invalidateCache } from '../middleware/cache';
 import { notifyPedsCallRoomClosed } from '../utils/ped-alerts';
@@ -73,7 +73,7 @@ callRoomRouter.post('/override-close', requireRole(['meet_admin', 'referee']), a
 
     const ip = req.ip || 'unknown';
     const key = `override|${req.user!.entityId}|${ip}`;
-    if (await isLoginThrottled('pin', key, ip, 10, 30)) return res.status(429).json({ error: THROTTLE_MESSAGE });
+    if (await isLoginThrottled('pin', key, ip, 10, PIN_FAILS_PER_IP)) return res.status(429).json({ error: THROTTLE_MESSAGE });
 
     const { data: candidates } = await supabase
       .from('staff')

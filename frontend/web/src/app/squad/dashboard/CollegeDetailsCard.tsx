@@ -112,7 +112,7 @@ export default function CollegeDetailsCard({ initial, collegeCode }: Props) {
           <Field label="Contact Number of the Principal" value={saved.principalPhone || '—'} />
         </dl>
       ) : (
-        <form onSubmit={handleSubmit} style={{ marginTop: '1rem' }} id="form-college-details">
+        <form onSubmit={handleSubmit} method="post" style={{ marginTop: '1rem' }} id="form-college-details">
           {error && (
             <div
               role="alert"

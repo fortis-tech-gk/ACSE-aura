@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
+import { supabase } from '../config/supabase';
 
 const JWT_SECRET: string = process.env.JWT_SECRET || '';
 if (!JWT_SECRET) {
@@ -60,20 +61,44 @@ export function peekUser(req: Request): TokenPayload | null {
   }
 }
 
-export function authenticate(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+// Staff tokens live up to 21 days: a deactivated account must stop working well before that.
+// is_active is re-checked per staff account, cached for 30 s; a database hiccup never logs anyone out.
+const NON_STAFF_ROLES = new Set<UserRole>(['athlete', 'ped', 'squad_manager', 'spectator']);
+const STAFF_ACTIVE_TTL_MS = 30_000;
+const staffActive = new Map<string, { active: boolean; at: number }>();
+
+async function staffStillActive(staffId: string): Promise<boolean> {
+  const hit = staffActive.get(staffId);
+  if (hit && Date.now() - hit.at < STAFF_ACTIVE_TTL_MS) return hit.active;
+  try {
+    const { data, error } = await supabase.from('staff').select('is_active').eq('id', staffId).maybeSingle();
+    if (error) return hit?.active ?? true;
+    const active = data?.is_active === true; // a deleted account is inactive too
+    staffActive.set(staffId, { active, at: Date.now() });
+    return active;
+  } catch {
+    return hit?.active ?? true;
+  }
+}
+
+export async function authenticate(req: AuthenticatedRequest, res: Response, next: NextFunction) {
   const authHeader = req.headers.authorization;
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
     return res.status(401).json({ error: 'Authorization header missing or invalid.' });
   }
 
   const token = authHeader.split(' ')[1];
+  let decoded: TokenPayload;
   try {
-    const decoded = jwt.verify(token, EFFECTIVE_JWT_SECRET) as unknown as TokenPayload;
-    req.user = decoded;
-    next();
+    decoded = jwt.verify(token, EFFECTIVE_JWT_SECRET) as unknown as TokenPayload;
   } catch {
     return res.status(401).json({ error: 'Token is expired or invalid.' });
   }
+  if (!NON_STAFF_ROLES.has(decoded.role) && decoded.entityId && !(await staffStillActive(decoded.entityId))) {
+    return res.status(401).json({ error: 'This staff account has been deactivated. Ask the meet office.' });
+  }
+  req.user = decoded;
+  next();
 }
 
 export function requireRole(allowedRoles: UserRole[]) {

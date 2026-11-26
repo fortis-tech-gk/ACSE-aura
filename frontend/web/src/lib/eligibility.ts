@@ -11,7 +11,9 @@ export const EARLIEST_DOB = '1900-01-01';
 /** Returns an error message, or null when the date of birth is acceptable. */
 export function validateDateOfBirth(dob: string | null | undefined, todayIso?: string): string | null {
   const v = String(dob || '').trim();
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(v) || isNaN(new Date(v + 'T00:00:00Z').getTime())) {
+  const d = new Date(v + 'T00:00:00Z');
+  // JS rolls 2005-02-30 over to 2 March: the date must come back unchanged
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(v) || isNaN(d.getTime()) || d.toISOString().slice(0, 10) !== v) {
     return 'Please enter a valid date of birth (as per SSLC certificate).';
   }
   const today = todayIso || new Date().toISOString().slice(0, 10);
