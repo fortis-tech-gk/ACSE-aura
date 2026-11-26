@@ -43,8 +43,6 @@ jobs:
         working-directory: frontend/mobile
     env:
       APP_VARIANT: ${{ matrix.app }}
-      # Always higher than the previous GitHub build, so each APK installs as an update
-      ANDROID_VERSION_CODE: ${{ 1000 + github.run_number }}
       APK_NAME: aura-${{ matrix.app }}-${{ inputs.target }}-${{ github.run_number }}.apk
       KEYSTORE_B64: ${{ secrets.APK_KEYSTORE_BASE64 }}
       KEYSTORE_PASSWORD: ${{ secrets.APK_KEYSTORE_PASSWORD }}
@@ -71,6 +69,8 @@ jobs:
           fi
           echo "EXPO_PUBLIC_API_URL=$URL" >> "$GITHUB_ENV"
           echo "API: $URL"
+          # Always higher than the previous GitHub build, so each APK installs as an update
+          echo "ANDROID_VERSION_CODE=$((1000 + ${{ github.run_number }}))" >> "$GITHUB_ENV"
       - name: Generate the native Android project
         run: npx expo prebuild --platform android --no-install --clean
       - name: Build the release APK with Gradle
