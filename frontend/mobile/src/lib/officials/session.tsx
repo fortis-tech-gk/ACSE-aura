@@ -540,6 +540,14 @@ export function OfficialSessionProvider({ children }: { children: React.ReactNod
       }
       // Keep order: if earlier actions are still waiting, this one waits behind them
       const waiting = queueRef.current.some((q) => q.status === 'pending');
+      // Never send an online-only action ahead of entries still waiting (it would overtake them)
+      if (!queueable && waiting) {
+        const n = queueRef.current.filter((q) => q.status === 'pending').length;
+        return {
+          status: 'offline',
+          message: `${n} saved entr${n === 1 ? 'y is' : 'ies are'} not sent yet (no network). Keep the paper sheet and try again in a minute.`,
+        };
+      }
       // Queueable actions skip the live attempt while the network looks down: saved at once,
       // sent in order later. Actions that need the internet always try.
       const skipLive = queueable && (waiting || networkLooksDown());
