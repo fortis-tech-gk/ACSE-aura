@@ -54,10 +54,22 @@ supabase/migrations/college_credentials_*.sql
 docs/*Credentials*.xlsx
 
 # Work Trees
-.claude/# SQL that contains password / passphrase hashes — never commit (audit #8)
+.claude/
+# SQL that contains password / passphrase hashes — never commit (audit #8)
 docs/admin_password_reset.sql
 docs/vtu_sports_admin_login.sql
 docs/*_password*.sql
 docs/*_login*.sql
 # Audit write-ups describe unfixed weaknesses — keep out of the public repo
 docs/audit/
+
+# Personal contact details (PED phones, principal emails/mobiles, addresses): never commit.
+# The fortis-tech-gk/ACSE-aura repository is public.
+docs/All PED*Phone*
+docs/*pricipal*
+docs/*principal*
+docs/college_contact_updates.sql
+docs/All College Address*
+docs/management*details*
+docs/college_division_ped_contact*
+docs/reports/colleges-not-registered.*
