@@ -36,6 +36,22 @@ const lanes = (flip: boolean) =>
     .map((i) => `<path d="M-20 ${70 + i * 9} C 60 ${40 + i * 10}, 120 ${95 + i * 6}, 190 ${60 + i * 9}" ${flip ? 'transform="translate(297 0) scale(-1 1)"' : ''}/>`)
     .join('');
 
+/** College name size (mm): as large as fits on one line. Names run 20–67 characters. */
+function collegeSize(name: string): number {
+  const n = name.length;
+  return n <= 30 ? 9 : n <= 42 ? 8 : n <= 52 ? 7 : n <= 60 ? 6.2 : 5.6;
+}
+
+/**
+ * The three people who sign the certificate, left to right (names as on the website's leadership
+ * section). The name prints above the title on each signature panel; empty = title only.
+ */
+export const SIGNATORIES: { name: string; title: string; lines: string[] }[] = [
+  { name: 'Mr. Devendra Naik R. S.', title: 'Organizing Secretary', lines: ['Dr. ACS-AURA 2026', 'Dr. ACS College of Engineering'] },
+  { name: 'Dr. Rajesh Y. H.', title: 'Director of Physical Education', lines: ['VTU, Belagavi'] },
+  { name: 'Dr. Shylaja B. S.', title: 'Principal & Chairman', lines: ['Dr. ACS-AURA 2026', 'Dr. ACS College of Engineering'] },
+];
+
 export function certificateHtml(d: CertificateData, a: CertificateAssets): string {
   const events = (d.events || []).filter(Boolean);
   return `<!doctype html>
@@ -57,13 +73,13 @@ ${a.fontCss ? `<style>${a.fontCss}</style>` : `<link rel="preconnect" href="http
   .frame2 { position: absolute; inset: 9.5mm 9.5mm 17.5mm 9.5mm; border: .3mm solid var(--gold); }
   .c { position: absolute; left: 0; right: 0; text-align: center; }
 
-  .head { top: 12mm; display: flex; align-items: center; justify-content: center; gap: 9mm; }
+  .head { top: 9.5mm; display: flex; align-items: center; justify-content: center; gap: 9mm; }
   .head img { width: 23mm; height: 23mm; object-fit: contain; }
   .univ { font-family: 'Cinzel', serif; font-weight: 800; font-size: 6.4mm; letter-spacing: .25mm; color: var(--navy); text-transform: uppercase; }
   .meet { font-family: 'Cinzel', serif; font-weight: 700; font-size: 4.1mm; color: var(--navy2); margin-top: 1.2mm; }
   .meet sup { font-size: 2.6mm; }
-  .org { font-size: 2.7mm; letter-spacing: .5mm; text-transform: uppercase; color: var(--muted); margin-top: 2mm; font-weight: 600; }
-  .host { font-family: 'Cinzel', serif; font-weight: 800; font-size: 5.4mm; color: var(--maroon); margin-top: .6mm; }
+  .org { font-size: 2.7mm; letter-spacing: .5mm; text-transform: uppercase; color: var(--muted); margin-top: 1.2mm; font-weight: 600; }
+  .host { font-family: 'Cinzel', serif; font-weight: 800; font-size: 7.8mm; line-height: 1.15; color: var(--maroon); margin-top: .6mm; }
   .hsub { font-size: 2.7mm; color: var(--muted); margin-top: .6mm; }
 
   .t-dr { top: 42mm; font-family: 'Cinzel', serif; font-weight: 800; font-size: 5.4mm; letter-spacing: 1.2mm; color: var(--maroon); }
@@ -85,12 +101,13 @@ ${a.fontCss ? `<style>${a.fontCss}</style>` : `<link rel="preconnect" href="http
   .name { font-family: 'Cinzel Decorative', serif; font-weight: 700; color: var(--navy); line-height: 1.25; margin-top: 2.5mm; padding: 0 12mm 1.5mm; display: inline-block; font-style: normal;
     border-bottom: .5mm solid transparent; border-image: linear-gradient(90deg, transparent, var(--gold), transparent) 1; text-transform: uppercase; letter-spacing: .3mm; }
   .usn { font-family: 'Montserrat', sans-serif; font-style: normal; font-size: 3.2mm; font-weight: 600; color: var(--muted); letter-spacing: .6mm; margin-top: 2mm; }
-  .college { font-family: 'Cinzel', serif; font-style: normal; font-weight: 800; font-size: 5.4mm; color: var(--maroon); margin-top: 3mm; }
+  .college { font-family: 'Cinzel', serif; font-style: normal; font-weight: 800; font-size: 7.4mm; line-height: 1.2; color: var(--maroon); margin-top: 3mm; }
   .events { margin-top: 3mm; font-family: 'Montserrat', sans-serif; font-style: normal; font-size: 3mm; color: var(--gold3); font-weight: 700; letter-spacing: .5mm; }
 
   .sigs { bottom: 22mm; display: flex; justify-content: center; gap: 16mm; padding: 0 24mm; }
   .sig { width: 76mm; border-top: .5mm solid var(--gold); padding-top: 1.6mm; font-size: 2.6mm; line-height: 1.5; color: var(--gold3); font-weight: 600; letter-spacing: .15mm; text-transform: uppercase; }
   .sig b { display: block; font-family: 'Cinzel', serif; font-size: 3mm; color: var(--navy); }
+  .sig .who { display: block; font-family: 'Cinzel', serif; font-size: 3.6mm; font-weight: 800; color: var(--maroon); letter-spacing: .2mm; margin-bottom: .4mm; }
 
   .seal { position: absolute; left: 50%; top: 188.5mm; width: 19mm; height: 19mm; z-index: 5; transform: translateX(-50%); }
   .corner { position: absolute; width: 14mm; height: 14mm; }
@@ -144,15 +161,13 @@ ${a.fontCss ? `<style>${a.fontCss}</style>` : `<link rel="preconnect" href="http
     <div class="lead">This is to certify that</div>
     <div class="name" style="font-size:${d.athleteName.length <= 18 ? 9.5 : d.athleteName.length <= 26 ? 7.8 : 6.4}mm">${esc(d.athleteName)}</div>
     <div class="usn">USN · ${esc(d.usn)}</div>
-    <div class="college">${esc(d.collegeName)}</div>
+    <div class="college" style="font-size:${collegeSize(d.collegeName)}mm">${esc(d.collegeName)}</div>
     <div class="sent">has participated in the 28th VTU Inter-Collegiate State Level Athletic Meet 2026<br>(Dr. ACS-AURA 2026), held at Dr. ACS College of Engineering, Bengaluru, from 7th to 10th December 2026.</div>
     ${events.length ? `<div class="events">EVENTS &nbsp;·&nbsp; ${events.map(esc).join('  ·  ')}</div>` : ''}
   </div>
 
   <div class="c sigs">
-    <div class="sig"><b>Organizing Secretary</b>Dr. ACS-AURA 2026<br>Dr. ACS College of Engineering</div>
-    <div class="sig"><b>Director of Physical Education</b>VTU, Belagavi</div>
-    <div class="sig"><b>Principal &amp; Chairman</b>Dr. ACS-AURA 2026<br>Dr. ACS College of Engineering</div>
+    ${SIGNATORIES.map((s) => `<div class="sig">${s.name ? `<span class="who">${esc(s.name)}</span>` : ''}<b>${esc(s.title)}</b>${s.lines.map(esc).join('<br>')}</div>`).join('\n    ')}
   </div>
 
   <div class="c foot"><span class="fl"><span class="g">07 – 10 DEC 2026</span><span>|</span><span>MYSORE ROAD, BENGALURU</span></span><span></span><span class="fr g">CERTIFICATE NO. ${esc(d.certificateNo)}</span></div>
