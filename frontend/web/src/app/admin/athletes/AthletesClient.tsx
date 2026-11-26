@@ -33,15 +33,7 @@ export default function AthletesClient({ athletes, filteredTotal, totalAthletes,
   const selectedGender = filters.gender || 'ALL';
   const selectedStatus = filters.status || 'ALL';
   const selectedEvent = filters.event || 'ALL';
-  const [pdfReport, setPdfReport] = useState<{
-    title: string;
-    filters: string;
-    groups: EventGroup[];
-    athletes: number;
-    men: number;
-    women: number;
-    colleges: number;
-  } | null>(null);
+  const [pdfReport, setPdfReport] = useState<{ title: string; groups: EventGroup[] } | null>(null);
   const [exporting, setExporting] = useState<string | null>(null);
 
   // Search box: typed locally, sent to the server after a short pause
@@ -136,16 +128,7 @@ export default function AthletesClient({ athletes, filteredTotal, totalAthletes,
   async function handlePdf(useFilters: boolean, key: string) {
     const report = await prepareReport(useFilters, key);
     if (!report) return;
-    const men = report.athletes.filter((r) => r.Gender === 'Men').length;
-    setPdfReport({
-      title: report.title,
-      filters: report.filters,
-      groups: report.groups,
-      athletes: report.athletes.length,
-      men,
-      women: report.athletes.length - men,
-      colleges: new Set(report.athletes.map((r) => r['College Code'])).size,
-    });
+    setPdfReport({ title: report.title, groups: report.groups });
   }
 
   const exportBtn = (key: string, label: string, icon: string, primary: boolean, onClick: () => void, id: string) => (
@@ -497,12 +480,7 @@ export default function AthletesClient({ athletes, filteredTotal, totalAthletes,
       {pdfReport && (
         <AthletesPdfReport
           title={pdfReport.title}
-          filterSummary={pdfReport.filters}
           groups={pdfReport.groups}
-          athletes={pdfReport.athletes}
-          men={pdfReport.men}
-          women={pdfReport.women}
-          colleges={pdfReport.colleges}
           onClose={() => setPdfReport(null)}
         />
       )}

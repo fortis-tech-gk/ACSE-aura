@@ -8,12 +8,7 @@ import { REPORT_MEET, REPORT_ORG } from '@/lib/athlete-xlsx';
 
 interface Props {
   title: string;
-  filterSummary: string;
   groups: EventGroup[];
-  athletes: number;
-  men: number;
-  women: number;
-  colleges: number;
   onClose: () => void;
 }
 
@@ -25,7 +20,7 @@ const CENTER = new Set(['Sl No', 'Bib No', 'Sem', 'College Code', 'Entered As', 
  * The header (logo, college, meet, title, filters) repeats on every printed page: the whole
  * report is one table whose <thead> holds it. Page numbers come from the @page footer.
  */
-export default function AthletesPdfReport({ title, filterSummary, groups, athletes, men, women, colleges, onClose }: Props) {
+export default function AthletesPdfReport({ title, groups, onClose }: Props) {
   const [mounted, setMounted] = useState(false);
   useEffect(() => {
     setMounted(true);
@@ -41,14 +36,10 @@ export default function AthletesPdfReport({ title, filterSummary, groups, athlet
 
   if (!mounted) return null;
 
-  const generated = new Date().toLocaleString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
-  const entries = groups.reduce((n, g) => n + g.entries, 0);
-  const reserves = groups.reduce((n, g) => n + g.reserves, 0);
-
   return createPortal(
     <div className="apdf-overlay" role="dialog" aria-modal="true" aria-label={title}>
       <div className="apdf-bar no-print">
-        <span className="apdf-bar-title">📄 {title} — {groups.length} {groups.length === 1 ? 'event' : 'events'}, {athletes} {athletes === 1 ? 'athlete' : 'athletes'}</span>
+        <span className="apdf-bar-title">📄 {title} — {groups.length} {groups.length === 1 ? 'event' : 'events'}</span>
         <div style={{ display: 'flex', gap: '0.6rem', flexWrap: 'wrap' }}>
           <button type="button" className="apdf-btn-primary" onClick={() => window.print()} id="btn-athletes-pdf-print">
             ⬇️ Download / Save as PDF
@@ -73,13 +64,6 @@ export default function AthletesPdfReport({ title, filterSummary, groups, athlet
                   </div>
                   <div className="apdf-logo-spacer" aria-hidden="true" />
                 </div>
-                <div className="apdf-meta">
-                  <span><strong>{groups.length}</strong> {groups.length === 1 ? 'event' : 'events'}</span>
-                  <span><strong>{entries}</strong> {entries === 1 ? 'entry' : 'entries'} &bull; <strong>{reserves}</strong> {reserves === 1 ? 'reserve' : 'reserves'}</span>
-                  <span><strong>{athletes}</strong> athletes ({men} men &bull; {women} women) from <strong>{colleges}</strong> colleges</span>
-                  <span>Filters: {filterSummary}</span>
-                  <span>Generated: {generated}</span>
-                </div>
               </td>
             </tr>
           </thead>
@@ -97,26 +81,47 @@ export default function AthletesPdfReport({ title, filterSummary, groups, athlet
                           ({g.entries} {g.entries === 1 ? 'entry' : 'entries'}, {g.reserves} {g.reserves === 1 ? 'reserve' : 'reserves'})
                         </span>
                       </div>
-                      <table className="apdf-table">
-                        <thead>
-                          <tr>
-                            {EVENT_WISE_COLUMNS.map((c) => (
-                              <th key={c}>{c}</th>
-                            ))}
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {g.rows.map((r) => (
-                            <tr key={`${g.key}-${r['Sl No']}`} className={r['Entered As'] === 'Reserve' ? 'res' : undefined}>
-                              {EVENT_WISE_COLUMNS.map((c) => (
-                                <td key={c} className={c === 'Athlete Name' ? 'b' : c === 'USN' || c === 'Student Phone' ? 'mono' : CENTER.has(c) ? 'c' : undefined}>
-                                  {r[c]}
-                                </td>
-                              ))}
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
+                      {[
+                        { rows: g.rows, reserve: false },
+                        { rows: g.reserveRows, reserve: true },
+                      ].map(({ rows, reserve }) =>
+                        rows.length === 0 ? (
+                          reserve ? null : (
+                            <p key="none" className="apdf-none">No entries (reserves only)</p>
+                          )
+                        ) : (
+                          <div key={reserve ? 'res' : 'ent'}>
+                            {reserve && (
+                              <div className="apdf-res-bar">
+                                Reserves — {g.title} <span className="apdf-event-count">({rows.length})</span>
+                              </div>
+                            )}
+                            <table className="apdf-table">
+                              <thead>
+                                <tr>
+                                  {EVENT_WISE_COLUMNS.map((c) => (
+                                    <th key={c}>{c}</th>
+                                  ))}
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {rows.map((r) => (
+                                  <tr key={r['Sl No']}>
+                                    {EVENT_WISE_COLUMNS.map((c) => (
+                                      <td
+                                        key={c}
+                                        className={c === 'Athlete Name' ? 'b' : c === 'USN' || c === 'Student Phone' ? 'mono' : CENTER.has(c) ? 'c' : undefined}
+                                      >
+                                        {r[c]}
+                                      </td>
+                                    ))}
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        )
+                      )}
                     </section>
                   ))
                 )}
@@ -256,9 +261,24 @@ export default function AthletesPdfReport({ title, filterSummary, groups, athlet
           text-align: center;
           color: #475569;
         }
-        tr.res td {
-          color: #64748b;
+        .apdf-res-bar {
+          margin-top: 0.35rem;
+          background: #fff2cc;
+          color: #7c2d12;
+          border: 1px solid #94a3b8;
+          border-bottom: none;
+          font-weight: 800;
+          font-size: 0.78rem;
+          padding: 0.22rem 0.5rem;
+          -webkit-print-color-adjust: exact;
+          print-color-adjust: exact;
+          break-after: avoid;
+        }
+        .apdf-none {
+          margin: 0.3rem 0;
+          font-size: 0.75rem;
           font-style: italic;
+          color: #64748b;
         }
         .apdf-table {
           width: 100%;

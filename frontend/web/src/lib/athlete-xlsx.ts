@@ -30,7 +30,8 @@ const THIN: Partial<Borders> = {
   bottom: { style: 'thin', color: { argb: 'FF94A3B8' } },
   right: { style: 'thin', color: { argb: 'FF94A3B8' } },
 };
-const HEADER_ROWS = 4;
+const HEADER_ROWS = 3;
+const RESERVE_FILL = 'FFFFF2CC';
 
 async function logoImageId(wb: Workbook): Promise<number | null> {
   try {
@@ -43,20 +44,19 @@ async function logoImageId(wb: Workbook): Promise<number | null> {
   }
 }
 
-/** Rows 1–4: college, meet, report title, filters + generated time. Merged across the sheet. */
-function addHeader(ws: Worksheet, cols: number, title: string, info: string, logo: number | null) {
-  const lines: [string, number, boolean][] = [
-    [REPORT_ORG, 14, true],
-    [REPORT_MEET, 11, true],
-    [title, 12, true],
-    [info, 9, false],
+/** Rows 1–3: college, meet, report title. Merged across the sheet. */
+function addHeader(ws: Worksheet, cols: number, title: string, logo: number | null) {
+  const lines: [string, number][] = [
+    [REPORT_ORG, 14],
+    [REPORT_MEET, 11],
+    [title, 12],
   ];
-  lines.forEach(([text, size, bold], i) => {
+  lines.forEach(([text, size], i) => {
     const row = ws.getRow(i + 1);
     row.getCell(1).value = text;
-    row.getCell(1).font = { bold, size, italic: i === 3, underline: i === 2, color: { argb: i === 3 ? 'FF334155' : 'FF0F172A' } };
+    row.getCell(1).font = { bold: true, size, underline: i === 2, color: { argb: 'FF0F172A' } };
     row.getCell(1).alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
-    row.height = i === 3 ? 18 : 20;
+    row.height = 22;
     ws.mergeCells(i + 1, 1, i + 1, cols);
   });
   ws.getCell(HEADER_ROWS, 1).border = { bottom: { style: 'medium', color: { argb: 'FF0F172A' } } };
@@ -106,15 +106,7 @@ function eventWiseSheet(wb: Workbook, r: XlsxReport, logo: number | null) {
   const cols = EVENT_WISE_COLUMNS.length;
   const ws = wb.addWorksheet('Event-wise', { views: [{ state: 'frozen', ySplit: HEADER_ROWS }] });
   ws.columns = [7, 9, 32, 14, 6, 12, 46, 14, 14, 13, 18].map((width) => ({ width }));
-  const totalEntries = r.groups.reduce((n, g) => n + g.entries, 0);
-  const totalReserves = r.groups.reduce((n, g) => n + g.reserves, 0);
-  addHeader(
-    ws,
-    cols,
-    r.title,
-    `Filters: ${r.filterSummary}   •   ${r.groups.length} ${r.groups.length === 1 ? 'event' : 'events'}, ${totalEntries} ${totalEntries === 1 ? 'entry' : 'entries'}, ${totalReserves} ${totalReserves === 1 ? 'reserve' : 'reserves'}   •   Generated ${new Date().toLocaleString('en-IN')}`,
-    logo
-  );
+  addHeader(ws, cols, r.title, logo);
 
   const center = new Set([1, 2, 5, 6, 10, 11]);
   let rowNo = HEADER_ROWS + 2;
@@ -132,16 +124,41 @@ function eventWiseSheet(wb: Workbook, r: XlsxReport, logo: number | null) {
     ws.mergeCells(rowNo, 1, rowNo, cols);
     rowNo++;
 
+    // Entries table
     ws.getRow(rowNo).values = EVENT_WISE_COLUMNS as string[];
     styleHeaderRow(ws, rowNo, cols);
     rowNo++;
-
+    if (g.rows.length === 0) {
+      ws.getCell(rowNo, 1).value = 'No entries (reserves only)';
+      ws.getCell(rowNo, 1).font = { size: 10, italic: true, color: { argb: 'FF64748B' } };
+      ws.mergeCells(rowNo, 1, rowNo, cols);
+      rowNo++;
+    }
     g.rows.forEach((row, i) => {
       ws.getRow(rowNo).values = EVENT_WISE_COLUMNS.map((k) => row[k]);
       styleDataRow(ws, rowNo, cols, center, i % 2 === 1);
-      if (row['Entered As'] === 'Reserve') ws.getRow(rowNo).getCell(10).font = { size: 10, italic: true, color: { argb: 'FF64748B' } };
       rowNo++;
     });
+
+    // Reserves: their own table under the entries
+    if (g.reserveRows.length > 0) {
+      const sub = ws.getRow(rowNo);
+      sub.getCell(1).value = `Reserves — ${g.title}   (${g.reserveRows.length})`;
+      sub.getCell(1).font = { bold: true, size: 11, color: { argb: 'FF7C2D12' } };
+      sub.getCell(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: RESERVE_FILL } };
+      sub.getCell(1).border = THIN;
+      sub.height = 18;
+      ws.mergeCells(rowNo, 1, rowNo, cols);
+      rowNo++;
+      ws.getRow(rowNo).values = EVENT_WISE_COLUMNS as string[];
+      styleHeaderRow(ws, rowNo, cols);
+      rowNo++;
+      g.reserveRows.forEach((row, i) => {
+        ws.getRow(rowNo).values = EVENT_WISE_COLUMNS.map((k) => row[k]);
+        styleDataRow(ws, rowNo, cols, center, i % 2 === 1);
+        rowNo++;
+      });
+    }
     rowNo++; // gap before the next event
   }
   setupPrint(ws, `Dr. ACS-AURA 2026 — ${r.title}`, `1:${HEADER_ROWS}`);
@@ -155,14 +172,7 @@ function allAthletesSheet(wb: Workbook, r: XlsxReport, logo: number | null) {
   ws.columns = keys.map((k) => ({
     width: Math.min(46, Math.max(String(k).length + 2, ...r.athletes.map((a) => String(a[k] ?? '').length + 1))),
   }));
-  const men = r.athletes.filter((a) => a.Gender === 'Men').length;
-  addHeader(
-    ws,
-    Math.min(cols, 14),
-    `${r.title.replace('Athletes by Event', 'All Athletes')}`,
-    `Filters: ${r.filterSummary}   •   ${r.athletes.length} athletes (${men} men, ${r.athletes.length - men} women)   •   Generated ${new Date().toLocaleString('en-IN')}`,
-    logo
-  );
+  addHeader(ws, Math.min(cols, 14), r.title.replace('Athletes by Event', 'All Athletes'), logo);
   ws.getRow(headerRow).values = keys as string[];
   styleHeaderRow(ws, headerRow, cols);
   const center = new Set(['Sl No', 'Bib No', 'Gender', 'Semester', 'Blood Group', 'Date of Birth', 'Half Marathon'].map((k) => keys.indexOf(k as keyof ExportRow) + 1));
@@ -178,7 +188,7 @@ function allAthletesSheet(wb: Workbook, r: XlsxReport, logo: number | null) {
 function infoSheet(wb: Workbook, r: XlsxReport, logo: number | null) {
   const ws = wb.addWorksheet('Report Info');
   ws.columns = [{ width: 22 }, { width: 80 }];
-  addHeader(ws, 2, 'Report Info', '', logo);
+  addHeader(ws, 2, 'Report Info', logo);
   const men = r.athletes.filter((a) => a.Gender === 'Men').length;
   const rows: [string, string | number][] = [
     ['Report', r.title],

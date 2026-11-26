@@ -121,13 +121,16 @@ export interface EventGroup {
   title: string;
   entries: number;
   reserves: number;
+  /** Regular / relay / Half Marathon entries (Sl No 1..n) */
   rows: EventWiseRow[];
+  /** Reserves, listed in their own table (Sl No 1..n) */
+  reserveRows: EventWiseRow[];
 }
 
 const ENTERED_ORDER: Record<EnteredAs, number> = { 'Event 1': 0, 'Event 2': 0, Relay: 0, 'Half Marathon': 0, Reserve: 1 };
 
 /**
- * Groups athletes by event. `onlyEventId` keeps just that event (the page's event filter), so
+ * Groups athletes by event; each event has an entries table and a separate reserves table. `onlyEventId` keeps just that event (the page's event filter), so
  * choosing "100m Men" downloads only the 100m Men block. Order: official event code, Men then
  * Women; inside a block entries before reserves, then college A-Z and name A-Z.
  */
@@ -175,7 +178,7 @@ export function buildEventGroups(list: any[], onlyEventId?: string | null): Even
           String(x.a.squads?.colleges?.name || '').localeCompare(String(y.a.squads?.colleges?.name || '')) ||
           String(x.a.sslc_name || '').localeCompare(String(y.a.sslc_name || ''))
       );
-      const rows: EventWiseRow[] = items.map(({ a, as }, i) => {
+      const toRow = ({ a, as }: { a: any; as: EnteredAs }, i: number): EventWiseRow => {
         const sq = a.squads || {};
         const col = sq.colleges || {};
         return {
@@ -191,9 +194,10 @@ export function buildEventGroups(list: any[], onlyEventId?: string | null): Even
           'Entered As': as,
           'Payment Status': PAYMENT_LABEL[normalizePaymentStatus(sq.payment_status)] || '',
         };
-      });
-      const reserves = rows.filter((r) => r['Entered As'] === 'Reserve').length;
-      return { key, title: g.title, entries: rows.length - reserves, reserves, rows };
+      };
+      const rows = items.filter((x) => x.as !== 'Reserve').map(toRow);
+      const reserveRows = items.filter((x) => x.as === 'Reserve').map(toRow);
+      return { key, title: g.title, entries: rows.length, reserves: reserveRows.length, rows, reserveRows };
     });
 }
 
