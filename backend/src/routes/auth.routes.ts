@@ -269,12 +269,17 @@ authRouter.post('/staff/pin-login', async (req: Request, res: Response) => {
     }
     await clearLoginFailures('pin', pinKey);
 
-    const token = generateToken({
-      role: matchedStaff.role,
-      entityId: matchedStaff.id,
-      displayName: matchedStaff.display_name,
-      scopeEventIds: matchedStaff.scope_event_ids || [],
-    });
+    // 21 days, so scanner phones set up before the meet stay logged in for all of it
+    // (an expired login stops saved scans from being sent until someone logs in again).
+    const token = generateToken(
+      {
+        role: matchedStaff.role,
+        entityId: matchedStaff.id,
+        displayName: matchedStaff.display_name,
+        scopeEventIds: matchedStaff.scope_event_ids || [],
+      },
+      '21d'
+    );
 
     return res.json({
       success: true,

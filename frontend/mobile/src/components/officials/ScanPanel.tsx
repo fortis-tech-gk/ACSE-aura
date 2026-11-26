@@ -3,6 +3,7 @@ import { Image, Platform, Pressable, StyleSheet, Text, TextInput, Vibration, Vie
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import type { Outcome } from '@/lib/officials/session';
 import type { AthleteRef } from '@/lib/officials/types';
+import { usePhotoUri } from '@/lib/photo-cache';
 import { Button, Icon, Muted, colors, useNow } from '@/components/ui';
 
 const TONE = {
@@ -135,6 +136,8 @@ function ResultCard({ result, onClose, large }: { result: Outcome; onClose: () =
   const t = TONE[result.tone];
   const a = result.athlete;
   const k = large ? 1.35 : 1; // text and photo scale on tablets
+  // The copy saved on the phone when there is one, so the face shows with no network
+  const photoUri = usePhotoUri(a?.photoUrl);
   return (
     <Pressable onPress={onClose} style={[StyleSheet.absoluteFill, s.result, { backgroundColor: t.bg }]} accessibilityRole="alert" accessibilityLabel={`${result.title}. ${a?.name || ''}. Tap to scan next.`}>
       <View style={s.resultTop}>
@@ -147,8 +150,8 @@ function ResultCard({ result, onClose, large }: { result: Outcome; onClose: () =
 
       {a ? (
         <View style={s.athlete}>
-          {a.photoUrl ? (
-            <Image source={{ uri: a.photoUrl }} style={[s.photo, { width: 84 * k, height: 104 * k }]} />
+          {photoUri ? (
+            <Image source={{ uri: photoUri }} style={[s.photo, { width: 84 * k, height: 104 * k }]} />
           ) : (
             <View style={[s.photo, s.noPhoto, { width: 84 * k, height: 104 * k }]}>
               <Text style={{ fontSize: 34 * k }}>👤</Text>

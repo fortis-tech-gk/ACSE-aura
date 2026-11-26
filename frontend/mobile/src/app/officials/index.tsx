@@ -2,12 +2,13 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { Redirect, router } from 'expo-router';
 import { useOfficialSession } from '@/lib/officials/session';
-import { MEALS, currentMeal, istDate } from '@/lib/officials/scan-logic';
+import { MEALS, countMeals, currentMeal, istDate } from '@/lib/officials/scan-logic';
 import type { AthleteRef, MealType } from '@/lib/officials/types';
 import { api } from '@/lib/api';
 import { confirm } from '@/lib/confirm';
 import { useOfficialsLayout } from '@/lib/officials/layout';
 import { RosterNote, ScanPanel, SyncPill } from '@/components/officials/ScanPanel';
+import { PhotoSaver } from '@/components/officials/PhotoSaver';
 import { HeatList } from '@/components/officials/HeatList';
 import { AppHeader, Card, Icon, Muted, Screen, SectionLabel, Stat, colors } from '@/components/ui';
 
@@ -86,6 +87,8 @@ export default function OfficialsHome() {
       )}
 
       {['food_volunteer', 'warden', 'accreditation_volunteer'].includes(staff.role) && <RosterNote count={roster.length} at={rosterAt} />}
+      {/* Every duty that scans ID cards shows the athlete's photo, so it needs them offline */}
+      {['food_volunteer', 'warden', 'accreditation_volunteer', 'call_room_official'].includes(staff.role) && <PhotoSaver />}
     </Screen>
   );
 }
@@ -112,7 +115,7 @@ function useStats<T>(path: string, token: string | null, everyMs = 30000) {
 }
 
 function FoodDesk({ token }: { token: string | null }) {
-  const { submit, queue } = useOfficialSession();
+  const { submit, mealLog } = useOfficialSession();
   const [auto, setAuto] = useState(true);
   const [picked, setPicked] = useState<MealType>(currentMeal());
   const [now, setNow] = useState(() => Date.now());
@@ -124,10 +127,8 @@ function FoodDesk({ token }: { token: string | null }) {
   const { data, reload } = useStats<Record<string, number>>('/catering/stats', token);
 
   const today = istDate(new Date(now));
-  const mine = useMemo(
-    () => queue.filter((q) => q.kind === 'meal' && q.mealType === meal && q.mealDate === today && q.status !== 'rejected').length,
-    [queue, meal, today]
-  );
+  // From the meal log, not the scan history: the history keeps only its last 800 entries
+  const mine = useMemo(() => countMeals(mealLog, meal, today), [mealLog, meal, today]);
   const served = data ? data[`${meal.toLowerCase()}_served`] : null;
 
   const onScan = useCallback(

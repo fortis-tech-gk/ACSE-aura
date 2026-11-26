@@ -9,6 +9,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { api, ApiError } from './api';
 import { syncReminders, getNotificationPermission, requestNotificationPermission } from './reminders';
 import { registerPushToken, unregisterPushToken } from './push';
+import { clearSavedPhotos, savePhoto } from './photo-cache';
 import type { AthleteMe } from './types';
 
 const TOKEN_KEY = 'aura_athlete_token';
@@ -23,7 +24,13 @@ const SecureStore =
       }
     : SecureStoreNative;
 const CACHE_KEY = '@aura/athlete-me';
-const REFRESH_EVERY_MS = 5 * 60 * 1000;
+/**
+ * The pass, QR and schedule are saved on the phone, so the profile only needs refreshing for
+ * schedule changes (heats, lanes, call room times). Live results have their own screens.
+ */
+const REFRESH_EVERY_MS = 30 * 60 * 1000;
+/** Coming back to the app refreshes only when the saved copy is at least this old */
+const FOREGROUND_REFRESH_AFTER_MS = 10 * 60 * 1000;
 const ASKED_NOTIF_KEY = '@aura/asked-notifications';
 
 /**
@@ -50,6 +57,8 @@ type Ctx = {
   lastSyncedAt: number | null;
   refreshing: boolean;
   offline: boolean;
+  /** The server no longer accepts the saved login. The saved pass stays on screen until they log in again. */
+  loginExpired: boolean;
   remindersScheduled: number | null;
   token: string | null;
   login: (input: LoginInput) => Promise<void>;
@@ -67,16 +76,21 @@ export function AthleteSessionProvider({ children }: { children: React.ReactNode
   const [lastSyncedAt, setLastSyncedAt] = useState<number | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [offline, setOffline] = useState(false);
+  const [loginExpired, setLoginExpired] = useState(false);
   const [remindersScheduled, setRemindersScheduled] = useState<number | null>(null);
   const tokenRef = useRef<string | null>(null);
   const inFlight = useRef(false);
+  const lastSyncedRef = useRef<number | null>(null);
 
   const clearLocal = useCallback(async () => {
     tokenRef.current = null;
     setToken(null);
     setMe(null);
     setLastSyncedAt(null);
+    lastSyncedRef.current = null;
+    setLoginExpired(false);
     setRemindersScheduled(null);
+    clearSavedPhotos();
     await Promise.all([
       SecureStore.deleteItemAsync(TOKEN_KEY).catch(() => {}),
       AsyncStorage.removeItem(CACHE_KEY).catch(() => {}),
@@ -89,8 +103,12 @@ export function AthleteSessionProvider({ children }: { children: React.ReactNode
     setMe(data);
     const at = Date.now();
     setLastSyncedAt(at);
+    lastSyncedRef.current = at;
     setOffline(false);
+    setLoginExpired(false);
     await AsyncStorage.setItem(CACHE_KEY, JSON.stringify({ data, at })).catch(() => {});
+    // Keep the photo on the phone so the pass shows it offline
+    savePhoto(data.athlete?.photoUrl);
     try {
       setRemindersScheduled(await syncReminders(data.schedule));
     } catch {
@@ -117,7 +135,11 @@ export function AthleteSessionProvider({ children }: { children: React.ReactNode
       registerPushToken(t);
     } catch (e) {
       if (e instanceof ApiError && e.offline) setOffline(true);
-      else if (e instanceof ApiError && (e.status === 401 || e.status === 403 || e.status === 404)) await clearLocal();
+      // Expired or rejected login: keep the saved pass on screen (the venue may have no network
+      // to log in again) and ask them to log in when they can.
+      else if (e instanceof ApiError && (e.status === 401 || e.status === 403)) setLoginExpired(true);
+      // Profile removed or withdrawn from the championship: the saved pass is no longer valid
+      else if (e instanceof ApiError && e.status === 404) await clearLocal();
     } finally {
       inFlight.current = false;
       setRefreshing(false);
@@ -140,6 +162,7 @@ export function AthleteSessionProvider({ children }: { children: React.ReactNode
           const { data, at } = JSON.parse(raw);
           setMe(data);
           setLastSyncedAt(at);
+          lastSyncedRef.current = at;
         }
       } catch {
         // ignore bad cache
@@ -150,11 +173,13 @@ export function AthleteSessionProvider({ children }: { children: React.ReactNode
     })();
   }, [refresh]);
 
-  // Refresh when the app returns to the foreground and every few minutes while open
+  // Refresh when the app returns to the foreground (if the saved copy is old) and now and then while open
   useEffect(() => {
     if (!token) return;
     const sub = AppState.addEventListener('change', (s) => {
-      if (s === 'active') refresh();
+      if (s !== 'active') return;
+      const at = lastSyncedRef.current;
+      if (!at || Date.now() - at >= FOREGROUND_REFRESH_AFTER_MS) refresh();
     });
     const timer = setInterval(() => {
       if (AppState.currentState === 'active') refresh();
@@ -195,8 +220,8 @@ export function AthleteSessionProvider({ children }: { children: React.ReactNode
   }, [me]);
 
   const value = useMemo(
-    () => ({ status, me, lastSyncedAt, refreshing, offline, remindersScheduled, token, login, refresh, resyncReminders, logout }),
-    [status, me, lastSyncedAt, refreshing, offline, remindersScheduled, token, login, refresh, resyncReminders, logout]
+    () => ({ status, me, lastSyncedAt, refreshing, offline, loginExpired, remindersScheduled, token, login, refresh, resyncReminders, logout }),
+    [status, me, lastSyncedAt, refreshing, offline, loginExpired, remindersScheduled, token, login, refresh, resyncReminders, logout]
   );
   return <AthleteSessionContext.Provider value={value}>{children}</AthleteSessionContext.Provider>;
 }

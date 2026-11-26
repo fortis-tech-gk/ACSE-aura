@@ -72,6 +72,36 @@ export function localMealDuplicate(queue: QueuedScan[], athleteId: string, meal:
   );
 }
 
+/**
+ * Meals given on this device: "date|meal|athleteId" -> time scanned (ISO).
+ * Kept apart from the scan history, which is trimmed to 800 entries: one food counter can scan
+ * thousands of meals a day, and the offline duplicate check must still see all of them.
+ */
+export type MealLog = Record<string, string>;
+
+export const mealKey = (athleteId: string, meal: MealType, date: string) => `${date}|${meal}|${athleteId}`;
+
+/** Keep only today's and yesterday's meals (dates are India dates, YYYY-MM-DD) */
+export function pruneMealLog(log: MealLog, today: string): MealLog {
+  const y = new Date(`${today}T00:00:00Z`);
+  y.setUTCDate(y.getUTCDate() - 1);
+  const yesterday = y.toISOString().slice(0, 10);
+  const out: MealLog = {};
+  for (const [k, v] of Object.entries(log)) {
+    const date = k.slice(0, 10);
+    if (date === today || date === yesterday) out[k] = v;
+  }
+  return out;
+}
+
+/** How many of this meal were given on this device today */
+export function countMeals(log: MealLog, meal: MealType, date: string): number {
+  const prefix = `${date}|${meal}|`;
+  let n = 0;
+  for (const k of Object.keys(log)) if (k.startsWith(prefix)) n++;
+  return n;
+}
+
 /** Keep every unsynced scan; keep synced history for 2 days, at most 800 entries */
 export function pruneQueue(queue: QueuedScan[], now = Date.now()): QueuedScan[] {
   const cutoff = now - 2 * 24 * 3600 * 1000;

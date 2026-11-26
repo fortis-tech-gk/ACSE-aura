@@ -112,12 +112,17 @@ athleteRouter.post('/login', loginLimiter, async (req: Request, res: Response) =
     }
     if (throttleKey) await clearLoginFailures('athlete', throttleKey);
 
-    const token = generateToken({
-      role: 'athlete',
-      entityId: athlete.id,
-      displayName: athlete.sslc_name,
-      collegeId: (athlete.squads as any)?.colleges?.id,
-    });
+    // 21 days: athletes log in up to a week before the meet, and an expired login during the meet
+    // means logging in again at the venue, where the network may be down.
+    const token = generateToken(
+      {
+        role: 'athlete',
+        entityId: athlete.id,
+        displayName: athlete.sslc_name,
+        collegeId: (athlete.squads as any)?.colleges?.id,
+      },
+      '21d'
+    );
 
     return res.json({ success: true, token, athlete: { id: athlete.id, name: athlete.sslc_name, bibNumber: athlete.bid_number } });
   } catch (err: any) {

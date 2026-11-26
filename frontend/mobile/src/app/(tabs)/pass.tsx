@@ -5,11 +5,14 @@ import QRCode from 'react-native-qrcode-svg';
 import { useAthleteSession } from '@/lib/athlete-session';
 import { fmtDay, fmtTime, minutesUntil, stageLabel } from '@/lib/format';
 import { isRemindable } from '@/lib/reminders';
-import { AppHeader, Card, Icon, Muted, OfflineBanner, Pill, Screen, SectionLabel, colors, fonts, shadow, useNow } from '@/components/ui';
+import { usePhotoUri } from '@/lib/photo-cache';
+import { AppHeader, Card, Icon, Muted, OfflineBanner, Pill, Screen, SectionLabel, colors, fonts, shadow, styles as ui, useNow } from '@/components/ui';
 
 export default function PassScreen() {
-  const { me, refreshing, refresh, offline, lastSyncedAt } = useAthleteSession();
+  const { me, refreshing, refresh, offline, lastSyncedAt, loginExpired } = useAthleteSession();
   const now = useNow();
+  // Saved copy on the phone when there is one, so the photo shows with no network
+  const photoUri = usePhotoUri(me?.athlete.photoUrl);
   if (!me) {
     return (
       <Screen header={<AppHeader eyebrow="AURA Athletes" title="My Pass" />}>
@@ -30,6 +33,14 @@ export default function PassScreen() {
       header={<AppHeader eyebrow="AURA Athletes" title={`Hi, ${firstName.charAt(0)}${firstName.slice(1).toLowerCase()}`} subtitle="Your pass for Dr. ACS AURA 2026" />}
     >
       <OfflineBanner offline={offline} lastSyncedAt={lastSyncedAt} />
+      {loginExpired && (
+        <Pressable onPress={() => router.push('/login')} style={ui.offline} accessibilityRole="button">
+          <Icon name="warning" size={18} color={colors.amber} />
+          <Text style={ui.offlineText}>
+            Your login has expired. Your pass below still works — tap to log in again when you have internet, to get schedule updates.
+          </Text>
+        </Pressable>
+      )}
 
       {/* Digital ID card */}
       <View style={s.card}>
@@ -44,8 +55,8 @@ export default function PassScreen() {
         <View style={s.cardGold} />
 
         <View style={s.identity}>
-          {a.photoUrl ? (
-            <Image source={{ uri: a.photoUrl }} style={s.photo} accessibilityLabel={`Photo of ${a.name}`} />
+          {photoUri ? (
+            <Image source={{ uri: photoUri }} style={s.photo} accessibilityLabel={`Photo of ${a.name}`} />
           ) : (
             <View style={[s.photo, s.photoEmpty]}>
               <Icon name="person" size={44} color={colors.muted} />

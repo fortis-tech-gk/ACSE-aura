@@ -14,8 +14,11 @@ import {
   indexRoster,
   istDate,
   localMealDuplicate,
+  mealKey,
   newScanId,
+  pruneMealLog,
   pruneQueue,
+  type MealLog,
   type RosterIndex,
 } from './scan-logic';
 import type { AthleteRef, Hostel, LoginRole, MealType, OpPayload, QueuedScan, RosterAthlete, ScanKind, Staff } from './types';
@@ -34,8 +37,19 @@ const STAFF_KEY = '@aura/off-staff';
 const ROSTER_KEY = '@aura/off-roster';
 const QUEUE_KEY = '@aura/off-queue';
 const HOSTELS_KEY = '@aura/off-hostels';
+const MEALS_KEY = '@aura/off-meals';
 const ROSTER_MAX_AGE_MS = 15 * 60 * 1000;
 const SYNC_EVERY_MS = 20 * 1000;
+/**
+ * A scan at the desk waits at most this long for the server before the phone decides on its own.
+ * Venue Wi-Fi with no internet, or weak mobile data, does not fail fast: without a short limit
+ * every scan in the queue would hang for the full background timeout.
+ */
+const LIVE_TIMEOUT_MS = 2500;
+/** Background re-sends are not blocking anyone, so they can wait longer */
+const SYNC_TIMEOUT_MS = 8000;
+/** After the network fails, scans are decided on the phone straight away for this long */
+const OFFLINE_HOLD_MS = 30 * 1000;
 
 export type ScanAthlete = { name: string; bib: number | null; college: string | null; photoUrl: string | null };
 
@@ -72,6 +86,8 @@ type Ctx = {
   rosterIndex: RosterIndex;
   hostels: Hostel[];
   queue: QueuedScan[];
+  /** Every meal given on this device today and yesterday (not trimmed like the scan history) */
+  mealLog: MealLog;
   pendingCount: number;
   syncing: boolean;
   lastSyncError: string | null;
@@ -107,9 +123,9 @@ type SendResult =
   | { kind: 'auth' };
 
 /** Send a call room / referee action */
-async function sendOp(op: OpPayload, token: string): Promise<SendResult> {
+async function sendOp(op: OpPayload, token: string, timeoutMs = SYNC_TIMEOUT_MS): Promise<SendResult> {
   try {
-    const data: any = await api(op.path, { method: op.method || 'POST', token, timeoutMs: 8000, body: op.body });
+    const data: any = await api(op.path, { method: op.method || 'POST', token, timeoutMs, body: op.body });
     return { kind: 'done', status: 'ok', outcome: { tone: 'green', title: op.label, athlete: null }, data };
   } catch (e) {
     if (e instanceof ApiError) {
@@ -123,15 +139,15 @@ async function sendOp(op: OpPayload, token: string): Promise<SendResult> {
 }
 
 /** Send one queued scan to the server and translate the answer for the screen */
-async function sendScan(q: QueuedScan, token: string, fallback: ScanAthlete | null): Promise<SendResult> {
-  if (q.kind === 'op' && q.op) return sendOp(q.op, token);
+async function sendScan(q: QueuedScan, token: string, fallback: ScanAthlete | null, timeoutMs = SYNC_TIMEOUT_MS): Promise<SendResult> {
+  if (q.kind === 'op' && q.op) return sendOp(q.op, token, timeoutMs);
   const ref = !q.ref ? {} : 'qrToken' in q.ref ? { qrToken: q.ref.qrToken } : { bib: q.ref.bib };
   try {
     if (q.kind === 'meal') {
       const r: any = await api('/catering/scan', {
         method: 'POST',
         token,
-        timeoutMs: 8000,
+        timeoutMs,
         body: { clientScanUuid: q.id, mealType: q.mealType, scannedAt: q.scannedAt, ...ref },
       });
       const athlete: ScanAthlete = {
@@ -156,7 +172,7 @@ async function sendScan(q: QueuedScan, token: string, fallback: ScanAthlete | nu
       const r: any = await api('/accommodation/checkin', {
         method: 'POST',
         token,
-        timeoutMs: 8000,
+        timeoutMs,
         body: { clientScanUuid: q.id, deviceTimestamp: q.scannedAt, hostelId: q.hostelId, roomAssigned: q.room, ...ref },
       });
       const x = r.result || {};
@@ -180,7 +196,7 @@ async function sendScan(q: QueuedScan, token: string, fallback: ScanAthlete | nu
     const r: any = await api('/accreditation/scan', {
       method: 'POST',
       token,
-      timeoutMs: 8000,
+      timeoutMs,
       body: { clientScanUuid: q.id, deviceTimestamp: q.scannedAt, ...ref },
     });
     const x = r.result || {};
@@ -224,12 +240,22 @@ export function OfficialSessionProvider({ children }: { children: React.ReactNod
   const [rosterAt, setRosterAt] = useState<number | null>(null);
   const [hostels, setHostels] = useState<Hostel[]>([]);
   const [queue, setQueueState] = useState<QueuedScan[]>([]);
+  const [mealLog, setMealLogState] = useState<MealLog>({});
   const [syncing, setSyncing] = useState(false);
   const [lastSyncError, setLastSyncError] = useState<string | null>(null);
 
   const tokenRef = useRef<string | null>(null);
   const queueRef = useRef<QueuedScan[]>([]);
+  const mealLogRef = useRef<MealLog>({});
   const syncingRef = useRef(false);
+  /** Until this time, scans skip the live attempt and are decided on the phone */
+  const offlineUntilRef = useRef(0);
+  const networkLooksDown = useCallback(() => Date.now() < offlineUntilRef.current, []);
+  /** Remember how the last request went, so the next scan doesn't wait on a dead network */
+  const noteNetwork = useCallback((r: SendResult) => {
+    if (r.kind === 'retry') offlineUntilRef.current = Date.now() + OFFLINE_HOLD_MS;
+    else offlineUntilRef.current = 0;
+  }, []);
   const rosterIndex = useMemo(() => indexRoster(roster), [roster]);
   const rosterIndexRef = useRef(rosterIndex);
   useEffect(() => {
@@ -243,6 +269,34 @@ export function OfficialSessionProvider({ children }: { children: React.ReactNod
     setQueueState(next);
     await AsyncStorage.setItem(QUEUE_KEY, JSON.stringify(next)).catch(() => {});
   }, []);
+
+  /** Update the meal log in memory and on disk */
+  const setMealLog = useCallback(async (update: (log: MealLog) => MealLog) => {
+    const next = pruneMealLog(update(mealLogRef.current), istDate());
+    mealLogRef.current = next;
+    setMealLogState(next);
+    await AsyncStorage.setItem(MEALS_KEY, JSON.stringify(next)).catch(() => {});
+  }, []);
+
+  /**
+   * After the server answers a meal scan: a meal the server refused for any reason other than
+   * "already claimed" was not given, so it comes off the log. ("Already claimed" stays: the
+   * athlete has eaten, at this counter or another.)
+   */
+  const settleMeal = useCallback(
+    async (q: QueuedScan, r: SendResult) => {
+      if (q.kind !== 'meal' || !q.athleteId || !q.mealType || !q.mealDate) return;
+      if (r.kind === 'done' && r.status === 'rejected' && r.outcome.title !== 'Already claimed') {
+        const key = mealKey(q.athleteId, q.mealType, q.mealDate);
+        await setMealLog((log) => {
+          const next = { ...log };
+          delete next[key];
+          return next;
+        });
+      }
+    },
+    [setMealLog]
+  );
 
   const patchScan = useCallback(
     (id: string, patch: Partial<QueuedScan>) => setQueue((q) => q.map((s) => (s.id === id ? { ...s, ...patch } : s))),
@@ -286,6 +340,8 @@ export function OfficialSessionProvider({ children }: { children: React.ReactNod
       for (const q of pending) {
         const athlete = q.athleteId ? fromRoster(rosterIndexRef.current.byId.get(q.athleteId) ?? null) : null;
         const r = await sendScan(q, t, athlete);
+        noteNetwork(r);
+        await settleMeal(q, r);
         if (r.kind === 'auth') {
           setSessionExpired(true);
           setLastSyncError('Your login has expired. Log in again to send the saved scans.');
@@ -308,7 +364,7 @@ export function OfficialSessionProvider({ children }: { children: React.ReactNod
       syncingRef.current = false;
       setSyncing(false);
     }
-  }, [patchScan]);
+  }, [patchScan, noteNetwork, settleMeal]);
 
   const submit = useCallback(
     async (input: ScanInput): Promise<Outcome> => {
@@ -321,14 +377,16 @@ export function OfficialSessionProvider({ children }: { children: React.ReactNod
       const now = new Date();
       const mealDate = input.kind === 'meal' ? istDate(now) : undefined;
 
-      // Checks that need no network
+      // Checks that need no network. The meal log covers every meal given on this device today;
+      // the scan history only covers its last 800 entries.
       if (input.kind === 'meal' && known && input.mealType) {
-        const dup = localMealDuplicate(queueRef.current, known.id, input.mealType, mealDate!);
-        if (dup) {
+        const loggedAt = mealLogRef.current[mealKey(known.id, input.mealType, mealDate!)];
+        const dupAt = loggedAt ?? localMealDuplicate(queueRef.current, known.id, input.mealType, mealDate!)?.scannedAt;
+        if (dupAt) {
           return {
             tone: 'red',
             title: 'Already claimed',
-            detail: `${MEAL_LABEL[input.mealType]} was already scanned on this device at ${fmtClock(dup.scannedAt)}.`,
+            detail: `${MEAL_LABEL[input.mealType]} was already scanned on this device at ${fmtClock(dupAt)}.`,
             athlete,
             offline: false,
           };
@@ -353,9 +411,17 @@ export function OfficialSessionProvider({ children }: { children: React.ReactNod
       const unknownBib = 'bib' in input.ref && !known;
 
       await setQueue((q) => [...q, scan]);
+      if (scan.kind === 'meal' && scan.athleteId && scan.mealType && scan.mealDate) {
+        const key = mealKey(scan.athleteId, scan.mealType, scan.mealDate);
+        await setMealLog((log) => ({ ...log, [key]: scan.scannedAt }));
+      }
 
-      if (t && !sessionExpired) {
-        const r = await sendScan(scan, t, athlete);
+      // Ask the server only while the network looks healthy, and only for a short time: on a
+      // dead or crawling network the phone decides at once and the scan is sent in the background.
+      if (t && !sessionExpired && !networkLooksDown()) {
+        const r = await sendScan(scan, t, athlete, LIVE_TIMEOUT_MS);
+        noteNetwork(r);
+        await settleMeal(scan, r);
         if (r.kind === 'done') {
           await patchScan(scan.id, {
             status: r.status,
@@ -400,7 +466,7 @@ export function OfficialSessionProvider({ children }: { children: React.ReactNod
       const detail = input.kind === 'checkin' ? [known.hostelName, input.room ? `Room ${input.room}` : known.roomRange].filter(Boolean).join(' · ') : undefined;
       return { tone: 'green', title, detail, athlete, offline: true };
     },
-    [patchScan, sessionExpired, setQueue]
+    [patchScan, sessionExpired, setQueue, setMealLog, networkLooksDown, noteNetwork, settleMeal]
   );
 
   const submitOp = useCallback(
@@ -409,8 +475,14 @@ export function OfficialSessionProvider({ children }: { children: React.ReactNod
       const t = tokenRef.current;
       // Keep order: if earlier actions are still waiting, this one waits behind them
       const waiting = queueRef.current.some((q) => q.status === 'pending');
-      if (t && !sessionExpired && !(queueable && waiting)) {
-        const r = await sendOp(op, t);
+      // Queueable actions skip the live attempt while the network looks down: saved at once,
+      // sent in order later. Actions that need the internet always try.
+      const skipLive = queueable && (waiting || networkLooksDown());
+      if (t && !sessionExpired && !skipLive) {
+        // Full timeout here: unlike scans, actions carry no duplicate-safe id, so a request cut off
+        // early could reach the server and then be sent a second time from the queue.
+        const r = await sendOp(op, t, SYNC_TIMEOUT_MS);
+        noteNetwork(r);
         if (r.kind === 'done') {
           return r.status === 'ok'
             ? { status: 'ok', data: r.data }
@@ -437,7 +509,7 @@ export function OfficialSessionProvider({ children }: { children: React.ReactNod
       if (waiting) syncNow();
       return { status: 'queued' };
     },
-    [sessionExpired, setQueue, syncNow]
+    [sessionExpired, setQueue, syncNow, networkLooksDown, noteNetwork]
   );
 
   const login = useCallback(
@@ -470,18 +542,29 @@ export function OfficialSessionProvider({ children }: { children: React.ReactNod
   // Restore everything saved on the device
   useEffect(() => {
     (async () => {
-      const [savedToken, savedStaff, savedRoster, savedQueue, savedHostels] = await Promise.all([
+      const [savedToken, savedStaff, savedRoster, savedQueue, savedHostels, savedMeals] = await Promise.all([
         SecureStore.getItemAsync(TOKEN_KEY).catch(() => null),
         AsyncStorage.getItem(STAFF_KEY).catch(() => null),
         AsyncStorage.getItem(ROSTER_KEY).catch(() => null),
         AsyncStorage.getItem(QUEUE_KEY).catch(() => null),
         AsyncStorage.getItem(HOSTELS_KEY).catch(() => null),
+        AsyncStorage.getItem(MEALS_KEY).catch(() => null),
       ]);
       try {
         if (savedQueue) {
           queueRef.current = JSON.parse(savedQueue);
           setQueueState(queueRef.current);
         }
+        // Meal log, plus any meals still in the scan history (phones updated mid-meet start with one)
+        const log: MealLog = savedMeals ? JSON.parse(savedMeals) : {};
+        for (const q of queueRef.current) {
+          if (q.kind === 'meal' && q.athleteId && q.mealType && q.mealDate && q.status !== 'rejected') {
+            const key = mealKey(q.athleteId, q.mealType, q.mealDate);
+            if (!log[key]) log[key] = q.scannedAt;
+          }
+        }
+        mealLogRef.current = pruneMealLog(log, istDate());
+        setMealLogState(mealLogRef.current);
         if (savedRoster) {
           const r = JSON.parse(savedRoster);
           setRoster(r.athletes || []);
@@ -536,6 +619,7 @@ export function OfficialSessionProvider({ children }: { children: React.ReactNod
       rosterIndex,
       hostels,
       queue,
+      mealLog,
       pendingCount,
       syncing,
       lastSyncError,
@@ -546,7 +630,7 @@ export function OfficialSessionProvider({ children }: { children: React.ReactNod
       submitOp,
       syncNow,
     }),
-    [status, staff, token, sessionExpired, roster, rosterAt, rosterIndex, hostels, queue, pendingCount, syncing, lastSyncError, login, logout, refreshRoster, submit, submitOp, syncNow]
+    [status, staff, token, sessionExpired, roster, rosterAt, rosterIndex, hostels, queue, mealLog, pendingCount, syncing, lastSyncError, login, logout, refreshRoster, submit, submitOp, syncNow]
   );
 
   return <OfficialSessionContext.Provider value={value}>{children}</OfficialSessionContext.Provider>;
