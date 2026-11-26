@@ -21,7 +21,7 @@ const ADMIN_LINKS: { href: string; label: string }[] = [
   { href: '/admin/results', label: '✏️ Results & Corrections' },
   { href: '/admin/score-sheets', label: '🖨️ Blank Score Sheets' },
   { href: '/admin/delegations', label: '📋 Delegations' },
-  { href: '/registration-desk', label: '✅ Registration Desk' },
+  { href: '/registration-desk', label: '✅ Arrivals' },
   { href: '/admin/audit', label: '📜 Audit Log' },
 ];
 

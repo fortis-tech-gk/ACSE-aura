@@ -59,9 +59,9 @@ export default function StaffManager({ initialStaff }: Props) {
       case 'finance_desk':
         return 'Finance Verification Desk';
       case 'registration_desk':
-        return 'Registration Desk (Attendance)';
+        return 'Arrivals board (website)';
       case 'accreditation_volunteer':
-        return 'Gate Accreditation Scanner';
+        return 'Accreditation desk (college check-in)';
       case 'warden':
         return 'Hostel Accommodation Warden';
       case 'call_room_official':
@@ -209,13 +209,13 @@ export default function StaffManager({ initialStaff }: Props) {
                     }
                   }}
                 >
-                  <option value="accreditation_volunteer">Gate Accreditation Scanner</option>
+                  <option value="accreditation_volunteer">Accreditation desk (college check-in)</option>
                   <option value="warden">Hostel Accommodation Warden</option>
                   <option value="food_volunteer">Food Counter Volunteer (Meals)</option>
                   <option value="call_room_official">Call Room Marshal / Track Marshal</option>
                   <option value="referee">Field / Track Judge (Referee)</option>
                   <option value="finance_desk">Finance Verification Desk</option>
-                  <option value="registration_desk">Registration Desk (Contingent Attendance)</option>
+                  <option value="registration_desk">Arrivals board (website view, check-in fallback)</option>
                   <option value="meet_admin">Technical / Meet Director</option>
                 </select>
               </div>

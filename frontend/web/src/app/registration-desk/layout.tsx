@@ -8,8 +8,8 @@ import '@/app/admin/admin.css';
 export const metadata = {
   // Private portal: keep out of search results
   robots: { index: false, follow: false },
-  title: 'Registration Desk — VTU SportsOS',
-  description: 'Contingent reporting and attendance marking at the venue Registration Desk',
+  title: 'Arrivals — VTU SportsOS',
+  description: 'College check-in and attendance at the venue',
 };
 
 export default async function RegistrationDeskLayout({ children }: { children: React.ReactNode }) {
@@ -18,13 +18,13 @@ export default async function RegistrationDeskLayout({ children }: { children: R
 
   return (
     <div className="admin-shell">
-      <OfficialBanner portalBadge="REGISTRATION DESK &bull; CONTINGENT REPORTING" />
+      <OfficialBanner portalBadge="ARRIVALS &bull; COLLEGE CHECK-IN" />
 
       <nav className="univ-main-nav">
         <div className="univ-nav-inner">
           <div className="univ-nav-menu">
             <Link href="/registration-desk" className="univ-nav-link">
-              <span>✅ Contingent Attendance</span>
+              <span>✅ Arrivals &amp; Attendance</span>
             </Link>
             {isAdmin && (
               <Link href="/admin" className="univ-nav-link">

@@ -11,7 +11,7 @@ import { Button, Card, Icon, Muted, Select, colors, styles as ui, type SelectOpt
 const ROLES: SelectOption<LoginRole>[] = [
   { value: 'referee', label: 'Referee', sub: 'Times, distances and heights', icon: 'timer' },
   { value: 'call_room_official', label: 'Call room', sub: 'Check athletes in before their heat', icon: 'door' },
-  { value: 'accreditation_volunteer', label: 'Accreditation desk', sub: 'Accredit athletes on arrival', icon: 'verified' },
+  { value: 'accreditation_volunteer', label: 'Accreditation desk', sub: 'Check in each college on arrival', icon: 'verified' },
   { value: 'warden', label: 'Hostel warden', sub: 'Check athletes into hostels', icon: 'bed' },
   { value: 'food_volunteer', label: 'Food counter', sub: 'Scan athletes at meals', icon: 'food' },
 ];

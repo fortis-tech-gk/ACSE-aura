@@ -190,11 +190,20 @@ async function sendScan(q: QueuedScan, token: string, fallback: ScanAthlete | nu
       college: x.squad_code || x.college_name || fallback?.college || null,
       photoUrl: fallback?.photoUrl ?? null,
     };
-    const events = Array.isArray(x.events) ? x.events.map((e: any) => e.name).join(', ') : '';
-    if (x.already_accredited && !x.is_duplicate_sync) {
-      return { kind: 'done', status: 'ok', outcome: { tone: 'amber', title: 'Already accredited', detail: events, athlete } };
+    // College check-in: one scan accredits the whole college (migration 0054)
+    const collegeName = x.college_name || x.college_code || 'College';
+    const men = Number(x.accredited_men ?? 0);
+    const women = Number(x.accredited_women ?? 0);
+    const counts = `${men} men · ${women} women accredited`;
+    if (x.already_present && !x.is_duplicate_sync) {
+      const added = Number(x.newly_accredited ?? 0);
+      return {
+        kind: 'done',
+        status: 'ok',
+        outcome: { tone: 'amber', title: 'College already checked in', detail: `${collegeName}${added ? ` · ${added} more added` : ''} · ${counts}`, athlete },
+      };
     }
-    return { kind: 'done', status: 'ok', outcome: { tone: 'green', title: 'Accredited', detail: events, athlete } };
+    return { kind: 'done', status: 'ok', outcome: { tone: 'green', title: 'College checked in', detail: `${collegeName} · ${counts}`, athlete } };
   } catch (e) {
     if (e instanceof ApiError) {
       if (e.offline) return { kind: 'retry', error: e.message };
@@ -387,7 +396,7 @@ export function OfficialSessionProvider({ children }: { children: React.ReactNod
         return { tone: 'amber', title: 'Already checked in', detail: [known.hostelName, known.roomRange].filter(Boolean).join(' · '), athlete, offline: true };
       }
       const title =
-        input.kind === 'meal' ? `${MEAL_LABEL[input.mealType as MealType]} — serve` : input.kind === 'checkin' ? 'Checked in' : 'Accredited';
+        input.kind === 'meal' ? `${MEAL_LABEL[input.mealType as MealType]} — serve` : input.kind === 'checkin' ? 'Checked in' : 'College checked in';
       const detail = input.kind === 'checkin' ? [known.hostelName, input.room ? `Room ${input.room}` : known.roomRange].filter(Boolean).join(' · ') : undefined;
       return { tone: 'green', title, detail, athlete, offline: true };
     },

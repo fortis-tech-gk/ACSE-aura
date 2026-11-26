@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache';
 import { supabaseAdmin } from '@/lib/supabase';
 import { requireRegistrationDesk } from '@/lib/auth-guard';
 import { normalizePaymentStatus, type SquadPaymentStatus } from '@/lib/payment-status';
+import { fetchCollegeParticipation } from '@/lib/college-participation';
 
 export interface DeskSquad {
   id: string;
@@ -22,27 +23,29 @@ export interface DeskCollege {
   district: string | null;
   attendance_marked_at: string | null;
   attendance_marked_by: string | null;
-  attendance_men_count: number | null;
-  attendance_women_count: number | null;
+  /** Athletes who reported at a roll call / call room at least once (college_participation, migration 0054) */
+  competed_men: number;
+  competed_women: number;
   squads: DeskSquad[];
 }
 
 const MIGRATION_ERROR =
-  'Attendance needs database migration 0022 (supabase/migrations/0022_college_attendance.sql). Apply it in Supabase, then try again.';
+  'College check-in needs database migration 0054 (supabase/migrations/0054_college_checkin.sql). Apply it, then try again.';
 
-function isMissingAttendanceColumn(message: string | undefined) {
-  return Boolean(message && /attendance_/.test(message) && /(column|schema cache)/i.test(message));
+function isMissingCheckIn(message: string | undefined) {
+  return Boolean(message && /(check_in_college|college_participation)/.test(message));
 }
 
 /**
- * All colleges with their two squads and registered athlete counts, for the Registration Desk.
- * `migrationApplied` is false until migration 0022 adds the attendance columns.
+ * All colleges with their two squads, registered athlete counts, check-in state and how many
+ * athletes actually competed, for the Arrivals board.
+ * `migrationApplied` is false until migration 0054 adds college check-in.
  */
 export async function listCollegesForDeskAction(): Promise<{ colleges: DeskCollege[]; migrationApplied: boolean }> {
   await requireRegistrationDesk();
 
-  // colleges.* so the desk still loads before migration 0022 adds the attendance columns
-  const { data, error } = await supabaseAdmin
+  const [{ data, error }, participation] = await Promise.all([
+    supabaseAdmin
     .from('colleges')
     .select(`
       *,
@@ -56,11 +59,13 @@ export async function listCollegesForDeskAction(): Promise<{ colleges: DeskColle
         profiles (count)
       )
     `)
-    .order('name', { ascending: true });
+    .order('name', { ascending: true }),
+    fetchCollegeParticipation(),
+  ]);
 
   if (error) throw new Error(error.message);
   const rows = data || [];
-  const migrationApplied = rows.length === 0 || 'attendance_marked_at' in rows[0];
+  const migrationApplied = participation.available;
 
   const colleges: DeskCollege[] = rows.map((c: any) => ({
     id: c.id,
@@ -69,8 +74,8 @@ export async function listCollegesForDeskAction(): Promise<{ colleges: DeskColle
     district: c.district ?? null,
     attendance_marked_at: c.attendance_marked_at ?? null,
     attendance_marked_by: c.attendance_marked_by ?? null,
-    attendance_men_count: c.attendance_men_count ?? null,
-    attendance_women_count: c.attendance_women_count ?? null,
+    competed_men: participation.byCollege.get(c.id)?.competed_men ?? 0,
+    competed_women: participation.byCollege.get(c.id)?.competed_women ?? 0,
     squads: (c.squads || []).map((s: any) => ({
       id: s.id,
       gender: s.gender,
@@ -101,70 +106,36 @@ function revalidateAttendance() {
 }
 
 /**
- * Marks a college's contingent as having reported at the venue. Unlocks the college's
- * Attendance Certificate in the contingent portal.
+ * Website fallback for the accreditation desk (normally the Officials app scans one athlete's QR):
+ * checks in the whole college and accredits every athlete of its fee-verified squads.
+ * Unlocks the college's Attendance Certificate.
  */
-export async function markCollegeAttendanceAction(
-  collegeId: string,
-  menCount: number,
-  womenCount: number
-): Promise<{ success: boolean; error?: string; markedAt?: string; markedBy?: string }> {
+export async function checkInCollegeAction(
+  collegeId: string
+): Promise<{ success: boolean; error?: string; markedAt?: string; markedBy?: string; newlyAccredited?: number }> {
   const session = await requireRegistrationDesk();
-
-  const men = Number(menCount);
-  const women = Number(womenCount);
-  if (!Number.isInteger(men) || !Number.isInteger(women) || men < 0 || women < 0 || men > 500 || women > 500) {
-    return { success: false, error: 'Enter whole numbers (0–500) for men and women participants.' };
-  }
-  if (men + women === 0) {
-    return { success: false, error: 'At least one participant must have reported to mark attendance.' };
-  }
-
-  const markedAt = new Date().toISOString();
   const markedBy = session.displayName || 'Registration Desk';
-  const { data, error } = await supabaseAdmin
+
+  const { data, error } = await supabaseAdmin.rpc('check_in_college', { p_college_id: collegeId, p_marked_by: markedBy });
+  if (error) return { success: false, error: isMissingCheckIn(error.message) ? MIGRATION_ERROR : error.message };
+
+  const r: any = data || {};
+  const { data: col } = await supabaseAdmin
     .from('colleges')
-    .update({
-      attendance_marked_at: markedAt,
-      attendance_marked_by: markedBy,
-      attendance_men_count: men,
-      attendance_women_count: women,
-    })
+    .select('attendance_marked_at, attendance_marked_by')
     .eq('id', collegeId)
-    .select('id, code')
     .maybeSingle();
 
-  if (error) return { success: false, error: isMissingAttendanceColumn(error.message) ? MIGRATION_ERROR : error.message };
-  if (!data) return { success: false, error: 'College not found.' };
-
-  await writeAudit('COLLEGE_ATTENDANCE_MARKED', { collegeId, collegeCode: data.code, men, women }, markedBy);
+  await writeAudit(
+    'COLLEGE_CHECKED_IN',
+    { collegeId, collegeCode: r.college_code, newlyAccredited: r.newly_accredited, source: 'website' },
+    markedBy
+  );
   revalidateAttendance();
-  return { success: true, markedAt, markedBy };
-}
-
-/**
- * Removes a college's attendance mark (e.g. marked by mistake). Locks the certificate again.
- */
-export async function clearCollegeAttendanceAction(collegeId: string): Promise<{ success: boolean; error?: string }> {
-  const session = await requireRegistrationDesk();
-  const performedBy = session.displayName || 'Registration Desk';
-
-  const { data, error } = await supabaseAdmin
-    .from('colleges')
-    .update({
-      attendance_marked_at: null,
-      attendance_marked_by: null,
-      attendance_men_count: null,
-      attendance_women_count: null,
-    })
-    .eq('id', collegeId)
-    .select('id, code')
-    .maybeSingle();
-
-  if (error) return { success: false, error: isMissingAttendanceColumn(error.message) ? MIGRATION_ERROR : error.message };
-  if (!data) return { success: false, error: 'College not found.' };
-
-  await writeAudit('COLLEGE_ATTENDANCE_CLEARED', { collegeId, collegeCode: data.code }, performedBy);
-  revalidateAttendance();
-  return { success: true };
+  return {
+    success: true,
+    markedAt: col?.attendance_marked_at || new Date().toISOString(),
+    markedBy: col?.attendance_marked_by || markedBy,
+    newlyAccredited: Number(r.newly_accredited || 0),
+  };
 }

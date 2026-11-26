@@ -32,7 +32,10 @@ export default function AttendanceCertificate({
       <div className="att-actions no-print">
         <div>
           <h1 className="att-heading">Attendance Certificate</h1>
-          <p className="att-note">Your contingent&apos;s attendance has been recorded by the Registration Desk.</p>
+          <p className="att-note">
+            Your college has been checked in. The numbers below are the athletes who reported at a roll call or call room, so
+            they grow as your events happen. Print after your college&apos;s last event.
+          </p>
         </div>
         <button type="button" className="att-print" onClick={() => window.print()} id="btn-print-attendance-certificate">
           🖨️ Download / Print (PDF)

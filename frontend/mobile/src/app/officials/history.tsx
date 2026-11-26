@@ -5,7 +5,7 @@ import type { QueuedScan } from '@/lib/officials/types';
 import { fmtTime } from '@/lib/format';
 import { AppHeader, Button, Card, Muted, Pill, Screen, Segmented, colors } from '@/components/ui';
 
-const KIND: Record<QueuedScan['kind'], string> = { meal: 'Meal', checkin: 'Hostel check-in', accreditation: 'Accreditation', op: 'Entry' };
+const KIND: Record<QueuedScan['kind'], string> = { meal: 'Meal', checkin: 'Hostel check-in', accreditation: 'College check-in', op: 'Entry' };
 const MEAL: Record<string, string> = { BREAKFAST: 'Breakfast', LUNCH: 'Lunch', SNACKS: 'Snacks', DINNER: 'Dinner' };
 
 type Filter = 'all' | 'pending' | 'rejected';

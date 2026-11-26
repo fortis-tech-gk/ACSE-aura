@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { requireSquad } from '@/lib/auth-guard';
 import { supabaseAdmin } from '@/lib/supabase';
 import AttendanceCertificate from './AttendanceCertificate';
+import { fetchCollegeParticipation } from '@/lib/college-participation';
 
 export const metadata = {
   title: 'Attendance Certificate — VTU SportsOS Squad',
@@ -20,7 +21,7 @@ export default async function SquadCertificatePage() {
 
   const markedAt: string | null = college?.attendance_marked_at ?? null;
 
-  // Locked until the Registration Desk marks this college as attended. Nothing of the
+  // Locked until the accreditation desk checks this college in (one scan of any athlete). Nothing of the
   // certificate is sent to the browser before that, so it cannot be viewed or printed.
   if (!college || !markedAt) {
     return (
@@ -41,8 +42,8 @@ export default async function SquadCertificatePage() {
           </h1>
           <p style={{ color: '#475569', fontSize: '0.95rem', lineHeight: 1.6 }}>
             Your college&apos;s Attendance Certificate will be available here after your contingent reports at the{' '}
-            <strong>Registration Desk</strong> at Dr. ACS College of Engineering during the meet (7 – 10 December 2026) and
-            the desk marks your college as attended.
+            <strong>accreditation desk</strong> at Dr. ACS College of Engineering during the meet (7 – 10 December 2026). The
+            desk scans the ID card of any one of your athletes, and that checks in your whole college.
           </p>
           <p style={{ color: '#64748b', fontSize: '0.85rem', marginTop: '0.75rem' }}>
             Once unlocked it can be downloaded or printed from this page.
@@ -58,6 +59,10 @@ export default async function SquadCertificatePage() {
     );
   }
 
+  // The numbers on the certificate are the athletes who actually reported at a roll call / call room
+  const { byCollege } = await fetchCollegeParticipation(college.id);
+  const part = byCollege.get(college.id);
+
   const own = (squads || []).find((s: any) => s.id === session.squadId);
   const other = (squads || []).find((s: any) => s.id !== session.squadId);
   const pedName = (own?.ped_name || other?.ped_name || '').trim();
@@ -68,8 +73,8 @@ export default async function SquadCertificatePage() {
       district={college.district || ''}
       collegeCode={college.code}
       pedName={pedName}
-      menCount={Number(college.attendance_men_count || 0)}
-      womenCount={Number(college.attendance_women_count || 0)}
+      menCount={part?.competed_men ?? 0}
+      womenCount={part?.competed_women ?? 0}
       markedAt={markedAt}
     />
   );

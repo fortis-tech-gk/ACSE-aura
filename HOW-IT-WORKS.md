@@ -20,7 +20,7 @@ Think of it as **four kinds of people** and **one shared notebook**:
 | **College PED** (Physical Education Director, contingent manager) | The website | Registers their athletes, picks events, pays the entry fee |
 | **Athlete** | The *AURA Athletes* app | Shows their pass, sees their schedule, results and points |
 | **Official** (desk staff, call room, referees) | The *AURA Officials* app | Scans people in, checks them into the call room, enters results |
-| **Admin / Finance desk / Registration desk** | The website | Runs the meet: colleges, payments, heat draw, ID cards, certificates |
+| **Admin / Finance desk / Arrivals board** | The website | Runs the meet: colleges, payments, heat draw, ID cards, certificates |
 
 The **shared notebook** is one database in the cloud. Everything anyone enters goes into it, and everything anyone
 sees comes from it. That is why a result typed by a referee shows up on the public website and in the
@@ -41,7 +41,9 @@ type a world-record-breaking 100 m time by mistake.
 3. The system works out the **fee**. The PED pays by UPI and uploads the proof.
 4. The finance desk confirms the payment.
 5. Registration closes and every athlete gets a permanent **bib number**.
-6. At the meet: accreditation desk -> hostel -> meals -> call room -> track or field -> result -> medals.
+6. The night before each event (until 22:00), the PED can swap a reserve in and pick the relay runners in the app.
+7. At the meet: the college checks in at the accreditation desk (one scan) -> hostel -> meals -> roll call / call room -> track or field -> result -> medals.
+8. After the meet: the athlete downloads a **Certificate of Participation** in the app.
 
 ![Meet day](diagrams/03-meet-day-flow.svg)
 
@@ -57,7 +59,7 @@ type a world-record-breaking 100 m time by mistake.
 | **Dashboard** | Your college, your squad, how many athletes, event quotas, payment status, bib numbers (after registration closes), advisory notes |
 | **Athletes** | Add, edit and delete athletes. Pick events, a reserve and relays. |
 | **Payment** | See the fee, pay by UPI, upload the receipt, see the status |
-| **Certificate / reports** | Entry report and the attendance certificate to print |
+| **Certificate / reports** | Entry report, and the college's **Attendance Certificate**. It unlocks when your college checks in at the accreditation desk, and shows how many men and women **competed** (reported at a roll call or call room), so print it after your last event. |
 
 ### Adding an athlete
 Fill in: full name **exactly as on the SSLC (10th) certificate**, **USN** (a first-year can use a temporary
@@ -105,6 +107,23 @@ college amount once.
 ### Deadlines
 Registration is open without a fine until **29 November 2026**, and until **30 November 2026** with a late fine of ₹1,000. The admin closes it after that, and then nothing can be added.
 
+### At the meet: the PED in the AURA Athletes app
+After registration, the PED also uses the **AURA Athletes app**. On the login screen choose **PED**, then enter
+the **college code** and **either** the Men's or the Women's passphrase. One login covers both squads.
+
+| What | How |
+|---|---|
+| **Swap a reserve in** | Put a reserve athlete into an individual event in place of a college athlete. A reserve who already has 2 individual events must give one up. |
+| **Relay runners** | Pick the 4 running members and their legs for each relay from the athletes ticked on the form. |
+| **Attendance** | For every event: who has reported at the roll call / call room, who has not, and who was marked DNS. |
+| **Results** | Your college's marks and places as soon as a heat is finalized. |
+| **Alerts** | Push notifications **30, 20 and 10 minutes** before a call room for athletes not yet reported, a DNS alert when the call room closes, and a result alert when the heat is finalized. |
+
+**Swaps and relay runners close at 22:00 IST the day before the event**, and as soon as that event's roll
+call opens. After that, changes are made only at the call room.
+
+This does not reopen the website: the registration rules (no relay team building on the website) stay the same.
+
 ---
 
 ## 2. For the athlete
@@ -114,11 +133,17 @@ Registration is open without a fine until **29 November 2026**, and until **30 N
 
 | Tab | What you see |
 |---|---|
-| **My Pass** | Your photo, name, college, bib number and a **QR code**. Show this at the accreditation desk, hostel and food counter. Also shows whether you are accredited. |
+| **My Pass** | Your photo, name, college, bib number and a **QR code**. Show this at the hostel and food counter (and at the accreditation desk if your PED asks you to). Also shows whether you are accredited. |
 | **Events** | Your events with day, time, heat and lane, a countdown, and the call room time. Reminders ring before your call room. |
 | **Results** | Your time or mark, your place in the heat, medals, points earned, and your college's rank. For the decathlon and heptathlon you see your total points and place. |
 | **Leaderboard** | Team standings: Overall, Men and Women |
-| **More** | Stay and Meals (hostel, room, meals used today), directions to the venue, settings, log out |
+| **More** | Stay and Meals (hostel, room, meals used today), directions to the venue, **Certificate**, settings, log out |
+
+### Certificate of Participation
+From the **day after the meet ends** (11 December 2026), open **More -> Certificate** and download your
+certificate as a PDF. It lists the events you took part in. You get one if you **reported at a roll call or
+call room for at least one event**, your own event or your relay team's. An athlete who registered but
+never reported does not get one.
 
 You also get **notifications**, for example when you qualify for the next round.
 
@@ -141,11 +166,23 @@ enter your 6-digit **PIN**. The app remembers your last duty.
 
 | Duty | Job | How |
 |---|---|---|
-| **Accreditation desk** | Confirm an athlete has arrived | Scan the athlete's QR (or type the bib). Works only if the college's payment is verified. |
+| **Accreditation desk** | Check in a **college** when its contingent arrives | Scan **any one** athlete's QR of that college (or type one bib). The whole college is checked in and all its athletes are accredited. Works only if the college's payment is verified. |
 | **Hostel warden** | Check athletes into the hostel | Scan the QR, pick the room. Refuses the wrong hostel. |
 | **Food counter** | One meal per slot | Scan the QR for breakfast, lunch, snacks or dinner. A second scan for the same meal is refused. |
 | **Call room** | Check athletes in before their heat | Open the heat, scan each athlete, inspect (spikes, bib), handle scratches and swaps, then close the call room |
 | **Referee** | Enter the result | Times, distances, heights or decathlon marks, then Finalize |
+
+### Accreditation desk: one scan per college
+When a college's contingent arrives, scan the ID card of **any one** of its athletes. The screen says
+**College checked in** with how many men and women are now accredited. That one scan:
+- marks the college as present and unlocks its Attendance Certificate on the website;
+- accredits **every athlete of both squads**, so they can be drawn into heats, report at the roll call and get meals.
+
+Scanning a second athlete of the same college does no harm. It shows **College already checked in**, and picks up anyone
+added since. Athletes added or reinstated later (late entries, substitutes) are accredited automatically.
+
+The desk does **not** count heads. The real attendance comes from the roll call and call room: after the meet, every
+college's count of athletes who **actually competed** is on the **Arrivals** page.
 
 ### Working offline
 Wi-Fi at a stadium can be poor. The app **keeps working**:
@@ -154,7 +191,17 @@ Wi-Fi at a stadium can be poor. The app **keeps working**:
   network returns. Sending twice does no harm.
 - A badge at the top shows how many items are waiting and lets you check them.
 
-### Call room (step by step)
+### First round: the event roll call
+The first round of an event does not start from heats. It starts from a **roll call for the whole event**:
+1. Open the event's roll call. Every eligible entrant of the event is on it.
+2. Athletes scan in. A relay team counts as reported when any of its runners scans. A reserve of the same
+   college can come in for an absent athlete.
+3. Press **Prepare heats**. The heats are drawn **only from the athletes who reported** and go straight to the
+   referee. Everyone else is DNS. Heats drawn earlier by the meet office are thrown away and redrawn.
+
+So there are no empty lanes in a first round. Later rounds (semi-finals, finals) use the per-heat call room below.
+
+### Call room for later rounds (step by step)
 1. Open your heat from the list. Open the call room.
 2. As athletes arrive, scan their QR or type the bib. The athlete's photo, name and college appear.
 3. Use the inspection to record spikes, bib and similar checks. Mark **scratched** or **disqualified** if needed.
@@ -196,10 +243,10 @@ Wi-Fi at a stadium can be poor. The app **keeps working**:
 
 ---
 
-## 4. For the admin, finance desk and registration desk
+## 4. For the admin, finance desk and arrivals board
 
 **Where:** the website, *Admin login* (username and password). The **finance desk** account can open **only the
-Payments page**. The **registration desk** account marks arrivals.
+Payments page**. The **arrivals board** account (old name: registration desk) sees which colleges have checked in and how many athletes competed.
 
 ### Admin pages
 | Page | Use |
@@ -208,9 +255,11 @@ Payments page**. The **registration desk** account marks arrivals.
 | **Colleges** | Add a college, create its two squads and logins, reset passphrases, **unlock a squad** in an emergency |
 | **Athletes** | Search and export every registered athlete |
 | **Payments** | Review every payment: UTR, amount, receipt, then **Verify** or **Reject** (with a reason) |
+| **Arrivals** | Which colleges have checked in, and per college how many men and women **competed** (reported at a roll call or call room at least once). A *Check in* button is a fallback if the accreditation app cannot scan. |
 | **Bibs** | Generate contiguous bib numbers once registration closes (never change afterwards) |
 | **ID cards** | Print athlete accreditation cards (admin-only; colleges do not see them) |
 | **Heats / Schedule** | Draw heats for each event, see the schedule, link each heat to its slot |
+| **Photo finish** | Work with the photo finish system for the 100/200/400 m, hurdles and relays. **App mode** (default): the system draws the heats, you export them as FinishLynx files and import the results back. **Manual mode**: the photo finish vendor makes the heats and you type the lane and bib for each. The referee still presses *Finish heat*. |
 | **Results & Corrections** | Fix a result after a referee finished the heat: **reopen** the heat for the referee, or correct a track final time or a decathlon / heptathlon mark directly. A reason is required and goes in the Audit Log; places and points recalculate by themselves. |
 | **Score sheets** | Print blank referee score sheets, including decathlon / heptathlon sheets (one page per day) |
 | **Delegations** | Printable delegation sheets with the principal's signature and seal |
@@ -224,7 +273,7 @@ Payments page**. The **registration desk** account marks arrivals.
 2. Registration open: PEDs register and pay. Finance verifies payments daily.
 3. **Close registration**, then **generate bib numbers**.
 4. Print ID cards, delegation sheets, score sheets.
-5. On arrival days the registration desk marks each college present, and the accreditation desk scans athletes.
+5. On arrival days the accreditation desk checks in each college with one scan. The **Arrivals** page shows who is in.
 6. **Draw heats** per event. Only accredited athletes of verified colleges are drawn, teammates in different heats.
 7. On meet days: watch results, handle amendments, and keep an eye on the audit log.
 
@@ -257,7 +306,10 @@ Which events count where:
 - **Overall championship:** college points from every event, individual and 4x100 m / 4x400 m relays.
 - **Men's / Women's team championship:** college points from that gender's individual events only (no relays).
 
-**Qualifying:** in track events with several heats, the **first 2 of each heat** go to the next round (ties for
+**Which events have heats:** only the **100 m, 200 m, 400 m, the hurdles and the relays**. Every other event
+(800 m and longer, the walk, the half marathon, the field events) is a single race or flight, run as a straight final.
+
+**Qualifying:** in events with several heats, the **first 2 of each heat** go to the next round (ties for
 2nd place both go through). If more than 8 qualify for a final, a semi-final is run first.
 
 **Decathlon and heptathlon:** each discipline gives points from the World Athletics tables, and the totals decide the places. Everyone must finish every discipline to be ranked. If two athletes have the same total, the one who scored higher in more disciplines wins.
@@ -274,7 +326,7 @@ Which events count where:
 | **UTR** | The bank or UPI reference number of a payment |
 | **Roster lock** | After payment is submitted, athletes can no longer be added or removed |
 | **Bib** | The athlete's permanent number for the meet |
-| **Accreditation** | Confirming at the desk that an athlete has arrived and is cleared to compete |
+| **Accreditation** | The athlete is cleared to compete. Happens for the whole college at once when the college checks in at the accreditation desk. |
 | **Call room** | The check-in area before a heat. Athletes not scanned in when it closes are DNS. |
 | **Heat** | One race (or flight) of an event. Big events have several heats. |
 | **DNS / DNF / DQ / NM** | Did not start / did not finish / disqualified / no valid mark |
@@ -286,7 +338,7 @@ Which events count where:
 
 ## Questions people ask
 
-**An athlete is missing from the heat draw.** Check three things: the athlete is *accredited*, the college's payment is
+**An athlete is missing from the heat draw.** Check three things: the athlete's college has *checked in* (so the athlete is *accredited*), the college's payment is
 *verified*, and the athlete is *registered* for that event as a regular entry (a reserve is not drawn).
 
 **A PED made a mistake after paying.** Roster is locked. Ask the meet office: an admin can withdraw or substitute
@@ -295,6 +347,12 @@ an athlete (Amendments) or unlock the squad.
 **A referee typed a wrong time.** If the heat is not finalized, retype it (it saves over the old one). If it is
 finalized, the admin opens **Results & Corrections** and either reopens the heat (the referee fixes it and finishes it
 again) or corrects a final time / decathlon mark directly. The change is logged, and points recalculate automatically.
+
+**A PED wants to change a relay runner or swap a reserve on the morning of the event.** The app closes this at
+22:00 the night before. On the day, the call room official makes the swap at the roll call or call room.
+
+**An athlete cannot download the certificate.** It opens only the day after the meet, and only for athletes who
+reported at a roll call or call room at least once.
 
 **The tablet lost Wi-Fi.** Keep working. Items show *Queued* and send themselves when the network returns.
 

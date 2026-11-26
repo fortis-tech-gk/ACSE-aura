@@ -11,7 +11,9 @@ accreditationRouter.use(requireRole(['meet_admin', 'accreditation_volunteer']));
 /**
  * POST /api/accreditation/scan
  * Body: { clientScanUuid, qrToken | bib | athleteId, deviceTimestamp? }
- * Accreditation needs the college's fee to be verified.
+ * College check-in (migration 0054): scanning ANY one athlete checks in the whole college and
+ * accredits every athlete of its fee-verified squads. The RPC refuses a college whose fee is not
+ * verified, and is idempotent per clientScanUuid (offline retries).
  */
 accreditationRouter.post('/scan', async (req: AuthenticatedRequest, res: Response) => {
   try {
@@ -22,27 +24,6 @@ accreditationRouter.post('/scan', async (req: AuthenticatedRequest, res: Respons
     }
     const who = await resolveAthlete(req.body);
     if (!who.ok) return res.status(who.status).json({ error: who.error });
-
-    // A re-sent scan (offline retry) must succeed even if checked before — the RPC handles that.
-    const { data: prior } = await supabase
-      .from('accreditation_scans')
-      .select('id')
-      .eq('client_scan_uuid', clientScanUuid)
-      .maybeSingle();
-    if (!prior) {
-      const { data: prof } = await supabase
-        .from('profiles')
-        .select('squads ( payment_status, colleges ( code ) )')
-        .eq('id', who.athleteId)
-        .maybeSingle();
-      const squad: any = (prof as any)?.squads;
-      if (!prof) return res.status(404).json({ error: 'Athlete profile not found.' });
-      if (squad?.payment_status !== 'VERIFIED') {
-        return res.status(400).json({
-          error: `Fees for ${squad?.colleges?.code || 'this college'} are not verified yet. Send the team manager to the finance desk.`,
-        });
-      }
-    }
 
     const { data, error } = await supabase.rpc('process_accreditation_scan', {
       p_client_uuid: clientScanUuid,
@@ -60,18 +41,33 @@ accreditationRouter.post('/scan', async (req: AuthenticatedRequest, res: Respons
 
 /**
  * GET /api/accreditation/stats
+ * Colleges checked in vs still to come (colleges with a verified fee), and accredited athletes.
  */
 accreditationRouter.get('/stats', async (_req: AuthenticatedRequest, res: Response) => {
   try {
     const active = () =>
       supabase.from('profiles').select('id', { count: 'exact', head: true }).neq('accreditation_status', 'WITHDrAWN');
-    const [all, done] = await Promise.all([active(), active().eq('accreditation_status', 'ACCREDITED')]);
-    const err = all.error || done.error;
+    const [all, done, paid] = await Promise.all([
+      active(),
+      active().eq('accreditation_status', 'ACCREDITED'),
+      supabase.from('squads').select('college_id, colleges ( attendance_marked_at )').eq('payment_status', 'VERIFIED'),
+    ]);
+    const err = all.error || done.error || paid.error;
     if (err) return res.status(400).json({ error: err.message });
+
+    const colleges = new Map<string, boolean>();
+    for (const sq of (paid.data || []) as any[]) {
+      const c = Array.isArray(sq.colleges) ? sq.colleges[0] : sq.colleges;
+      colleges.set(sq.college_id, Boolean(c?.attendance_marked_at));
+    }
+    const present = [...colleges.values()].filter(Boolean).length;
 
     const total = all.count || 0;
     const accredited = done.count || 0;
     return res.json({
+      collegesPresent: present,
+      collegesPending: colleges.size - present,
+      collegesTotal: colleges.size,
       totalAthletes: total,
       accreditedAthletes: accredited,
       pendingAccreditation: total - accredited,

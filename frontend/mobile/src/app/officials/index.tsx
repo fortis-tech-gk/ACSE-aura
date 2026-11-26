@@ -241,7 +241,7 @@ function WardenDesk({ token }: { token: string | null }) {
 
 function AccreditationDesk({ token }: { token: string | null }) {
   const { submit } = useOfficialSession();
-  const { data, reload } = useStats<{ accreditedAthletes: number; totalAthletes: number; pendingAccreditation: number }>('/accreditation/stats', token);
+  const { data, reload } = useStats<{ collegesPresent?: number; collegesPending?: number; accreditedAthletes: number }>('/accreditation/stats', token);
   const onScan = useCallback(
     async (ref: AthleteRef) => {
       const out = await submit({ kind: 'accreditation', ref });
@@ -252,12 +252,12 @@ function AccreditationDesk({ token }: { token: string | null }) {
   );
   return (
     <DeskLayout
-      scanner={(l) => <ScanPanel onScan={onScan} hint="Scan ID card to accredit" {...l} />}
+      scanner={(l) => <ScanPanel onScan={onScan} hint="Scan any one athlete's ID card to check in the college" {...l} />}
       stats={
         <View style={s.stats}>
-          <Stat label="Accredited" value={data ? String(data.accreditedAthletes) : '—'} />
-          <Stat label="Still to come" value={data ? String(data.pendingAccreditation) : '—'} />
-          <Stat label="Registered" value={data ? String(data.totalAthletes) : '—'} />
+          <Stat label="Colleges in" value={data?.collegesPresent != null ? String(data.collegesPresent) : '—'} />
+          <Stat label="Still to come" value={data?.collegesPending != null ? String(data.collegesPending) : '—'} />
+          <Stat label="Athletes" value={data ? String(data.accreditedAthletes) : '—'} />
         </View>
       }
     />
