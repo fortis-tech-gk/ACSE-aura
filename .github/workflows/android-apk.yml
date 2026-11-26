@@ -3,8 +3,10 @@ name: Build Android APKs (GitHub runner)
 # Builds the sideloadable APKs of BOTH apps on GitHub's runners with plain Gradle
 # (expo prebuild + ./gradlew assembleRelease). No EAS build at all, so no EAS build quota.
 #
-#   target = production → production API (meet-day tablets / phones)
-#   target = staging    → staging API (rehearsals)
+#   target = both       → 4 APKs: officials + athletes, each for production and staging (default)
+#   target = production → production API only (meet-day tablets / phones)
+#   target = staging    → staging API only (rehearsals)
+#   A staging and a production APK of the same app share one package name, so a device holds one of them.
 #
 # Signing (both apps use the same key):
 #   - If the repository secrets APK_KEYSTORE_BASE64, APK_KEYSTORE_PASSWORD and APK_KEY_ALIAS
@@ -16,7 +18,7 @@ name: Build Android APKs (GitHub runner)
 #   APKs signed by EAS earlier have a different key: uninstall those once before installing these.
 #
 # Run: Actions → "Build Android APKs (GitHub runner)" → Run workflow, or
-#   gh workflow run android-apk.yml --repo ganeshak11/vtu-athletics -f target=production
+#   gh workflow run android-apk.yml --repo ganeshak11/vtu-athletics -f target=both
 # The APKs are attached to the run as artifacts (kept 30 days).
 
 on:
@@ -25,25 +27,26 @@ on:
       target:
         description: Which API the apps talk to
         type: choice
-        options: [production, staging]
-        default: production
+        options: [both, production, staging]
+        default: both
 
 jobs:
   apk:
     if: github.repository == 'ganeshak11/vtu-athletics'
-    name: ${{ matrix.app }} APK (${{ inputs.target }})
+    name: ${{ matrix.app }} APK (${{ matrix.target }})
     runs-on: ubuntu-latest
     timeout-minutes: 75
     strategy:
       fail-fast: false
       matrix:
         app: [officials, athletes]
+        target: ${{ fromJSON(inputs.target == 'both' && '["production","staging"]' || format('["{0}"]', inputs.target)) }}
     defaults:
       run:
         working-directory: frontend/mobile
     env:
       APP_VARIANT: ${{ matrix.app }}
-      APK_NAME: aura-${{ matrix.app }}-${{ inputs.target }}-${{ github.run_number }}.apk
+      APK_NAME: aura-${{ matrix.app }}-${{ matrix.target }}-${{ github.run_number }}.apk
       KEYSTORE_B64: ${{ secrets.APK_KEYSTORE_BASE64 }}
       KEYSTORE_PASSWORD: ${{ secrets.APK_KEYSTORE_PASSWORD }}
       KEY_ALIAS: ${{ secrets.APK_KEY_ALIAS }}
@@ -63,9 +66,9 @@ jobs:
       - name: Android SDK on the runner
         run: echo "ANDROID_HOME=$ANDROID_HOME"; ls "$ANDROID_HOME/build-tools" | tail -3
       - run: npm ci
-      - name: API address for ${{ inputs.target }}
+      - name: API address for ${{ matrix.target }}
         run: |
-          if [ "${{ inputs.target }}" = staging ]; then
+          if [ "${{ matrix.target }}" = staging ]; then
             URL=$(node -p "require('./eas.json').build.staging.env.EXPO_PUBLIC_API_URL")
           else
             URL=$(node -p "require('./eas.json').build.base.env.EXPO_PUBLIC_API_URL")
