@@ -81,6 +81,7 @@ export default async function SquadAthletesPage() {
         lateEntryOpen={lateEntryOpen}
         paymentStatus={normalizePaymentStatus(squad?.payment_status)}
         squadCode={squad?.squad_code || session.squadCode || ''}
+        squadId={session.squadId}
         gender={session.gender as 'men' | 'women'}
         relayCount={relayCount}
         totalDues={fees.combined.totalAmount}

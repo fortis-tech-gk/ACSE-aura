@@ -1,6 +1,7 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { SQUAD_LOGIN_EVENT_KEY } from '@/app/squad/SquadSessionWatcher';
 import { useRouter } from 'next/navigation';
 import { loginSquad } from '@/app/actions/auth';
 import Link from 'next/link';
@@ -18,6 +19,11 @@ export default function SquadLoginPage() {
   const [passphrase, setPassphrase] = useState('');
   const [showEventsModal, setShowEventsModal] = useState(false);
   const [showHelpModal, setShowHelpModal] = useState(false);
+  const [sessionChanged, setSessionChanged] = useState(false);
+
+  useEffect(() => {
+    setSessionChanged(new URLSearchParams(window.location.search).get('reason') === 'session-changed');
+  }, []);
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -28,6 +34,12 @@ export default function SquadLoginPage() {
     try {
       const res = await loginSquad(formData);
       if (res.success && res.redirectTo) {
+        // Tell every other tab of this browser: they were opened for the previous login and must re-login
+        try {
+          localStorage.setItem(SQUAD_LOGIN_EVENT_KEY, String(Date.now()));
+        } catch {
+          // storage blocked: the other tabs still notice on their next check
+        }
         router.push(res.redirectTo);
         router.refresh();
       } else {
@@ -131,6 +143,12 @@ export default function SquadLoginPage() {
                 <span>📘</span> How to Register &mdash; Step-by-Step Guide
               </button>
             </div>
+
+            {sessionChanged && !error && (
+              <div className="login-error-alert" id="squad-session-changed" style={{ marginBottom: '1.25rem' }}>
+                ⚠️ You were signed out because this browser logged in as another squad (or logged out) in a different tab. Please log in again.
+              </div>
+            )}
 
             {error && (
               <div className="login-error-alert" id="squad-login-error" style={{ marginBottom: '1.25rem' }}>

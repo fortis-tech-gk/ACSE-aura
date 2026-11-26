@@ -79,6 +79,16 @@ export async function addAthleteAction(formData: FormData): Promise<AddAthleteRe
   try {
     const session = await requireSquad();
 
+    // The browser holds one login cookie: if the PED logged in as the other squad in another tab,
+    // this form (opened for the previous squad) must not save anything under the new login.
+    const expectedSquadId = String(formData.get('expectedSquadId') || '');
+    if (expectedSquadId && expectedSquadId !== session.squadId) {
+      return {
+        success: false,
+        error: 'You are now logged in as a different squad (Men / Women) in another tab. Nothing was saved. Please log in again and register the athlete from the correct squad.',
+      };
+    }
+
     // Roster lock + global registration window enforcement
     const lockError = await getRosterMutationBlock(session.squadId);
     if (lockError) {

@@ -53,6 +53,8 @@ interface Props {
   availableEvents: EventItem[];
   rosterLocked: boolean;
   squadCode: string;
+  /** The squad this page was rendered for; sent with every add so a switched login is caught */
+  squadId: string;
   gender: 'men' | 'women';
   relayCount?: number;
   /** Total dues from the server fee calculation (same as the payment page) */
@@ -103,6 +105,7 @@ export default function AthletesManager({
   availableEvents,
   rosterLocked,
   squadCode,
+  squadId,
   gender,
   relayCount: initialRelayCount = 0,
   totalDues,
@@ -466,6 +469,7 @@ export default function AthletesManager({
     formData.set('idType', idType);
     formData.set('phone', phone);
     formData.set('dateOfBirth', dateOfBirth);
+    formData.set('expectedSquadId', squadId);
     formData.set('event1Id', event1);
     if (event2) formData.set('event2Id', event2);
     if (reserveEvent) formData.set('reserveEventId', reserveEvent);
