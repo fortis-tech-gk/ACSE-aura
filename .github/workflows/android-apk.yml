@@ -1,14 +1,19 @@
 name: Build Android APKs (GitHub runner)
 
-# Builds the sideloadable APKs of BOTH apps on GitHub's runners with `eas build --local`:
-# the build runs here, not on Expo's servers, so it uses no EAS build quota. EAS only supplies
-# the existing Expo-managed signing key, so these APKs install over the ones handed out before.
+# Builds the sideloadable APKs of BOTH apps on GitHub's runners with plain Gradle
+# (expo prebuild + ./gradlew assembleRelease). No EAS build at all, so no EAS build quota.
 #
-#   target = production → athletes-preview + officials-preview (production API, meet-day tablets)
-#   target = staging    → athletes-demo   + officials-demo    (staging API, rehearsals)
+#   target = production → production API (meet-day tablets / phones)
+#   target = staging    → staging API (rehearsals)
 #
-# Repository secret needed:
-#   EXPO_TOKEN   expo.dev → Account settings → Access tokens (account ganesh_a_k_11)
+# Signing (both apps use the same key):
+#   - If the repository secrets APK_KEYSTORE_BASE64, APK_KEYSTORE_PASSWORD and APK_KEY_ALIAS
+#     are set, the APKs are signed with that key.
+#   - Otherwise they are signed with the React Native template debug key (android/app/debug.keystore,
+#     the same for every build). It works and later builds install over earlier ones, but the key is
+#     public: fine for meet tablets and testing, not for a store release.
+#   Changing the key later means uninstalling the app once on each device.
+#   APKs signed by EAS earlier have a different key: uninstall those once before installing these.
 #
 # Run: Actions → "Build Android APKs (GitHub runner)" → Run workflow, or
 #   gh workflow run android-apk.yml --repo ganeshak11/vtu-athletics -f target=production
@@ -37,16 +42,14 @@ jobs:
       run:
         working-directory: frontend/mobile
     env:
-      EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
-      PROFILE: ${{ matrix.app }}-${{ inputs.target == 'staging' && 'demo' || 'preview' }}
+      APP_VARIANT: ${{ matrix.app }}
+      # Always higher than the previous GitHub build, so each APK installs as an update
+      ANDROID_VERSION_CODE: ${{ 1000 + github.run_number }}
+      APK_NAME: aura-${{ matrix.app }}-${{ inputs.target }}-${{ github.run_number }}.apk
+      KEYSTORE_B64: ${{ secrets.APK_KEYSTORE_BASE64 }}
+      KEYSTORE_PASSWORD: ${{ secrets.APK_KEYSTORE_PASSWORD }}
+      KEY_ALIAS: ${{ secrets.APK_KEY_ALIAS }}
     steps:
-      - name: Check the Expo token
-        working-directory: .
-        run: |
-          if [ -z "$EXPO_TOKEN" ]; then
-            echo "::error::Add the EXPO_TOKEN repository secret (expo.dev → Access tokens) and run again."
-            exit 1
-          fi
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
@@ -59,14 +62,42 @@ jobs:
           java-version: 17
       - uses: android-actions/setup-android@v3
       - run: npm ci
-      - run: npm install -g eas-cli
-      - name: Build ${{ env.PROFILE }} APK on this runner
+      - name: API address for ${{ inputs.target }}
         run: |
-          eas build --platform android --profile "$PROFILE" --local --non-interactive \
-            --output "$GITHUB_WORKSPACE/aura-$PROFILE.apk"
-          ls -la "$GITHUB_WORKSPACE/aura-$PROFILE.apk"
+          if [ "${{ inputs.target }}" = staging ]; then
+            URL=$(node -p "require('./eas.json').build.staging.env.EXPO_PUBLIC_API_URL")
+          else
+            URL=$(node -p "require('./eas.json').build.base.env.EXPO_PUBLIC_API_URL")
+          fi
+          echo "EXPO_PUBLIC_API_URL=$URL" >> "$GITHUB_ENV"
+          echo "API: $URL"
+      - name: Generate the native Android project
+        run: npx expo prebuild --platform android --no-install --clean
+      - name: Build the release APK with Gradle
+        run: |
+          cd android
+          if [ -n "$KEYSTORE_B64" ] && [ -n "$KEYSTORE_PASSWORD" ] && [ -n "$KEY_ALIAS" ]; then
+            echo "Signing with the APK_KEYSTORE secret"
+            echo "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/release.keystore"
+            STORE="$RUNNER_TEMP/release.keystore"; PASS="$KEYSTORE_PASSWORD"; ALIAS="$KEY_ALIAS"
+          else
+            echo "::warning::No APK_KEYSTORE secrets: signing with the React Native debug key (public)."
+            STORE="$PWD/app/debug.keystore"; PASS=android; ALIAS=androiddebugkey
+          fi
+          ./gradlew assembleRelease --no-daemon \
+            -Pandroid.injected.signing.store.file="$STORE" \
+            -Pandroid.injected.signing.store.password="$PASS" \
+            -Pandroid.injected.signing.key.alias="$ALIAS" \
+            -Pandroid.injected.signing.key.password="$PASS"
+          cp app/build/outputs/apk/release/app-release.apk "$GITHUB_WORKSPACE/$APK_NAME"
+          ls -la "$GITHUB_WORKSPACE/$APK_NAME"
+      - name: Check the APK
+        run: |
+          BT=$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)
+          "$BT/aapt2" dump badging "$GITHUB_WORKSPACE/$APK_NAME" | grep -E "^package:|^application-label:"
+          "$BT/apksigner" verify --print-certs "$GITHUB_WORKSPACE/$APK_NAME" | grep -E "SHA-256|DN" | head -2
       - uses: actions/upload-artifact@v4
         with:
-          name: aura-${{ env.PROFILE }}-apk
-          path: ${{ github.workspace }}/aura-${{ env.PROFILE }}.apk
+          name: ${{ env.APK_NAME }}
+          path: ${{ github.workspace }}/${{ env.APK_NAME }}
           retention-days: 30
