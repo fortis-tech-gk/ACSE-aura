@@ -21,7 +21,7 @@ export default async function AdminCertificatesPage() {
         points,
         created_at,
         events(id, name, code, gender, category),
-        colleges(id, name, code, district),
+        colleges(id, name, code, district, region),
         profiles(id, sslc_name, usn, bid_number)
       `)
       .lte('place', 3)

@@ -1,6 +1,8 @@
 'use client';
 
 import { useState } from 'react';
+import DivisionSelect from '../DivisionSelect';
+import { compareText, inDivision } from '@/lib/college-regions';
 import { closeRegistrationAction } from '@/app/actions/bids';
 
 interface AthleteProfile {
@@ -22,6 +24,7 @@ interface SquadBidItem {
     name: string;
     code: string;
     district?: string;
+    region?: string | null;
   };
   profiles: AthleteProfile[];
 }
@@ -35,6 +38,12 @@ export default function BidOverviewManager({ initialSquads }: Props) {
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<any | null>(null);
   const [expandedSquadId, setExpandedSquadId] = useState<string | null>(null);
+  const [divisionFilter, setDivisionFilter] = useState('ALL');
+  const collegeOf = (s: SquadBidItem) => (Array.isArray(s.colleges) ? s.colleges[0] : s.colleges);
+  // Colleges A-Z (Men before Women), narrowed to the chosen VTU division
+  const shownSquads = squads
+    .filter((s) => inDivision(divisionFilter, collegeOf(s)?.code || s.squad_code.split('-')[0], collegeOf(s)?.region))
+    .sort((a, b) => compareText(collegeOf(a)?.name || a.squad_code, collegeOf(b)?.name || b.squad_code) || (a.gender === 'women' ? 1 : 0) - (b.gender === 'women' ? 1 : 0));
 
   async function handleCloseRegistration() {
     if (
@@ -146,6 +155,12 @@ export default function BidOverviewManager({ initialSquads }: Props) {
       </div>
 
       {/* Squad Bid Table */}
+      <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center', flexWrap: 'wrap', margin: '0 0 0.75rem' }}>
+        <DivisionSelect value={divisionFilter} onChange={setDivisionFilter} id="bids-division-filter" />
+        <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
+          Showing <strong>{shownSquads.length}</strong> of <strong>{squads.length}</strong> squads (colleges A–Z)
+        </span>
+      </div>
       <div className="table-container">
         <table className="data-table stack-mobile" id="bid-overview-table">
           <thead>
@@ -160,14 +175,14 @@ export default function BidOverviewManager({ initialSquads }: Props) {
             </tr>
           </thead>
           <tbody>
-            {squads.length === 0 ? (
+            {shownSquads.length === 0 ? (
               <tr>
                 <td colSpan={7} style={{ textAlign: 'center', padding: '3.5rem', color: 'var(--text-muted)' }}>
                   No squads registered.
                 </td>
               </tr>
             ) : (
-              squads.map((s) => {
+              shownSquads.map((s) => {
                 const college = Array.isArray(s.colleges) ? s.colleges[0] : s.colleges;
                 const isExpanded = expandedSquadId === s.id;
                 const hasBlock = s.bid_block_start && s.bid_block_end;
@@ -254,7 +269,7 @@ export default function BidOverviewManager({ initialSquads }: Props) {
                   </tr>
                 </thead>
                 <tbody>
-                  {(squads.find((s) => s.id === expandedSquadId)?.profiles || []).map((p) => (
+                  {[...(squads.find((s) => s.id === expandedSquadId)?.profiles || [])].sort((a, b) => compareText(a.sslc_name, b.sslc_name)).map((p) => (
                     <tr key={p.id}>
                       <td style={{ fontWeight: 800, color: 'var(--accent-gold)', fontSize: '1.05rem' }}>
                         {p.bid_number || '—'}

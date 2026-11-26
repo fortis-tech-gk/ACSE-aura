@@ -13,10 +13,10 @@ export default async function AdminIdCardsPage({
   await requireAdmin();
   const sp = await searchParams;
   const filters = parseAthleteFilters(sp);
-  // Cards are built only for the chosen college / search, or for the whole meet when "All
+  // Cards are built only for the chosen college / division / search, or for the whole meet when "All
   // colleges" is picked explicitly (?college=all) — never thousands of cards on first open.
   const loadAll = sp.college === 'all';
-  const wanted = loadAll || Boolean(filters.college || filters.q);
+  const wanted = loadAll || Boolean(filters.college || filters.division || filters.q);
   if (loadAll) filters.college = undefined;
 
   const [athletes, options] = await Promise.all([

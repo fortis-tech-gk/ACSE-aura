@@ -2,6 +2,8 @@
 
 import { useState } from 'react';
 import { withdrawAthleteAction, substituteAthleteAction } from '@/app/actions/bids';
+import DivisionSelect from '../DivisionSelect';
+import { compareText, inDivision } from '@/lib/college-regions';
 
 interface AthleteOption {
   id: string;
@@ -9,6 +11,9 @@ interface AthleteOption {
   usn: string;
   bid_number?: number;
   squad_code: string;
+  college_name?: string;
+  college_code?: string;
+  region?: string | null;
   accreditation_status: string;
 }
 
@@ -40,8 +45,13 @@ export default function AmendmentsManager({ athletes, initialAmendments }: Props
   const [loading, setLoading] = useState(false);
   const [msg, setMsg] = useState<{ text: string; error: boolean } | null>(null);
 
-  const activeAthletes = athletes.filter((a) => a.accreditation_status !== 'WITHDrAWN' && a.bid_number);
-  const withdrawnAthletes = athletes.filter((a) => a.accreditation_status === 'WITHDrAWN' && a.bid_number);
+  const [divisionFilter, setDivisionFilter] = useState('ALL');
+  // Pickers: chosen VTU division only, colleges A-Z, athletes A-Z within a college
+  const pickable = athletes
+    .filter((a) => inDivision(divisionFilter, a.college_code, a.region))
+    .sort((a, b) => compareText(a.college_name || a.squad_code, b.college_name || b.squad_code) || compareText(a.sslc_name, b.sslc_name));
+  const activeAthletes = pickable.filter((a) => a.accreditation_status !== 'WITHDrAWN' && a.bid_number);
+  const withdrawnAthletes = pickable.filter((a) => a.accreditation_status === 'WITHDrAWN' && a.bid_number);
 
   async function handleWithdraw(e: React.FormEvent) {
     e.preventDefault();
@@ -114,6 +124,10 @@ export default function AmendmentsManager({ athletes, initialAmendments }: Props
 
           <form onSubmit={handleWithdraw}>
             <div className="form-group">
+              <label className="form-label" htmlFor="amend-division-filter">Division</label>
+              <DivisionSelect value={divisionFilter} onChange={setDivisionFilter} className="input-field" id="amend-division-filter" />
+            </div>
+            <div className="form-group">
               <label className="form-label" htmlFor="athleteSelect">Select Registered Athlete</label>
               <select
                 id="athleteSelect"
@@ -122,10 +136,10 @@ export default function AmendmentsManager({ athletes, initialAmendments }: Props
                 value={selectedAthleteId}
                 onChange={(e) => setSelectedAthleteId(e.target.value)}
               >
-                <option value="">Select Athlete (Bid # — Name — Squad)</option>
+                <option value="">Select Athlete (College — Name — Bib #)</option>
                 {activeAthletes.map((a) => (
                   <option key={a.id} value={a.id}>
-                    Chest #{a.bid_number}: {a.sslc_name} ({a.squad_code})
+                    {a.college_code || a.squad_code}: {a.sslc_name} ({a.squad_code}, Chest #{a.bid_number})
                   </option>
                 ))}
               </select>
@@ -178,7 +192,7 @@ export default function AmendmentsManager({ athletes, initialAmendments }: Props
                 <option value="">Select Voided Bid Slot</option>
                 {withdrawnAthletes.map((w) => (
                   <option key={w.id} value={w.id}>
-                    Voided Chest #{w.bid_number}: {w.sslc_name} ({w.squad_code})
+                    {w.college_code || w.squad_code}: {w.sslc_name} ({w.squad_code}, Voided Chest #{w.bid_number})
                   </option>
                 ))}
               </select>

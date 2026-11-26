@@ -3,7 +3,7 @@
 import { useState } from 'react';
 
 import { DB_CODE_TO_OFFICIAL_MAP } from '@/lib/championship-events';
-import { VTU_DIVISIONS, collegeDivision } from '@/lib/college-regions';
+import { VTU_DIVISIONS, collegeDivision, compareText } from '@/lib/college-regions';
 
 interface Props {
   squads: any[];
@@ -27,13 +27,12 @@ export default function DelegationsClient({ squads }: Props) {
     collegeDivision(sq.colleges?.code || String(sq.squad_code || '').split('-')[0], sq.colleges?.region) || 'Unassigned';
   const divisionOrder = [...VTU_DIVISIONS, 'Unassigned'];
 
-  // Division, then college code, then Men before Women
+  // Division, then college name A-Z, then Men before Women
   const ordered = [...squads].sort((a, b) => {
     const da = divisionOrder.indexOf(divisionOf(a)), db = divisionOrder.indexOf(divisionOf(b));
     if (da !== db) return da - db;
-    const ca = a.colleges?.code || a.squad_code || '';
-    const cb = b.colleges?.code || b.squad_code || '';
-    if (ca !== cb) return ca.localeCompare(cb);
+    const byName = compareText(a.colleges?.name || a.squad_code, b.colleges?.name || b.squad_code);
+    if (byName) return byName;
     return (a.gender === 'men' ? 0 : 1) - (b.gender === 'men' ? 0 : 1);
   });
   const hasAthletes = (sq: any) => (sq.profiles || []).length > 0;
@@ -118,9 +117,7 @@ export default function DelegationsClient({ squads }: Props) {
           const colName = sq.colleges?.name || sq.squad_code;
           const colCode = sq.colleges?.code || sq.squad_code;
           const district = sq.colleges?.district || '';
-          const athletes = [...(sq.profiles || [])].sort((a: any, b: any) =>
-            String(a.sslc_name || '').localeCompare(String(b.sslc_name || ''))
-          );
+          const athletes = [...(sq.profiles || [])].sort((a: any, b: any) => compareText(a.sslc_name, b.sslc_name));
 
           return (
             <section key={sq.id} className="deleg-sheet printable-signoff-sheet">

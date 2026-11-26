@@ -7,6 +7,8 @@ import { buildExportRows, exportFileStamp, type ExportRow } from '@/lib/athlete-
 import type { AthleteFilters } from '@/lib/admin-athletes';
 import { exportAthletesAction } from '@/app/actions/admin-operations';
 import { useUrlFilters } from '../useUrlFilters';
+import DivisionSelect from '../DivisionSelect';
+import { compareText } from '@/lib/college-regions';
 import AthletesPdfReport from './AthletesPdfReport';
 
 const PAGE_SIZE = 50;
@@ -18,13 +20,16 @@ interface Props {
   totalAthletes: number;
   page: number;
   filters: AthleteFilters;
-  colleges: { code: string; name: string }[];
+  colleges: { code: string; name: string; division: string }[];
   events: { id: string; name: string; code: string }[];
 }
 
 export default function AthletesClient({ athletes, filteredTotal, totalAthletes, page, filters, colleges, events }: Props) {
   const { set, pending } = useUrlFilters();
   const selectedCollege = filters.college || 'ALL';
+  const selectedDivision = filters.division || 'ALL';
+  // College choices narrow to the chosen division (already A-Z by name)
+  const collegeChoices = selectedDivision === 'ALL' ? colleges : colleges.filter((c) => c.division === selectedDivision);
   const selectedGender = filters.gender || 'ALL';
   const selectedStatus = filters.status || 'ALL';
   const selectedEvent = filters.event || 'ALL';
@@ -47,16 +52,13 @@ export default function AthletesClient({ athletes, filteredTotal, totalAthletes,
   const pageCount = Math.max(1, Math.ceil(filteredTotal / PAGE_SIZE));
   const eventName = events.find((e) => e.id === selectedEvent)?.name || selectedEvent;
 
-  // Downloads are sorted by college, then gender, then name (easier to read than newest-first)
+  // Downloads: colleges A-Z, athletes A-Z within a college (same order as the table)
   function sortForExport(list: any[]) {
-    return [...list].sort((a, b) => {
-      const ca = a.squads?.colleges?.code || a.squads?.squad_code || '';
-      const cb = b.squads?.colleges?.code || b.squads?.squad_code || '';
-      if (ca !== cb) return ca.localeCompare(cb);
-      const ga = a.squads?.gender || '', gb = b.squads?.gender || '';
-      if (ga !== gb) return ga.localeCompare(gb);
-      return String(a.sslc_name || '').localeCompare(String(b.sslc_name || ''));
-    });
+    return [...list].sort(
+      (a, b) =>
+        compareText(a.squads?.colleges?.name || a.squads?.squad_code, b.squads?.colleges?.name || b.squads?.squad_code) ||
+        compareText(a.sslc_name, b.sslc_name)
+    );
   }
 
   // Human-readable summary of the active filters (shown in the Excel/PDF header)
@@ -64,6 +66,7 @@ export default function AthletesClient({ athletes, filteredTotal, totalAthletes,
     if (!useFilters) return 'None (entire roster)';
     const parts: string[] = [];
     if (filters.q) parts.push(`Search "${filters.q}"`);
+    if (selectedDivision !== 'ALL') parts.push(`${selectedDivision} Division`);
     if (selectedCollege !== 'ALL') parts.push(`College ${selectedCollege}`);
     if (selectedGender !== 'ALL') parts.push(selectedGender === 'men' ? 'Men' : 'Women');
     if (selectedStatus !== 'ALL') parts.push(`Payment ${selectedStatus}`);
@@ -145,7 +148,7 @@ export default function AthletesClient({ athletes, filteredTotal, totalAthletes,
     </button>
   );
 
-  const anyFilter = Boolean(filters.q || selectedCollege !== 'ALL' || selectedGender !== 'ALL' || selectedStatus !== 'ALL' || selectedEvent !== 'ALL');
+  const anyFilter = Boolean(filters.q || selectedCollege !== 'ALL' || selectedDivision !== 'ALL' || selectedGender !== 'ALL' || selectedStatus !== 'ALL' || selectedEvent !== 'ALL');
 
   return (
     <div>
@@ -186,6 +189,13 @@ export default function AthletesClient({ athletes, filteredTotal, totalAthletes,
             id="filter-search"
           />
 
+          {/* Division Filter (clears a college from another division) */}
+          <DivisionSelect
+            value={selectedDivision}
+            onChange={(d) => set({ division: d, college: colleges.find((c) => c.code === filters.college)?.division === d ? filters.college : null })}
+            id="filter-division"
+          />
+
           {/* College Filter */}
           <select
             value={selectedCollege}
@@ -193,10 +203,10 @@ export default function AthletesClient({ athletes, filteredTotal, totalAthletes,
             className="filter-control"
             id="filter-college"
           >
-            <option value="ALL">All Colleges ({colleges.length})</option>
-            {colleges.map((c) => (
+            <option value="ALL">All Colleges ({collegeChoices.length})</option>
+            {collegeChoices.map((c) => (
               <option key={c.code} value={c.code}>
-                {c.code} - {c.name}
+                {c.name} ({c.code})
               </option>
             ))}
           </select>
@@ -250,7 +260,7 @@ export default function AthletesClient({ athletes, filteredTotal, totalAthletes,
             onClick={() => {
               setSearchQuery('');
               lastSent.current = '';
-              set({ q: null, college: null, gender: null, status: null, event: null });
+              set({ q: null, college: null, division: null, gender: null, status: null, event: null });
             }}
             className="btn-admin btn-admin-secondary"
             style={{ padding: '0.45rem 0.75rem', fontSize: '0.8rem' }}

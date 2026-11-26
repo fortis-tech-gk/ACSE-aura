@@ -1,6 +1,8 @@
 'use client';
 
 import { useState } from 'react';
+import DivisionSelect from '../DivisionSelect';
+import { compareText, inDivision } from '@/lib/college-regions';
 import { useRouter } from 'next/navigation';
 import { normalizePaymentStatus, creditedAmount } from '@/lib/payment-status';
 import { verifySquadPaymentAction, getSquadRosterAction } from '@/app/actions/admin-operations';
@@ -13,6 +15,7 @@ export default function PaymentsClient({ squads }: Props) {
   const router = useRouter();
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('ALL');
+  const [divisionFilter, setDivisionFilter] = useState('ALL');
 
   // Active squad in modal
   const [selectedSquad, setSelectedSquad] = useState<any | null>(null);
@@ -37,6 +40,9 @@ export default function PaymentsClient({ squads }: Props) {
     if (statusFilter !== 'ALL' && normalizePaymentStatus(sq.payment_status) !== statusFilter) {
       return false;
     }
+    if (!inDivision(divisionFilter, sq.colleges?.code || String(sq.squad_code || '').split('-')[0], sq.colleges?.region)) {
+      return false;
+    }
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase().trim();
       const colName = (sq.colleges?.name || '').toLowerCase();
@@ -48,7 +54,10 @@ export default function PaymentsClient({ squads }: Props) {
       }
     }
     return true;
-  });
+  }).sort(
+    // Colleges A-Z, Men before Women
+    (a, b) => compareText(a.colleges?.name || a.squad_code, b.colleges?.name || b.squad_code) || (a.gender === 'women' ? 1 : 0) - (b.gender === 'women' ? 1 : 0)
+  );
 
   // Handle Verify or Reject
   async function handleVerification(status: 'VERIFIED' | 'REJECTED') {
@@ -140,6 +149,8 @@ export default function PaymentsClient({ squads }: Props) {
             <option value="REJECTED">✕ Rejected</option>
             <option value="DRAFT">Draft (Unsubmitted)</option>
           </select>
+
+          <DivisionSelect value={divisionFilter} onChange={setDivisionFilter} id="payment-division-filter" />
         </div>
 
         {/* Counter */}

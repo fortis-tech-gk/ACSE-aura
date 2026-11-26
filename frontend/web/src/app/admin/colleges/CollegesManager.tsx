@@ -1,6 +1,8 @@
 'use client';
 
 import { useState } from 'react';
+import DivisionSelect from '../DivisionSelect';
+import { compareText, divisionLabel, inDivision } from '@/lib/college-regions';
 import type { SquadPaymentStatus } from '@/lib/payment-status';
 import { createCollegeAction, resetSquadPassphraseAction, toggleSquadRosterLockAction, CreateCollegeResult } from '@/app/actions/admin';
 
@@ -22,6 +24,7 @@ interface CollegeItem {
   name: string;
   code: string;
   district?: string;
+  region?: string | null;
   squads: SquadItem[];
 }
 
@@ -35,6 +38,11 @@ export default function CollegesManager({ initialColleges }: Props) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [latestCreated, setLatestCreated] = useState<CreateCollegeResult | null>(null);
+  const [divisionFilter, setDivisionFilter] = useState('ALL');
+  // Colleges A-Z, narrowed to the chosen VTU division
+  const shownColleges = colleges
+    .filter((c) => inDivision(divisionFilter, c.code, c.region))
+    .sort((a, b) => compareText(a.name, b.name));
 
   async function handleAddCollege(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -202,6 +210,12 @@ export default function CollegesManager({ initialColleges }: Props) {
       )}
 
       {/* College List Table */}
+      <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center', flexWrap: 'wrap', margin: '0 0 0.75rem' }}>
+        <DivisionSelect value={divisionFilter} onChange={setDivisionFilter} id="colleges-division-filter" />
+        <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
+          Showing <strong>{shownColleges.length}</strong> of <strong>{colleges.length}</strong> colleges (A–Z)
+        </span>
+      </div>
       <div className="table-container">
         <table className="data-table stack-mobile" id="colleges-table">
           <thead>
@@ -215,14 +229,14 @@ export default function CollegesManager({ initialColleges }: Props) {
             </tr>
           </thead>
           <tbody>
-            {colleges.length === 0 ? (
+            {shownColleges.length === 0 ? (
               <tr>
                 <td colSpan={6} style={{ textAlign: 'center', padding: '3rem', color: 'var(--text-muted)' }}>
                   No colleges registered yet. Click &quot;Add New College&quot; above to register the first institution.
                 </td>
               </tr>
             ) : (
-              colleges.map((college) => {
+              shownColleges.map((college) => {
                 const menSquad = college.squads.find((s) => s.gender === 'men');
                 const womenSquad = college.squads.find((s) => s.gender === 'women');
 
@@ -231,7 +245,7 @@ export default function CollegesManager({ initialColleges }: Props) {
                     <td style={{ fontWeight: 600 }}>{college.name}</td>
                     <td>
                       <span style={{ fontWeight: 700, color: 'var(--accent-gold)' }}>{college.code}</span>
-                      <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{college.district || 'Karnataka'}</div>
+                      <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{college.district || 'Karnataka'} · {divisionLabel(college.code, college.region)}</div>
                     </td>
                     <td>
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>

@@ -5,13 +5,14 @@ import AthleteIdCard from '@/app/components/idcard/AthleteIdCard';
 import { idFontVars } from '@/app/components/idcard/fonts';
 import type { AthleteFilters } from '@/lib/admin-athletes';
 import { useUrlFilters } from '../useUrlFilters';
+import DivisionSelect from '../DivisionSelect';
 
 interface Props {
   /** athletes matching the filters (filtered on the server), or null until a college / search is chosen */
   athletes: any[] | null;
   filters: AthleteFilters;
   loadAll: boolean;
-  colleges: { code: string; name: string }[];
+  colleges: { code: string; name: string; division: string }[];
   totalAthletes: number;
 }
 
@@ -19,6 +20,8 @@ export default function IdCardsClient({ athletes, filters, loadAll, colleges, to
   const { set, pending } = useUrlFilters();
   const selectedCollege = loadAll ? 'all' : filters.college || '';
   const selectedGender = filters.gender || 'ALL';
+  const selectedDivision = filters.division || 'ALL';
+  const collegeChoices = selectedDivision === 'ALL' ? colleges : colleges.filter((c) => c.division === selectedDivision);
   const onlyAssignedBibs = Boolean(filters.bibOnly);
   const filteredAthletes = athletes || [];
 
@@ -71,17 +74,23 @@ export default function IdCardsClient({ athletes, filters, loadAll, colleges, to
             style={{ minWidth: '220px' }}
           />
 
+          <DivisionSelect
+            value={selectedDivision}
+            onChange={(d) => set({ division: d, college: colleges.find((c) => c.code === filters.college)?.division === d ? filters.college : null })}
+            id="idc-division"
+          />
+
           <select
             value={selectedCollege}
             onChange={(e) => set({ college: e.target.value })}
             className="filter-control"
             id="idc-college"
           >
-            <option value="">— Choose a college —</option>
-            <option value="all">All colleges ({totalAthletes} athletes, slow to build)</option>
-            {colleges.map((c) => (
+            <option value="">{selectedDivision === 'ALL' ? '— Choose a college —' : `All colleges in ${selectedDivision}`}</option>
+            {selectedDivision === 'ALL' && <option value="all">All colleges ({totalAthletes} athletes, slow to build)</option>}
+            {collegeChoices.map((c) => (
               <option key={c.code} value={c.code}>
-                {c.code} - {c.name}
+                {c.name} ({c.code})
               </option>
             ))}
           </select>

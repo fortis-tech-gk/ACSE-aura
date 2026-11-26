@@ -236,6 +236,7 @@ export async function listCollegesAction() {
       name,
       code,
       district,
+      region,
       created_at,
       squads (
         id,

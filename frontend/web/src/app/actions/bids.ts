@@ -44,7 +44,8 @@ export async function getBidOverviewAction() {
       colleges (
         name,
         code,
-        district
+        district,
+        region
       ),
       profiles (
         id,

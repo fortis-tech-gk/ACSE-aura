@@ -14,7 +14,7 @@ export async function listParticipationAthletesAction(): Promise<Athlete[]> {
   const rows = await fetchAllRows<any>(() =>
     supabaseAdmin
       .from('profiles')
-      .select('id, sslc_name, usn, bid_number, squads(colleges(name, code, district))')
+      .select('id, sslc_name, usn, bid_number, squads(colleges(name, code, district, region))')
       .eq('accreditation_status', 'ACCREDITED')
       .order('sslc_name')
       .order('id')

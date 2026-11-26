@@ -23,7 +23,8 @@ export default async function AdminAmendmentsPage() {
       bid_number,
       accreditation_status,
       squads (
-        squad_code
+        squad_code,
+        colleges (name, code, region)
       )
     `)
     .not('bid_number', 'is', null)
@@ -39,6 +40,9 @@ export default async function AdminAmendmentsPage() {
       usn: a.usn,
       bid_number: a.bid_number,
       squad_code: s?.squad_code || 'Squad',
+      college_name: (Array.isArray(s?.colleges) ? s.colleges[0] : s?.colleges)?.name || '',
+      college_code: (Array.isArray(s?.colleges) ? s.colleges[0] : s?.colleges)?.code || String(s?.squad_code || '').split('-')[0],
+      region: (Array.isArray(s?.colleges) ? s.colleges[0] : s?.colleges)?.region || null,
       accreditation_status: a.accreditation_status,
     };
   });

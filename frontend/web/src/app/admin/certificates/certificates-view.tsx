@@ -1,6 +1,8 @@
 'use client';
 
 import React, { useState } from 'react';
+import DivisionSelect from '../DivisionSelect';
+import { compareText, inDivision } from '@/lib/college-regions';
 import QRCode from 'react-qr-code';
 import { listParticipationAthletesAction } from '@/app/actions/certificates';
 
@@ -21,6 +23,7 @@ export interface Placer {
     name: string;
     code: string;
     district: string;
+    region?: string | null;
   };
   profiles?: {
     id: string;
@@ -40,6 +43,7 @@ export interface Athlete {
       name: string;
       code: string;
       district: string;
+      region?: string | null;
     };
   };
 }
@@ -65,6 +69,7 @@ export function CertificatesView({
       .catch((e) => setAthletesError(String(e?.message || e)));
   }
   const [search, setSearch] = useState('');
+  const [divisionFilter, setDivisionFilter] = useState('ALL');
   const [selectedPlacerId, setSelectedPlacerId] = useState<string | null>(null);
 
   const filteredPlacers = placers.filter((p) => {
@@ -75,8 +80,8 @@ export function CertificatesView({
     const event = p.events?.name?.toLowerCase() || '';
     const matchesSearch = athleteName.includes(q) || usn.includes(q) || college.includes(q) || event.includes(q);
     const matchesSelected = selectedPlacerId ? p.id === selectedPlacerId : true;
-    return matchesSearch && matchesSelected;
-  });
+    return matchesSearch && matchesSelected && inDivision(divisionFilter, p.colleges?.code, p.colleges?.region);
+  }).sort((a, b) => compareText(a.colleges?.name, b.colleges?.name) || compareText(a.profiles?.sslc_name, b.profiles?.sslc_name));
 
   const filteredAthletes = (athletes || []).filter((a) => {
     const q = search.toLowerCase();
@@ -84,8 +89,8 @@ export function CertificatesView({
       a.sslc_name.toLowerCase().includes(q) ||
       a.usn.toLowerCase().includes(q) ||
       (a.squads?.colleges?.name && a.squads.colleges.name.toLowerCase().includes(q))
-    );
-  });
+    ) && inDivision(divisionFilter, a.squads?.colleges?.code, a.squads?.colleges?.region);
+  }).sort((a, b) => compareText(a.squads?.colleges?.name, b.squads?.colleges?.name) || compareText(a.sslc_name, b.sslc_name));
 
   const handlePrint = () => {
     window.print();
@@ -148,6 +153,7 @@ export function CertificatesView({
             onChange={(e) => setSearch(e.target.value)}
             style={{ width: '280px' }}
           />
+          <DivisionSelect value={divisionFilter} onChange={setDivisionFilter} className="input-field" style={{ width: 'auto' }} id="certificates-division-filter" />
         </div>
 
         <button

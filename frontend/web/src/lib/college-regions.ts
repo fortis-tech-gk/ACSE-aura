@@ -260,3 +260,24 @@ export function collegeDivision(code?: string | null, storedRegion?: string | nu
   const key = String(code || '').toUpperCase();
   return CODE_TO_DIVISION[key] ?? null;
 }
+
+/** Division filter choices on admin pages ('Unassigned' = college with no known division) */
+export const UNASSIGNED_DIVISION = 'Unassigned';
+export const DIVISION_FILTER_OPTIONS: readonly string[] = [...VTU_DIVISIONS, UNASSIGNED_DIVISION];
+
+/** Division name for display / filtering, 'Unassigned' when unknown */
+export function divisionLabel(code?: string | null, storedRegion?: string | null): string {
+  return collegeDivision(code, storedRegion) || UNASSIGNED_DIVISION;
+}
+
+/** True when `selected` is empty / 'ALL' or the college belongs to that division */
+export function inDivision(selected: string | null | undefined, code?: string | null, storedRegion?: string | null): boolean {
+  if (!selected || selected === 'ALL') return true;
+  return divisionLabel(code, storedRegion) === selected;
+}
+
+const textCollator = new Intl.Collator('en', { sensitivity: 'base', ignorePunctuation: true, numeric: true });
+/** Alphabetical compare that ignores case and punctuation ("B.M.S" next to "BMS") */
+export function compareText(a?: string | null, b?: string | null): number {
+  return textCollator.compare(String(a || '').trim(), String(b || '').trim());
+}
