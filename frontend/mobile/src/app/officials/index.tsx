@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { Redirect, router } from 'expo-router';
-import { useOfficialSession } from '@/lib/officials/session';
+import { STALE_PENDING_MS, useOfficialSession } from '@/lib/officials/session';
 import { MEALS, countMeals, currentMeal, istDate } from '@/lib/officials/scan-logic';
 import type { AthleteRef, MealType } from '@/lib/officials/types';
 import { api } from '@/lib/api';
@@ -74,6 +74,8 @@ export default function OfficialsHome() {
           <Text style={s.expiredText}>Your login has expired. Tap to log in again — saved scans will be sent after.</Text>
         </Pressable>
       )}
+
+      <StalePendingBanner />
 
       {staff.role === 'food_volunteer' && <FoodDesk token={token} />}
       {staff.role === 'warden' && <WardenDesk token={token} />}
@@ -323,3 +325,29 @@ const s = StyleSheet.create({
   stats: { flexDirection: 'row', gap: 8 },
   wideRow: { flexDirection: 'row', gap: 18, alignItems: 'flex-start' },
 });
+
+/**
+ * Entries waiting for the network for more than 3 minutes. Referees keep the paper sheet until
+ * they are sent; food / hostel scans are already decided on the phone and only need to sync.
+ */
+function StalePendingBanner() {
+  const { oldestPendingAt, pendingCount, staff } = useOfficialSession();
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), 30_000);
+    return () => clearInterval(t);
+  }, []);
+  if (!oldestPendingAt || !pendingCount) return null;
+  const mins = Math.floor((now - new Date(oldestPendingAt).getTime()) / 60000);
+  if (now - new Date(oldestPendingAt).getTime() < STALE_PENDING_MS) return null;
+  const referee = staff?.role === 'referee' || staff?.role === 'meet_admin';
+  return (
+    <Pressable onPress={() => router.push('/officials/history')} style={s.expired} accessibilityRole="button">
+      <Icon name="warning" size={18} color={colors.red} />
+      <Text style={s.expiredText}>
+        {pendingCount} entr{pendingCount === 1 ? 'y' : 'ies'} not sent for {mins} min (no network).{' '}
+        {referee ? 'Keep the paper sheet until they are sent. ' : 'They are saved on this phone. '}Tap to see them.
+      </Text>
+    </Pressable>
+  );
+}

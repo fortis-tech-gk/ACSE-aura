@@ -78,7 +78,8 @@ export function CallRoomHeat({ heatId }: { heatId: string }) {
   }, [entries, statusOf]);
 
   const run = useCallback(
-    async (op: OpPayload, queueable = true) => {
+    // Call room needs the network at all times: nothing is saved on the tablet to send later
+    async (op: OpPayload, queueable = false) => {
       const r = await submitOp(op, { queueable });
       if (r.status === 'ok') reload();
       if (r.status === 'rejected' || r.status === 'offline') notify('Not done', r.message);
@@ -89,7 +90,7 @@ export function CallRoomHeat({ heatId }: { heatId: string }) {
 
   /**
    * Strict call room: nothing before "Open call room", nothing after "Close & send to track".
-   * Opening can be done offline — it counts as open here as soon as it is saved on the tablet.
+   * Every call room action needs the network (nothing is queued on the tablet).
    */
   const serverStatus = data?.heat.status || 'SCHEDULED';
   const openPending = pending.some((op) => op.path === `/schedule/heats/${heatId}/status` && (op.body as any).status === 'CALL_ROOM');
@@ -104,14 +105,13 @@ export function CallRoomHeat({ heatId }: { heatId: string }) {
           ? { tone: 'red', title: 'Call room is closed', detail: 'Athletes who did not report are DNS. Corrections are made in the list below.', athlete: null, offline: false }
           : { tone: 'red', title: 'Open the call room first', detail: 'Tap "Open call room" above. Scanning starts when the call room is open.', athlete: null, offline: false };
       }
-      const local = findEntry(entries, ref as any, rosterIndex.byBib);
       const known = 'qrToken' in ref ? rosterIndex.byId.get(athleteIdFromQr(ref.qrToken) || '') : rosterIndex.byBib.get(Number(ref.bib));
       const fallbackAthlete = known ? { name: known.name, bib: known.bib, college: known.collegeCode, photoUrl: known.photoUrl } : null;
       if ('qrToken' in ref && !athleteIdFromQr(ref.qrToken)) {
         return { tone: 'red', title: 'Not an AURA ID card', athlete: null, offline: false };
       }
       // actedAt: when it was scanned — a scan saved offline still counts if it was made before the close
-      const r = await submitOp({ path: '/callroom/scan', body: { heatId, ...ref, actedAt: new Date().toISOString() }, label: 'Call room check-in', heatId });
+      const r = await submitOp({ path: '/callroom/scan', body: { heatId, ...ref, actedAt: new Date().toISOString() }, label: 'Call room check-in', heatId }, { queueable: false });
       if (r.status === 'ok') {
         reload();
         const d = r.data;
@@ -125,11 +125,9 @@ export function CallRoomHeat({ heatId }: { heatId: string }) {
         };
       }
       if (r.status === 'rejected') return { tone: 'red', title: 'Not allowed', detail: r.message, athlete: r.data?.athlete || fallbackAthlete, offline: false };
-      // Saved on the device
-      if (local) return { tone: 'green', title: 'Reported', detail: `${data && isField(data) ? 'Order' : 'Lane'} ${local.lane_number}`, athlete: fallbackAthlete, offline: true };
-      return { tone: 'amber', title: 'Saved — will check when online', detail: 'Not found in this heat on the saved list.', athlete: fallbackAthlete, offline: true };
+      return { tone: 'red', title: 'No network — not recorded', detail: ('message' in r && r.message) || 'The call room needs the internet. Check the Wi-Fi / mobile data and scan again.', athlete: fallbackAthlete, offline: false };
     },
-    [entries, rosterIndex, submitOp, heatId, reload, data, isOpen, isClosed]
+    [rosterIndex, submitOp, heatId, reload, data, isOpen, isClosed]
   );
 
   async function openCallRoom() {
@@ -154,7 +152,7 @@ export function CallRoomHeat({ heatId }: { heatId: string }) {
     run({ path: '/callroom/inspect', body: { heatAthleteId: e.id, reportedStatus: st, actedAt: new Date().toISOString() }, label: `${entryName(e)}: ${st === 'NOT_REPORTED' ? 'not reported' : STATUS_UI[st || 'NONE'].label}`, heatId });
   }
 
-  async function useReserve(e: Entry, reserve: { id: string; name: string; bib: number | null }) {
+  async function swapInReserve(e: Entry, reserve: { id: string; name: string; bib: number | null }) {
     const lane = `${laneLabel(data!)} ${e.lane_number}`;
     if (!(await confirm('Use the reserve?', `${reserve.name} comes in for ${entryName(e)} in ${lane}. ${entryName(e)} will not run this event.`, 'Use reserve'))) return;
     setOpen(null);
@@ -237,7 +235,7 @@ export function CallRoomHeat({ heatId }: { heatId: string }) {
                     <Muted style={{ fontSize: 13 }}>Not here? A reserve from the same college can take this {laneLabel(data).toLowerCase()}:</Muted>
                     <View style={s.actions}>
                       {data.reserves![e.id].map((r) => (
-                        <Chip key={r.id} label={`Use reserve: ${r.name}${r.bib != null ? ` (${r.bib})` : ''}`} onPress={() => useReserve(e, r)} />
+                        <Chip key={r.id} label={`Use reserve: ${r.name}${r.bib != null ? ` (${r.bib})` : ''}`} onPress={() => swapInReserve(e, r)} />
                       ))}
                     </View>
                   </View>

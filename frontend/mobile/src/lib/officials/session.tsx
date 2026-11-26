@@ -50,6 +50,17 @@ const LIVE_TIMEOUT_MS = 2500;
 const SYNC_TIMEOUT_MS = 8000;
 /** After the network fails, scans are decided on the phone straight away for this long */
 const OFFLINE_HOLD_MS = 30 * 1000;
+/**
+ * Food counter and hostel desk work offline-first: one counter and one hostel per division, so
+ * the phone's own meal log and saved list decide at once and the scan is sent in the background.
+ * Their saved athlete list is refreshed this often so check-ins and payments show up.
+ */
+const OFFLINE_FIRST_KINDS: ScanKind[] = ['meal', 'checkin'];
+const SCANNER_ROSTER_REFRESH_MS = 5 * 60 * 1000;
+/** Referee results may wait for the network this long before the screen warns about it */
+export const STALE_PENDING_MS = 3 * 60 * 1000;
+/** "Finish" first sends waiting results; it waits this long for them before giving up */
+const FLUSH_BEFORE_FINISH_MS = 15 * 1000;
 
 export type ScanAthlete = { name: string; bib: number | null; college: string | null; photoUrl: string | null };
 
@@ -89,6 +100,8 @@ type Ctx = {
   /** Every meal given on this device today and yesterday (not trimmed like the scan history) */
   mealLog: MealLog;
   pendingCount: number;
+  /** When the oldest unsent entry was made (null when everything is sent) */
+  oldestPendingAt: string | null;
   syncing: boolean;
   lastSyncError: string | null;
   login: (role: LoginRole, pin: string) => Promise<void>;
@@ -99,7 +112,7 @@ type Ctx = {
    * Call room / referee action. Sent now when possible; when the network is down it is saved
    * and sent later in order (queueable actions only). Server refusals come back as 'rejected'.
    */
-  submitOp: (op: OpPayload, opts?: { queueable?: boolean }) => Promise<OpResult>;
+  submitOp: (op: OpPayload, opts?: { queueable?: boolean; flushFirst?: boolean }) => Promise<OpResult>;
   syncNow: () => Promise<void>;
 };
 
@@ -332,11 +345,14 @@ export function OfficialSessionProvider({ children }: { children: React.ReactNod
   const syncNow = useCallback(async () => {
     const t = tokenRef.current;
     if (!t || syncingRef.current) return;
-    const pending = queueRef.current.filter((q) => q.status === 'pending');
-    if (!pending.length) return;
+    if (!queueRef.current.some((q) => q.status === 'pending')) return;
     syncingRef.current = true;
     setSyncing(true);
     try {
+      // Keep going while scans keep arriving (offline-first counters add them during a sync)
+      for (let pass = 0; pass < 20; pass++) {
+      const pending = queueRef.current.filter((q) => q.status === 'pending');
+      if (!pending.length) break;
       for (const q of pending) {
         const athlete = q.athleteId ? fromRoster(rosterIndexRef.current.byId.get(q.athleteId) ?? null) : null;
         const r = await sendScan(q, t, athlete);
@@ -358,6 +374,7 @@ export function OfficialSessionProvider({ children }: { children: React.ReactNod
           syncedAt: new Date().toISOString(),
           attempts: q.attempts + 1,
         });
+      }
       }
       setLastSyncError(null);
     } finally {
@@ -410,14 +427,39 @@ export function OfficialSessionProvider({ children }: { children: React.ReactNod
       // Bib typed by hand and not on the saved list: only the server can say who it is
       const unknownBib = 'bib' in input.ref && !known;
 
+      // Food / hostel, athlete on the saved list: a "no" the server would give, from the saved list
+      const localNo: Omit<Outcome, 'offline'> | null = !known
+        ? null
+        : !known.feesVerified && OFFLINE_FIRST_KINDS.includes(input.kind)
+          ? { tone: 'red', title: 'Fees not verified', detail: `${known.collegeCode || 'This college'}: send the team manager to the finance desk.`, athlete }
+          : input.kind === 'meal' && !known.accredited
+            ? { tone: 'red', title: 'College not checked in', detail: `${known.collegeCode || 'This college'} has not checked in at the accreditation desk yet.`, athlete }
+            : input.kind === 'checkin' && !known.checkedIn && !(input.hostelId || known.hostelId)
+              ? { tone: 'red', title: 'No hostel allotted', detail: 'Pick the hostel above, or ask the meet office to allot one to this college.', athlete }
+              : null;
+      // Offline-first: nothing in the way on the saved list → decide now, send in the background
+      const decideHere = !!known && OFFLINE_FIRST_KINDS.includes(input.kind) && !localNo;
+
       await setQueue((q) => [...q, scan]);
       if (scan.kind === 'meal' && scan.athleteId && scan.mealType && scan.mealDate) {
         const key = mealKey(scan.athleteId, scan.mealType, scan.mealDate);
         await setMealLog((log) => ({ ...log, [key]: scan.scannedAt }));
       }
 
+      if (decideHere) {
+        syncNow(); // background; never blocks the counter
+        if (input.kind === 'checkin' && known!.checkedIn) {
+          return { tone: 'amber', title: 'Already checked in', detail: [known!.hostelName, known!.roomRange].filter(Boolean).join(' · '), athlete, offline: true };
+        }
+        const title = input.kind === 'meal' ? `${MEAL_LABEL[input.mealType as MealType]} — serve` : 'Checked in';
+        const detail = input.kind === 'checkin' ? [known!.hostelName, input.room ? `Room ${input.room}` : known!.roomRange].filter(Boolean).join(' · ') : undefined;
+        return { tone: 'green', title, detail, athlete, offline: true };
+      }
+
       // Ask the server only while the network looks healthy, and only for a short time: on a
       // dead or crawling network the phone decides at once and the scan is sent in the background.
+      // (Food / hostel get here only when the saved list says "no" — it may be minutes old, so the
+      // server has the final word when it can be reached.)
       if (t && !sessionExpired && !networkLooksDown()) {
         const r = await sendScan(scan, t, athlete, LIVE_TIMEOUT_MS);
         noteNetwork(r);
@@ -454,6 +496,19 @@ export function OfficialSessionProvider({ children }: { children: React.ReactNod
           offline: true,
         };
       }
+      if (localNo) {
+        // Server unreachable and the saved list says no: nothing was given, so nothing is saved
+        await setQueue((q) => q.filter((s) => s.id !== scan.id));
+        if (scan.kind === 'meal' && scan.athleteId && scan.mealType && scan.mealDate) {
+          const key = mealKey(scan.athleteId, scan.mealType, scan.mealDate);
+          await setMealLog((log) => {
+            const next = { ...log };
+            delete next[key];
+            return next;
+          });
+        }
+        return { ...localNo, detail: `${localNo.detail} (Saved list; no network to re-check.)`, offline: false };
+      }
       if (input.kind === 'accreditation' && !known.feesVerified) {
         await setQueue((q) => q.filter((s) => s.id !== scan.id));
         return { tone: 'red', title: 'Fees not verified', detail: `${known.collegeCode || 'This college'}: send the team manager to the finance desk.`, athlete, offline: false };
@@ -466,13 +521,23 @@ export function OfficialSessionProvider({ children }: { children: React.ReactNod
       const detail = input.kind === 'checkin' ? [known.hostelName, input.room ? `Room ${input.room}` : known.roomRange].filter(Boolean).join(' · ') : undefined;
       return { tone: 'green', title, detail, athlete, offline: true };
     },
-    [patchScan, sessionExpired, setQueue, setMealLog, networkLooksDown, noteNetwork, settleMeal]
+    [patchScan, sessionExpired, setQueue, setMealLog, networkLooksDown, noteNetwork, settleMeal, syncNow]
   );
 
   const submitOp = useCallback(
-    async (op: OpPayload, opts: { queueable?: boolean } = {}): Promise<OpResult> => {
+    async (op: OpPayload, opts: { queueable?: boolean; flushFirst?: boolean } = {}): Promise<OpResult> => {
       const queueable = opts.queueable !== false;
       const t = tokenRef.current;
+      // "Finish" must reach the server AFTER the results saved before it: send those first,
+      // waiting a short while for them. Only for that — a call room scan never waits.
+      if (opts.flushFirst && t && !sessionExpired && queueRef.current.some((q) => q.status === 'pending')) {
+        const until = Date.now() + FLUSH_BEFORE_FINISH_MS;
+        offlineUntilRef.current = 0;
+        while (Date.now() < until && queueRef.current.some((q) => q.status === 'pending')) {
+          await syncNow();
+          if (queueRef.current.some((q) => q.status === 'pending')) await new Promise((r) => setTimeout(r, 1500));
+        }
+      }
       // Keep order: if earlier actions are still waiting, this one waits behind them
       const waiting = queueRef.current.some((q) => q.status === 'pending');
       // Queueable actions skip the live attempt while the network looks down: saved at once,
@@ -490,10 +555,19 @@ export function OfficialSessionProvider({ children }: { children: React.ReactNod
         }
         if (r.kind === 'auth') setSessionExpired(true);
         if (!queueable) {
-          return { status: 'offline', message: r.kind === 'auth' ? 'Your login has expired. Log in again.' : 'No connection. This needs the internet — try again in a moment.' };
+          if (r.kind === 'auth') return { status: 'offline', message: 'Your login has expired. Log in again.' };
+          // After a failed flush the referee still has results on the tablet: say so.
+          const unsent = queueRef.current.filter((q) => q.status === 'pending').length;
+          return {
+            status: 'offline',
+            message: unsent
+              ? `No connection. ${unsent} saved entr${unsent === 1 ? 'y is' : 'ies are'} still not sent — keep the paper sheet and try again in a minute.`
+              : 'No connection. This needs the internet — try again in a moment.',
+          };
         }
+        // Only reachable with no token / an expired session: skipLive implies a queueable action.
       } else if (!queueable) {
-        return { status: 'offline', message: waiting ? 'Saved entries are still being sent. Try again when they are done.' : 'No connection. This needs the internet.' };
+        return { status: 'offline', message: 'Your login has expired. Log in again.' };
       }
       const item: QueuedScan = {
         id: newScanId(),
@@ -589,6 +663,15 @@ export function OfficialSessionProvider({ children }: { children: React.ReactNod
     })();
   }, [refreshRoster, refreshHostels, syncNow]);
 
+  // Food counter / hostel desk decide from the saved list: keep it fresh (check-ins, payments)
+  useEffect(() => {
+    if (status !== 'signedIn' || !staff || !['food_volunteer', 'warden'].includes(staff.role)) return;
+    const timer = setInterval(() => {
+      if (!networkLooksDown()) refreshRoster();
+    }, SCANNER_ROSTER_REFRESH_MS);
+    return () => clearInterval(timer);
+  }, [status, staff, refreshRoster, networkLooksDown]);
+
   // Keep sending saved scans; refresh the roster when the app comes back to the front
   useEffect(() => {
     if (status !== 'signedIn') return;
@@ -607,6 +690,7 @@ export function OfficialSessionProvider({ children }: { children: React.ReactNod
   }, [status, syncNow, refreshRoster, rosterAt]);
 
   const pendingCount = useMemo(() => queue.filter((q) => q.status === 'pending').length, [queue]);
+  const oldestPendingAt = useMemo(() => queue.find((q) => q.status === 'pending')?.scannedAt ?? null, [queue]);
 
   const value = useMemo<Ctx>(
     () => ({
@@ -621,6 +705,7 @@ export function OfficialSessionProvider({ children }: { children: React.ReactNod
       queue,
       mealLog,
       pendingCount,
+      oldestPendingAt,
       syncing,
       lastSyncError,
       login,
@@ -630,7 +715,7 @@ export function OfficialSessionProvider({ children }: { children: React.ReactNod
       submitOp,
       syncNow,
     }),
-    [status, staff, token, sessionExpired, roster, rosterAt, rosterIndex, hostels, queue, mealLog, pendingCount, syncing, lastSyncError, login, logout, refreshRoster, submit, submitOp, syncNow]
+    [status, staff, token, sessionExpired, roster, rosterAt, rosterIndex, hostels, queue, mealLog, pendingCount, oldestPendingAt, syncing, lastSyncError, login, logout, refreshRoster, submit, submitOp, syncNow]
   );
 
   return <OfficialSessionContext.Provider value={value}>{children}</OfficialSessionContext.Provider>;

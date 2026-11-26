@@ -84,7 +84,8 @@ export function RollCall({ eventId, stage }: { eventId: string; stage: string })
   }, [entries, statusOf]);
 
   const run = useCallback(
-    async (op: OpPayload, queueable = true) => {
+    // Call room needs the network at all times: nothing is saved on the tablet to send later
+    async (op: OpPayload, queueable = false) => {
       const r = await submitOp({ ...op, heatId: tag }, { queueable });
       if (r.status === 'ok') reload();
       if (r.status === 'rejected' || r.status === 'offline') notify('Not done', r.message);
@@ -103,18 +104,15 @@ export function RollCall({ eventId, stage }: { eventId: string; stage: string })
       if ('qrToken' in ref && !athleteIdFromQr(ref.qrToken)) return { tone: 'red', title: 'Not an AURA ID card', athlete: null, offline: false };
       const known = 'qrToken' in ref ? rosterIndex.byId.get(athleteIdFromQr(ref.qrToken) || '') : rosterIndex.byBib.get(Number(ref.bib));
       const fallback = known ? { name: known.name, bib: known.bib, college: known.collegeCode, photoUrl: known.photoUrl } : null;
-      const r = await submitOp({ path: '/callroom/rollcalls/scan', body: { eventId, stage, ...ref, actedAt: new Date().toISOString() }, label: 'Roll call check-in', heatId: tag });
+      const r = await submitOp({ path: '/callroom/rollcalls/scan', body: { eventId, stage, ...ref, actedAt: new Date().toISOString() }, label: 'Roll call check-in', heatId: tag }, { queueable: false });
       if (r.status === 'ok') {
         reload();
         return { tone: r.data.alreadyReported ? 'amber' : 'green', title: r.data.alreadyReported ? 'Already present' : 'Present', detail: r.data.relayRole || '', athlete: r.data.athlete, offline: false };
       }
       if (r.status === 'rejected') return { tone: 'red', title: 'Not allowed', detail: r.message, athlete: r.data?.athlete || fallback, offline: false };
-      const local = findEntry(entries, ref as any, rosterIndex.byBib);
-      return local
-        ? { tone: 'green', title: 'Present', detail: 'Saved on this device', athlete: fallback, offline: true }
-        : { tone: 'amber', title: 'Saved — will check when online', detail: 'Not on the saved list of this event.', athlete: fallback, offline: true };
+      return { tone: 'red', title: 'No network — not recorded', detail: ('message' in r && r.message) || 'The call room needs the internet. Check the Wi-Fi / mobile data and scan again.', athlete: fallback, offline: false };
     },
-    [isOpen, drawn, rosterIndex, submitOp, eventId, stage, tag, reload, entries]
+    [isOpen, drawn, rosterIndex, submitOp, eventId, stage, tag, reload]
   );
 
   async function openRollCall() {

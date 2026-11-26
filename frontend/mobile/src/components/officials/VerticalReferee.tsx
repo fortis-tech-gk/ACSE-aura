@@ -134,7 +134,7 @@ export function VerticalReferee({ heatId, startAt }: { heatId: string; startAt?:
     const final = data.heat.stage === 'FINAL';
     if (!(await confirm('Finish this heat?', final ? 'This is the final: championship points are awarded now.' : 'The flight will be marked done.', 'Finish & save'))) return;
     setBusy(true);
-    const r = await submitOp({ path: '/field/finalize', heatId, label: 'Results finalized', body: { heatId, eventId: data.heat.events.id, stage: data.heat.stage } }, { queueable: false });
+    const r = await submitOp({ path: '/field/finalize', heatId, label: 'Results finalized', body: { heatId, eventId: data.heat.events.id, stage: data.heat.stage } }, { queueable: false, flushFirst: true });
     setBusy(false);
     if (r.status === 'ok') {
       afterFinalize(r.data, heatId);

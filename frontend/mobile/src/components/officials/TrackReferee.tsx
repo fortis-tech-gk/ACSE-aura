@@ -173,7 +173,7 @@ export function TrackReferee({ heatId, startAt }: { heatId: string; startAt?: st
     setBusy(true);
     const r = await submitOp(
       { path: '/track/finalize', heatId, label: 'Results finalized', body: { heatId, eventId: data.heat.events.id, stage: data.heat.stage } },
-      { queueable: false }
+      { queueable: false, flushFirst: true }
     );
     setBusy(false);
     if (r.status === 'ok') {
