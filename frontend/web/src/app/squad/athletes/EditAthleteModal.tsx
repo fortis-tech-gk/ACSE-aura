@@ -3,7 +3,7 @@
 import { MAX_UPLOAD_DATA_URL_CHARS, shrinkImageToDataUrl } from '@/lib/compress-image';
 import React, { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { updateAthleteAction, UpdateAthleteResult } from '@/app/actions/athletes';
+import { updateAthleteAction, UpdateAthleteResult, checkEventEditAllowedAction } from '@/app/actions/athletes';
 import { validateDateOfBirth, EARLIEST_DOB } from '@/lib/eligibility';
 import { validateIdNumber, normalizeIdNumber, idTypeOf, type IdType } from '@/lib/aadhaar';
 
@@ -25,6 +25,8 @@ interface Props {
   athlete: EditableAthlete;
   onClose: () => void;
   onSaved: (updated: NonNullable<UpdateAthleteResult['athlete']>) => void;
+  /** Opens the Edit Events modal (called only after the server allows event edits) */
+  onEditEvents?: () => void;
 }
 
 /** Mirrors server validation */
@@ -32,7 +34,24 @@ const BLOOD_GROUPS = ['A+', 'A-', 'B+', 'B-', 'O+', 'O-', 'AB+', 'AB-'];
 
 const toDateInput = (v?: string) => (v ? String(v).slice(0, 10) : '');
 
-export default function EditAthleteModal({ athlete, onClose, onSaved }: Props) {
+export default function EditAthleteModal({ athlete, onClose, onSaved, onEditEvents }: Props) {
+  const [checkingEvents, setCheckingEvents] = useState(false);
+  const [eventsBlocked, setEventsBlocked] = useState<string | null>(null);
+
+  async function handleEditEvents() {
+    setEventsBlocked(null);
+    setCheckingEvents(true);
+    try {
+      const res = await checkEventEditAllowedAction();
+      if (res.allowed) onEditEvents?.();
+      else setEventsBlocked(res.reason || 'Events cannot be edited once the college has paid the entry fee.');
+    } catch {
+      setEventsBlocked('Unable to check the payment status. Please try again.');
+    } finally {
+      setCheckingEvents(false);
+    }
+  }
+
   const [sslcName, setSslcName] = useState(athlete.sslc_name);
   const [usn, setUsn] = useState(athlete.usn);
   const [semester, setSemester] = useState(String(athlete.semester || 1));
@@ -177,8 +196,45 @@ export default function EditAthleteModal({ athlete, onClose, onSaved }: Props) {
               Edit Athlete Bio-data
             </h2>
             <p style={{ margin: '0.3rem 0 0', fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
-              Correct identification details. To change events, remove the athlete and register again.
+              Correct identification details. Events can be changed with Edit Events until the college pays.
             </p>
+            {onEditEvents && (
+              <button
+                type="button"
+                id="btn-edit-athlete-events"
+                onClick={handleEditEvents}
+                disabled={checkingEvents || saving}
+                style={{
+                  marginTop: '0.6rem',
+                  background: 'var(--bg-tertiary)',
+                  border: '1px solid var(--accent-primary)',
+                  color: 'var(--accent-primary)',
+                  padding: '0.45rem 0.9rem',
+                  borderRadius: 'var(--radius-sm)',
+                  fontWeight: 700,
+                  fontSize: '0.85rem',
+                  cursor: checkingEvents ? 'wait' : 'pointer',
+                }}
+              >
+                {checkingEvents ? 'Checking payment…' : 'Edit Events'}
+              </button>
+            )}
+            {eventsBlocked && (
+              <div
+                role="alert"
+                style={{
+                  marginTop: '0.6rem',
+                  background: 'rgba(245, 158, 11, 0.1)',
+                  border: '1px solid rgba(245, 158, 11, 0.45)',
+                  color: 'var(--text-primary)',
+                  padding: '0.6rem 0.8rem',
+                  borderRadius: 'var(--radius-sm)',
+                  fontSize: '0.85rem',
+                }}
+              >
+                {eventsBlocked}
+              </div>
+            )}
           </div>
           <button
             type="button"

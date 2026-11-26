@@ -811,6 +811,242 @@ export async function updateAthleteAction(formData: FormData): Promise<UpdateAth
 }
 
 /**
+ * Event edits are allowed only until the college has paid: once either squad of the college
+ * has a payment submitted or verified (one payment per college), events are frozen for good.
+ * A rejected payment does not count as paid.
+ */
+async function getEventEditPaidBlock(collegeId: string, squadId: string): Promise<string | null> {
+  let squadIds: string[] = [squadId];
+  if (collegeId) {
+    const { data: siblings } = await supabaseAdmin.from('squads').select('id').eq('college_id', collegeId);
+    if (siblings?.length) squadIds = siblings.map((s: any) => s.id);
+  }
+  const { data: paid, error } = await supabaseAdmin
+    .from('payments')
+    .select('id')
+    .in('squad_id', squadIds)
+    .in('status', ['SUBMITTED', 'VERIFIED'])
+    .limit(1);
+  if (error) return 'Unable to check the payment status. Please try again.';
+  if (paid && paid.length > 0) {
+    return 'Events cannot be edited once the college has paid the entry fee. Contact the VTU Directorate if a change is essential.';
+  }
+  return null;
+}
+
+/** Whether this squad may still change athletes' events (roster open AND college not yet paid). */
+export async function checkEventEditAllowedAction(): Promise<{ allowed: boolean; reason?: string }> {
+  try {
+    const session = await requireSquad();
+    const lockError = await getRosterMutationBlock(session.squadId);
+    if (lockError) return { allowed: false, reason: lockError };
+    const paidError = await getEventEditPaidBlock(session.collegeId, session.squadId);
+    if (paidError) return { allowed: false, reason: paidError };
+    return { allowed: true };
+  } catch (err: any) {
+    return { allowed: false, reason: err?.message || 'Unable to check the payment status. Please try again.' };
+  }
+}
+
+/**
+ * Replaces an athlete's events (Event 1 / 2, reserve, relays, Half Marathon) with the same
+ * VTU rules as registration. Allowed only while the roster is open and before the college
+ * has paid. Quotas count the squad's other athletes, not this athlete's current entries.
+ */
+export async function updateAthleteEventsAction(formData: FormData): Promise<{ success: boolean; error?: string }> {
+  try {
+    const session = await requireSquad();
+
+    const lockError = await getRosterMutationBlock(session.squadId);
+    if (lockError) return { success: false, error: lockError };
+    const paidError = await getEventEditPaidBlock(session.collegeId, session.squadId);
+    if (paidError) return { success: false, error: paidError };
+
+    const profileId = String(formData.get('profileId') || '').trim();
+    const event1Id = String(formData.get('event1Id') || '');
+    const event2Id = String(formData.get('event2Id') || '');
+    const reserveEventId = String(formData.get('reserveEventId') || '');
+    const relayChoice = String(formData.get('relayChoice') || 'none');
+    const isRelay = relayChoice === '4x100';
+    const isRelay400 = relayChoice === '4x400';
+    const isMixedRelay = formData.get('isMixedRelay') === 'true';
+    const isHalfMarathon = formData.get('isHalfMarathon') === 'true';
+
+    if (!profileId) return { success: false, error: 'Athlete not specified.' };
+
+    const { data: owned } = await supabaseAdmin
+      .from('profiles')
+      .select('id')
+      .eq('id', profileId)
+      .eq('squad_id', session.squadId)
+      .maybeSingle();
+    if (!owned) return { success: false, error: 'Athlete not found in your squad roster.' };
+
+    const isStandaloneAllowed = isRelay || isRelay400 || isMixedRelay || isHalfMarathon;
+    if (!event1Id && !isStandaloneAllowed) {
+      return { success: false, error: 'Event 1 is compulsory unless registering for a Relay (4x100m, 4x400m, Mixed) or Half Marathon.' };
+    }
+    if (!event1Id && event2Id) {
+      return { success: false, error: 'Choose Event 1 before Event 2.' };
+    }
+    if (event2Id && event1Id === event2Id) {
+      return { success: false, error: 'Event 1 and Event 2 cannot be the same event.' };
+    }
+    if (!event1Id && !event2Id && reserveEventId) {
+      return {
+        success: false,
+        error: 'VTU Regulation (Rule 14): A reserve event can only be nominated if the athlete is registered for an individual regular event.',
+      };
+    }
+    if (reserveEventId && (reserveEventId === event1Id || reserveEventId === event2Id)) {
+      return { success: false, error: 'Reserve event must be distinct from regular events.' };
+    }
+
+    const [catalogue, { data: squadRegs }, { data: collegeRelayRegs }, { data: currentRegs }] = await Promise.all([
+      getEventsCatalogue(),
+      supabaseAdmin
+        .from('registrations')
+        .select('event_id, kind, profile_id, profiles!inner(squad_id)')
+        .eq('profiles.squad_id', session.squadId)
+        .neq('profile_id', profileId),
+      supabaseAdmin
+        .from('registrations')
+        .select('event_id, profile_id, profiles!inner(squad_id, squads!inner(college_id))')
+        .eq('kind', 'relay')
+        .eq('profiles.squads.college_id', session.collegeId)
+        .neq('profile_id', profileId),
+      supabaseAdmin.from('registrations').select('id, event_id, kind').eq('profile_id', profileId),
+    ]);
+    const eventById = new Map(catalogue.map((ev) => [ev.id, ev]));
+    const eventByCode = new Map(catalogue.map((ev) => [String(ev.code || '').toUpperCase(), ev]));
+    const countOthers = (eventId: string, kind?: string) =>
+      (squadRegs || []).filter((r: any) => r.event_id === eventId && (!kind || r.kind === kind)).length;
+
+    for (const id of [event1Id, event2Id, reserveEventId].filter(Boolean)) {
+      const ev: any = eventById.get(id);
+      const code = String(ev?.code || '').toUpperCase();
+      const invalid =
+        !ev ||
+        ev.gender !== session.gender ||
+        ev.category === 'relay' ||
+        (ev.category === 'road' && !code.startsWith('20KM-W')) ||
+        code.startsWith('4X') ||
+        code.startsWith('HM-');
+      if (invalid) {
+        return { success: false, error: 'One of the selected events is not a valid individual event for your gender. Please re-select the events.' };
+      }
+    }
+
+    for (const evId of [event1Id, event2Id].filter(Boolean)) {
+      if (countOthers(evId, 'regular') >= 2) {
+        return {
+          success: false,
+          error: `VTU Quota Exceeded: Your college already has the maximum of 2 athletes registered in '${eventById.get(evId)?.name || 'this event'}'.`,
+        };
+      }
+    }
+
+    type RegKind = 'regular' | 'reserve' | 'relay' | 'half_marathon';
+    const wanted: { event_id: string; kind: RegKind }[] = [];
+    if (event1Id) wanted.push({ event_id: event1Id, kind: 'regular' });
+    if (event2Id) wanted.push({ event_id: event2Id, kind: 'regular' });
+    if (reserveEventId) wanted.push({ event_id: reserveEventId, kind: 'reserve' });
+
+    if (isRelay || isRelay400) {
+      const label = isRelay ? '4x100m' : '4x400m';
+      const code = `${isRelay ? '4X100M' : '4X400M'}-${session.gender === 'men' ? 'M' : 'W'}`;
+      const relayEvent = eventByCode.get(code);
+      if (!relayEvent) {
+        return { success: false, error: `The ${label} relay event is not configured in the championship catalogue. Please contact the VTU Directorate.` };
+      }
+      if (countOthers(relayEvent.id) >= 6) {
+        return {
+          success: false,
+          error: `Your college squad has already reached the maximum quota of 6 athletes for the ${label} relay (4 active runners + 2 reserves).`,
+        };
+      }
+      wanted.push({ event_id: relayEvent.id, kind: 'relay' });
+    }
+
+    if (isMixedRelay) {
+      const mixedEvent = eventByCode.get('4X400M-MIX');
+      if (!mixedEvent) {
+        return { success: false, error: 'The 4x400m Mixed Relay event is not configured in the championship catalogue. Please contact the VTU Directorate.' };
+      }
+      const mixedRegs = (collegeRelayRegs || []).filter((r: any) => r.event_id === mixedEvent.id);
+      if (mixedRegs.filter((r: any) => r.profiles?.squad_id === session.squadId).length >= 3) {
+        return {
+          success: false,
+          error: 'Your squad has already nominated 3 athletes for the 4x400m Mixed Relay. Each squad may nominate at most 3 (2 runners + 1 reserve); the team needs 2 Men and 2 Women.',
+        };
+      }
+      if (mixedRegs.length >= 6) {
+        return {
+          success: false,
+          error: 'Your college has already reached the maximum of 6 nominations for the 4x400m Mixed Relay (4 runners + 2 reserves, across Men and Women squads).',
+        };
+      }
+      wanted.push({ event_id: mixedEvent.id, kind: 'relay' });
+    }
+
+    if (isHalfMarathon) {
+      const hmEvent = eventByCode.get(session.gender === 'men' ? 'HM-M' : 'HM-W');
+      if (!hmEvent) {
+        return { success: false, error: 'The Half Marathon event is not configured in the championship catalogue. Please contact the VTU Directorate.' };
+      }
+      wanted.push({ event_id: hmEvent.id, kind: 'half_marathon' });
+    }
+
+    if (wanted.length === 0) {
+      return { success: false, error: 'Please select at least one event or relay discipline.' };
+    }
+
+    // Apply only the difference, so unchanged entries keep their rows (and relay memberships)
+    const key = (r: { event_id: string; kind: string }) => `${r.event_id}|${r.kind}`;
+    const current = currentRegs || [];
+    const wantedKeys = new Set(wanted.map(key));
+    const currentKeys = new Set(current.map(key));
+    const toDelete = current.filter((r: any) => !wantedKeys.has(key(r)));
+    const toInsert = wanted.filter((r) => !currentKeys.has(key(r))).map((r) => ({ ...r, profile_id: profileId }));
+
+    if (toDelete.length === 0 && toInsert.length === 0) return { success: true };
+
+    // Re-check right before writing: a payment may have been submitted while this was validated
+    const latePaid = await getEventEditPaidBlock(session.collegeId, session.squadId);
+    if (latePaid) return { success: false, error: latePaid };
+
+    if (toDelete.length > 0) {
+      const { error: delErr } = await supabaseAdmin
+        .from('registrations')
+        .delete()
+        .in('id', toDelete.map((r: any) => r.id));
+      if (delErr) return { success: false, error: delErr.message };
+    }
+
+    if (toInsert.length > 0) {
+      const { error: insErr } = await supabaseAdmin.from('registrations').insert(toInsert);
+      if (insErr) {
+        // Put the removed entries back so the athlete is not left with fewer events
+        if (toDelete.length > 0) {
+          await supabaseAdmin
+            .from('registrations')
+            .insert(toDelete.map((r: any) => ({ profile_id: profileId, event_id: r.event_id, kind: r.kind })));
+        }
+        return { success: false, error: insErr.message };
+      }
+    }
+
+    revalidatePath('/squad/athletes');
+    revalidatePath('/squad/dashboard');
+    revalidatePath('/squad/payment');
+    return { success: true };
+  } catch (err: any) {
+    console.error('updateAthleteEventsAction error:', err);
+    return { success: false, error: err?.message || 'Failed to update events.' };
+  }
+}
+
+/**
  * One-time date-of-birth fill for athletes registered before DOB was collected.
  * DOB affects neither events nor fees, so it is allowed even on a locked / paid roster —
  * but only while it is still empty. Changing an existing DOB needs the roster unlocked

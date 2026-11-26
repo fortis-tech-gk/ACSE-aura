@@ -11,6 +11,7 @@ import { Button } from '@/components/ui/Button';
 import { DB_CODE_TO_OFFICIAL_MAP } from '@/lib/championship-events';
 import RegistrationReportModal from '@/components/invoice/RegistrationReportModal';
 import EditAthleteModal from './EditAthleteModal';
+import EditEventsModal from './EditEventsModal';
 import DobQuickFill from './DobQuickFill';
 import { validateDateOfBirth, EARLIEST_DOB } from '@/lib/eligibility';
 import { validateIdNumber, normalizeIdNumber, type IdType } from '@/lib/aadhaar';
@@ -127,6 +128,7 @@ export default function AthletesManager({
   const [showAddModal, setShowAddModal] = useState(false);
   const [showReportModal, setShowReportModal] = useState(false);
   const [editingAthlete, setEditingAthlete] = useState<AthleteItem | null>(null);
+  const [editingEventsAthlete, setEditingEventsAthlete] = useState<AthleteItem | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [mounted, setMounted] = useState(false);
@@ -1105,6 +1107,22 @@ export default function AthletesManager({
             setAthletes((prev) => prev.map((a) => (a.id === updated.id ? { ...a, ...updated } : a)));
             setEditingAthlete(null);
           }}
+          onEditEvents={() => {
+            setEditingEventsAthlete(editingAthlete);
+            setEditingAthlete(null);
+          }}
+        />
+      )}
+
+      {mounted && editingEventsAthlete && !rosterLocked && (
+        <EditEventsModal
+          athlete={editingEventsAthlete}
+          athletes={athletes}
+          availableEvents={availableEvents}
+          siblingMixedCount={siblingMixedCount}
+          onClose={() => setEditingEventsAthlete(null)}
+          // The action revalidates this page: the fresh roster and dues arrive as new props
+          onSaved={() => setEditingEventsAthlete(null)}
         />
       )}
 
