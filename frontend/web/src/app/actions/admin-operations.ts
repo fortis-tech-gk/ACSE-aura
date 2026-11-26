@@ -442,26 +442,30 @@ export async function verifySquadPaymentAction(
   squadId: string,
   status: 'VERIFIED' | 'REJECTED',
   rejectionReason?: string,
-  amountReceived?: number
+  amountReceived?: number,
+  /** The receipt the desk is showing. Repeat payments are allowed, so a squad can have several pending. */
+  paymentId?: string
 ): Promise<{ success: boolean; error?: string }> {
   const adminSession = await requireFinance();
 
-  // Only a payment that is still awaiting verification can be decided. At most one can be
-  // pending per squad (enforced at submission), so pick it explicitly — never "the latest row",
-  // which could already be VERIFIED/REJECTED and would be re-processed.
-  const { data: pendingPayment, error: findErr } = await supabaseAdmin
+  // Decide exactly the receipt the desk showed (its UTR, proof and amount), never "the oldest/latest
+  // pending one": with two pending receipts that verified the wrong UTR with the other one's amount.
+  let pendingQuery = supabaseAdmin
     .from('payments')
     .select('id, amount_submitted, utr_number')
     .eq('squad_id', squadId)
-    .eq('status', 'SUBMITTED')
-    .order('created_at', { ascending: true })
-    .limit(1)
-    .maybeSingle();
+    .eq('status', 'SUBMITTED');
+  if (paymentId) pendingQuery = pendingQuery.eq('id', paymentId);
+  const { data: pendingRows, error: findErr } = await pendingQuery.order('created_at', { ascending: true });
 
   if (findErr) return { success: false, error: findErr.message };
-  if (!pendingPayment) {
-    return { success: false, error: 'This squad has no payment awaiting verification. It may already have been processed.' };
+  if (!pendingRows || pendingRows.length === 0) {
+    return { success: false, error: 'This receipt is no longer awaiting verification. It may already have been processed — reload the page.' };
   }
+  if (!paymentId && pendingRows.length > 1) {
+    return { success: false, error: `This squad has ${pendingRows.length} receipts awaiting verification. Reload the page and decide each receipt separately.` };
+  }
+  const pendingPayment = pendingRows[0];
 
   const result = await reviewPayment(pendingPayment.id, status, rejectionReason, adminSession.entityId, amountReceived);
   if (!result.success) return result;

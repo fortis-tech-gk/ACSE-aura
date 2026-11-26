@@ -313,8 +313,16 @@ The App Store listing text and the reviewer notes are in `docs/app-store/athlete
 | 0041 relay teams built from athlete-form nominations | ✅ | ✅ |
 | 0045 decathlon / heptathlon scoring (World Athletics tables) | ✅ | ✅ |
 | 0046 substitute athlete keeps events, photo, DOB, phone, Aadhaar | ✅ | ✅ |
+| 0042–0044, 0047–0052 | ✅ | ✅ (not logged at the time; confirmed 2026-11-26 by schema comparison) |
 | 0053 PED login in the athletes app | ✅ 2026-11-26 | ✅ 2026-11-26 |
 | 0054 college check-in (one scan per college) | ✅ 2026-11-26 | ✅ 2026-11-26 |
+| 0055 re-sync functions after 0001–0018 were re-run on production | ✅ 2026-11-26 (no-op) | ✅ 2026-11-26 |
+
+**Never re-run an old migration file.** Re-running 0001–0018 on production on 26 Nov silently put back the
+oldest versions of 10 functions (points, standings, field ranking, call room, check-in, payment trigger);
+0055 repaired it. After any production migration, compare the two databases (function bodies, columns,
+triggers, indexes, constraints, policies, grants) — they must have 0 differences. The queries are in
+`docs/audit/e2e-audit-2026-11-26.md` §6.
 
 ## Deploy log
 
@@ -326,6 +334,7 @@ The App Store listing text and the reviewer notes are in `docs/app-store/athlete
 | 2026-11-21 | API | production | decathlon / heptathlon | revision `aura-api-00010-n4v` |
 | 2026-11-21 | Database | staging + production | 0046 | substitute athlete migration |
 | 2026-11-26 | Database | staging + production | 0053, 0054 | PED app, college check-in |
+| 2026-11-26 | Database | production + staging | 0055 | re-sync of 13 functions + withdrawn-status check; schema and grants now identical to staging |
 | 2026-11-26 | API | production | `ea5b927` | revision `aura-api-00014-pkt` (roll call, photo finish, PED app, college check-in) |
 | 2026-11-26 | API | production | `PED_CRON_SECRET` | revision `aura-api-00015-8f2`; Cloud Scheduler `ped-alerts-tick` every minute |
 | 2026-11-26 | API | staging | `65bbc42` | revision `aura-api-staging-00014-fl6` (with `PED_CRON_SECRET_STAGING`) |

@@ -95,7 +95,8 @@ export default function PaymentsClient({ squads }: Props) {
         selectedSquad.id,
         status,
         status === 'REJECTED' ? rejectionReason : undefined,
-        received
+        received,
+        selectedSquad.pendingPayment?.id
       );
 
       if (res.success) {
@@ -405,15 +406,15 @@ export default function PaymentsClient({ squads }: Props) {
                     Payment Proof Screenshot
                   </div>
                   <div style={{ flex: 1, minHeight: '160px', background: '#ffffff', border: '1px dashed #cbd5e1', borderRadius: '8px', overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                    {selectedSquad.latestPayment?.screenshot_url ? (
+                    {(selectedSquad.pendingPayment || selectedSquad.latestPayment)?.screenshot_url ? (
                       <a
-                        href={selectedSquad.latestPayment.screenshot_url}
+                        href={(selectedSquad.pendingPayment || selectedSquad.latestPayment).screenshot_url}
                         target="_blank"
                         rel="noopener noreferrer"
                         style={{ display: 'block', width: '100%', height: '100%', textAlign: 'center' }}
                       >
                         <img
-                          src={selectedSquad.latestPayment.screenshot_url}
+                          src={(selectedSquad.pendingPayment || selectedSquad.latestPayment).screenshot_url}
                           alt="Payment Receipt"
                           style={{ maxHeight: '180px', maxWidth: '100%', objectFit: 'contain' }}
                         />
@@ -487,6 +488,19 @@ export default function PaymentsClient({ squads }: Props) {
                   </table>
                 </div>
               </div>
+
+              {/* Repeat payments are allowed: say which of several waiting receipts is being decided */}
+              {(() => {
+                const waiting = (selectedSquad.payments || []).filter((p: any) => p.status === 'SUBMITTED').length;
+                if (waiting < 2 || !selectedSquad.pendingPayment) return null;
+                return (
+                  <div style={{ marginTop: '1rem', background: '#fffbeb', border: '1px solid #fcd34d', borderRadius: '8px', padding: '0.6rem 0.75rem', fontSize: '0.8rem', color: '#92400e' }}>
+                    {waiting} receipts from this squad are waiting. You are deciding UTR{' '}
+                    <strong>{selectedSquad.pendingPayment.utr_number}</strong> (₹
+                    {Number(selectedSquad.pendingPayment.amount_submitted || 0).toLocaleString()}); the next one shows after this.
+                  </div>
+                );
+              })()}
 
               {/* Bank-credited amount: required to verify */}
               {selectedSquad.pendingPayment && !showRejectInput && (() => {
