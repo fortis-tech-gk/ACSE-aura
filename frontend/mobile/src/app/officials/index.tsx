@@ -341,12 +341,16 @@ function StalePendingBanner() {
   const mins = Math.floor((now - new Date(oldestPendingAt).getTime()) / 60000);
   if (now - new Date(oldestPendingAt).getTime() < STALE_PENDING_MS) return null;
   const referee = staff?.role === 'referee' || staff?.role === 'meet_admin';
+  const one = pendingCount === 1;
   return (
     <Pressable onPress={() => router.push('/officials/history')} style={s.expired} accessibilityRole="button">
       <Icon name="warning" size={18} color={colors.red} />
       <Text style={s.expiredText}>
-        {pendingCount} entr{pendingCount === 1 ? 'y' : 'ies'} not sent for {mins} min (no network).{' '}
-        {referee ? 'Keep the paper sheet until they are sent. ' : 'They are saved on this phone. '}Tap to see them.
+        {pendingCount} entr{one ? 'y' : 'ies'} not sent for {mins} min (no network).{' '}
+        {referee
+          ? `Keep the paper sheet until ${one ? 'it is' : 'they are'} sent. `
+          : `${one ? 'It is' : 'They are'} saved on this phone. `}
+        Tap to see {one ? 'it' : 'them'}.
       </Text>
     </Pressable>
   );

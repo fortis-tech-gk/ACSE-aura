@@ -268,7 +268,7 @@ export function CallRoomHeat({ heatId }: { heatId: string }) {
 
   return (
     <View style={{ gap: 14 }}>
-      <OfflineBanner offline={offline} lastSyncedAt={savedAt} note="Entries are saved on this device and sent when the network is back." />
+      <OfflineBanner offline={offline} lastSyncedAt={savedAt} note="The call room needs the internet. Nothing is recorded while it is offline — scan again when the network is back." />
       <HeatHeader data={data.heat} />
 
       <View style={s.buttons}>

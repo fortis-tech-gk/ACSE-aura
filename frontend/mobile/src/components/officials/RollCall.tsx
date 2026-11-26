@@ -218,7 +218,7 @@ export function RollCall({ eventId, stage }: { eventId: string; stage: string })
 
   return (
     <View style={{ gap: 14 }}>
-      <OfflineBanner offline={offline} lastSyncedAt={savedAt} note="Scans are saved on this device and sent when the network is back. Preparing heats needs the internet." />
+      <OfflineBanner offline={offline} lastSyncedAt={savedAt} note="Roll call needs the internet. Nothing is recorded while it is offline — scan again when the network is back." />
       <View style={s.head}>
         <Text style={s.title}>{data.event.name}</Text>
         <Muted>{`${data.stage === 'FINAL' ? 'Final' : 'First round'} · roll call`}</Muted>
