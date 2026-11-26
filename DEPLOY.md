@@ -317,6 +317,7 @@ The App Store listing text and the reviewer notes are in `docs/app-store/athlete
 | 0053 PED login in the athletes app | ✅ 2026-11-26 | ✅ 2026-11-26 |
 | 0054 college check-in (one scan per college) | ✅ 2026-11-26 | ✅ 2026-11-26 |
 | 0055 re-sync functions after 0001–0018 were re-run on production | ✅ 2026-11-26 (no-op) | ✅ 2026-11-26 |
+| 0056 Mixed relay max 3 nominations per squad (DB) | ✅ 2026-11-27 | ✅ 2026-11-27 (+ history row) |
 
 **Never re-run an old migration file.** Re-running 0001–0018 on production on 26 Nov silently put back the
 oldest versions of 10 functions (points, standings, field ranking, call room, check-in, payment trigger);
@@ -338,6 +339,10 @@ triggers, indexes, constraints, policies, grants) — they must have 0 differenc
 | 2026-11-26 | Database | production | history | `supabase_migrations.schema_migrations` marked 0023–0055 applied (the Supabase GitHub integration had replayed 0001–0022; GitHub auto-deploy being turned off) |
 | 2026-11-26 | API | production | `46158bc` | revision `aura-api-00025-wgc`, normal sizing (min 1 / max 20 / 512 MiB); health 200, `ped-alerts-tick` 200 |
 | 2026-11-26 | Website | production | `46158bc` | payments desk decides the shown receipt |
+| 2026-11-27 | API | staging | `ae0e961` | revision `aura-api-staging-00020-82n` (audit follow-ups) |
+| 2026-11-27 | Database | production | 0056 | existing over-cap squads untouched: NHCE Men and AIET Men have 4 Mixed nominees each (organisers to decide) |
+| 2026-11-27 | Website | production | `5e2cbda` | audit follow-ups (`ae0e961`): POST-only forms, payment status sync, upload checks |
+| 2026-11-27 | API | production | `5e2cbda` | revision `aura-api-00027-rkv`, normal sizing; venue login limits, finalize guard, standings cache, staff deactivation; schema = staging (0 differences) |
 | 2026-11-26 | API | production | `ea5b927` | revision `aura-api-00014-pkt` (roll call, photo finish, PED app, college check-in) |
 | 2026-11-26 | API | production | `PED_CRON_SECRET` | revision `aura-api-00015-8f2`; Cloud Scheduler `ped-alerts-tick` every minute |
 | 2026-11-26 | API | staging | `65bbc42` | revision `aura-api-staging-00014-fl6` (with `PED_CRON_SECRET_STAGING`) |
