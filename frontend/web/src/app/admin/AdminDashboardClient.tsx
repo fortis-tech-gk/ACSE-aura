@@ -269,6 +269,57 @@ export default function AdminDashboardClient({ initialStats }: Props) {
         </div>
       </div>
 
+      {/* Division-wise Men / Women athlete counts */}
+      <div style={{ marginTop: '2rem' }} id="division-wise-counts">
+        <h3 style={{ fontSize: '1.15rem', fontWeight: 800, color: '#0f172a', marginBottom: '1rem' }}>
+          Division-wise Athletes (Men / Women)
+        </h3>
+        <div className="admin-table-container">
+          <table className="admin-table">
+            <thead>
+              <tr>
+                <th>Division</th>
+                <th style={{ textAlign: 'right' }}>Colleges</th>
+                <th style={{ textAlign: 'right' }}>Men</th>
+                <th style={{ textAlign: 'right' }}>Women</th>
+                <th style={{ textAlign: 'right' }}>Total</th>
+              </tr>
+            </thead>
+            <tbody>
+              {(stats.divisionCounts || []).map((d) => (
+                <tr key={d.division}>
+                  <td style={{ fontWeight: 600 }}>{d.division}</td>
+                  <td style={{ textAlign: 'right' }}>{d.colleges}</td>
+                  <td style={{ textAlign: 'right' }}>{d.men}</td>
+                  <td style={{ textAlign: 'right' }}>{d.women}</td>
+                  <td style={{ textAlign: 'right', fontWeight: 700 }}>{d.men + d.women}</td>
+                </tr>
+              ))}
+            </tbody>
+            <tfoot>
+              {(() => {
+                const t = (stats.divisionCounts || []).reduce(
+                  (a, d) => ({ colleges: a.colleges + d.colleges, men: a.men + d.men, women: a.women + d.women }),
+                  { colleges: 0, men: 0, women: 0 },
+                );
+                return (
+                  <tr style={{ fontWeight: 800, background: '#f8fafc' }}>
+                    <td>All Divisions</td>
+                    <td style={{ textAlign: 'right' }}>{t.colleges}</td>
+                    <td style={{ textAlign: 'right' }}>{t.men}</td>
+                    <td style={{ textAlign: 'right' }}>{t.women}</td>
+                    <td style={{ textAlign: 'right' }}>{t.men + t.women}</td>
+                  </tr>
+                );
+              })()}
+            </tfoot>
+          </table>
+        </div>
+        <p style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '0.5rem' }}>
+          Colleges = colleges in that division with at least one registered athlete.
+        </p>
+      </div>
+
       {/* Administrative Operations Modules */}
       <div style={{ marginTop: '2rem' }}>
         <h3 style={{ fontSize: '1.15rem', fontWeight: 800, color: '#0f172a', marginBottom: '1rem' }}>

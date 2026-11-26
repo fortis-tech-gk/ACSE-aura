@@ -10,6 +10,16 @@ import { normalizePaymentStatus, totalCredited } from '@/lib/payment-status';
 import { tryMakeAthleteQrToken } from '@/lib/athlete-qr';
 import { signAthletePhotos } from '@/lib/photo-links';
 import { OFFICIAL_UPI_ID, OFFICIAL_ACCOUNT_NAME } from '@/lib/payment-config';
+import { VTU_DIVISIONS, collegeDivision } from '@/lib/college-regions';
+
+/** Athletes registered from one VTU division, split Men / Women. */
+export interface DivisionAthleteCount {
+  division: string;
+  men: number;
+  women: number;
+  /** Colleges of this division with at least one athlete */
+  colleges: number;
+}
 
 export interface AdminDashboardStats {
   registrationOpen: boolean;
@@ -22,6 +32,8 @@ export interface AdminDashboardStats {
   rejectedSquadsCount: number;
   draftSquadsCount: number;
   totalBibsGenerated: number;
+  /** Division-wise Men / Women athlete counts (VTU divisions, then 'Unassigned' if any) */
+  divisionCounts: DivisionAthleteCount[];
 }
 
 /**
@@ -54,7 +66,8 @@ export async function getAdminDashboardStatsAction(): Promise<AdminDashboardStat
       supabaseAdmin.from('meet_settings').select('registration_open, registration_closed_at').limit(1).maybeSingle(),
       supabaseAdmin.from('profiles').select('id', { count: 'exact', head: true }),
       supabaseAdmin.from('colleges').select('id', { count: 'exact', head: true }),
-      supabaseAdmin.from('squads').select('id, payment_status, roster_locked'),
+      // Few hundred squads (well under the 1,000-row cap); profiles(count) = athletes per squad
+      supabaseAdmin.from('squads').select('id, gender, payment_status, roster_locked, colleges (code, region), profiles (count)'),
       supabaseAdmin.from('profiles').select('id', { count: 'exact', head: true }).not('bid_number', 'is', null),
     ]);
 
@@ -63,6 +76,22 @@ export async function getAdminDashboardStatsAction(): Promise<AdminDashboardStat
   const pendingSquadsCount = squads?.filter((s) => s.payment_status === 'SUBMITTED').length || 0;
   const rejectedSquadsCount = squads?.filter((s) => s.payment_status === 'REJECTED').length || 0;
   const draftSquadsCount = squads?.filter((s) => normalizePaymentStatus(s.payment_status) === 'DRAFT').length || 0;
+
+  // Division-wise Men / Women counts: division from colleges.region, else the built-in code map
+  const byDivision = new Map<string, { men: number; women: number; colleges: Set<string> }>();
+  for (const d of [...VTU_DIVISIONS, 'Unassigned']) byDivision.set(d, { men: 0, women: 0, colleges: new Set() });
+  for (const sq of (squads || []) as any[]) {
+    const college = Array.isArray(sq.colleges) ? sq.colleges[0] : sq.colleges;
+    const athletes = Number(sq.profiles?.[0]?.count ?? 0);
+    if (!athletes) continue;
+    const row = byDivision.get(collegeDivision(college?.code, college?.region) || 'Unassigned')!;
+    if (sq.gender === 'women') row.women += athletes;
+    else row.men += athletes;
+    row.colleges.add(college?.code || sq.id);
+  }
+  const divisionCounts: DivisionAthleteCount[] = [...byDivision]
+    .filter(([d, r]) => d !== 'Unassigned' || r.men + r.women > 0)
+    .map(([division, r]) => ({ division, men: r.men, women: r.women, colleges: r.colleges.size }));
 
   return {
     registrationOpen: settings?.registration_open ?? true,
@@ -75,6 +104,7 @@ export async function getAdminDashboardStatsAction(): Promise<AdminDashboardStat
     rejectedSquadsCount,
     draftSquadsCount,
     totalBibsGenerated: totalBibsGenerated || 0,
+    divisionCounts,
   };
 }
 
