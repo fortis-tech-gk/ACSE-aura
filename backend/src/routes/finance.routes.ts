@@ -1,6 +1,7 @@
 import { Router, Response } from 'express';
 import { supabase } from '../config/supabase';
 import { authenticate, requireRole, AuthenticatedRequest } from '../middleware/auth';
+import { sendDbError } from '../utils/db-error';
 
 export const financeRouter = Router();
 
@@ -38,7 +39,7 @@ financeRouter.get('/payments', async (req: AuthenticatedRequest, res: Response) 
       `)
       .order('created_at', { ascending: false });
 
-    if (error) return res.status(400).json({ error: error.message });
+    if (error) return sendDbError(res, error);
     return res.json({ payments });
   } catch (err: any) {
     return res.status(500).json({ error: err.message });
@@ -71,7 +72,7 @@ financeRouter.post('/verify', async (req: AuthenticatedRequest, res: Response) =
       })
       .eq('id', paymentId);
 
-    if (error) return res.status(400).json({ error: error.message });
+    if (error) return sendDbError(res, error);
     return res.json({ success: true });
   } catch (err: any) {
     return res.status(500).json({ error: err.message });

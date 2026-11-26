@@ -9,6 +9,7 @@ import { sendPushToProfiles } from '../utils/push';
 import { fetchAll } from '../utils/fetch-all';
 import { istIso } from './officials.routes';
 import { notifyPedsRollCallClosed } from '../utils/ped-alerts';
+import { sendDbError } from '../utils/db-error';
 
 /**
  * Event roll call (first round of an event, 25-11-2026):
@@ -111,7 +112,7 @@ rollCallRouter.post('/open', async (req: AuthenticatedRequest, res: Response) =>
     if (!eventId) return res.status(400).json({ error: 'eventId is required.' });
     assertEventScope(req.user!, eventId);
     const { data, error } = await supabase.rpc('open_roll_call', { p_event_id: eventId, p_stage: stage, p_official_id: req.user!.entityId });
-    if (error) return res.status(400).json({ error: error.message });
+    if (error) return sendDbError(res, error);
     return res.json({ success: true, result: data });
   } catch (err: any) {
     return sendError(res, err);
@@ -139,7 +140,7 @@ rollCallRouter.get('/:eventId', async (req: AuthenticatedRequest, res: Response)
     if (!rc) return res.json({ event, stage, rollCall: null, entries: [], reserves: {} });
 
     const { data: entries, error } = await supabase.from('roll_call_entries').select(ENTRY_SELECT).eq('roll_call_id', rc.id);
-    if (error) return res.status(400).json({ error: error.message });
+    if (error) return sendDbError(res, error);
     const rows = (entries || []) as any[];
     rows.sort((a, b) => {
       const ca = a.profiles?.squads?.colleges?.code || a.relay_teams?.squads?.colleges?.code || '';
@@ -227,7 +228,7 @@ rollCallRouter.post('/scan', async (req: AuthenticatedRequest, res: Response) =>
         .from('roll_call_entries')
         .update({ status: 'REPORTED', reported_at: new Date().toISOString(), marked_by: req.user!.entityId, notes: relayRole ? `Checked in by ${relayRole} runner scan` : '' })
         .eq('id', entry.id);
-      if (error) return res.status(400).json({ error: error.message });
+      if (error) return sendDbError(res, error);
     }
     return res.json({ success: true, alreadyReported: already, entryId: entry.id, relayRole, athlete });
   } catch (err: any) {
@@ -250,7 +251,7 @@ rollCallRouter.post('/mark', async (req: AuthenticatedRequest, res: Response) =>
       .from('roll_call_entries')
       .update({ status, reported_at: status === 'REPORTED' ? new Date().toISOString() : null, marked_by: req.user!.entityId })
       .eq('id', entryId);
-    if (error) return res.status(400).json({ error: error.message });
+    if (error) return sendDbError(res, error);
     return res.json({ success: true });
   } catch (err: any) {
     return sendError(res, err);
@@ -267,7 +268,7 @@ rollCallRouter.post('/reserve-swap', async (req: AuthenticatedRequest, res: Resp
     if (!eventId) return res.status(404).json({ error: 'Entry not found on any roll call.' });
     assertEventScope(req.user!, eventId);
     const { data, error } = await supabase.rpc('roll_call_reserve_swap', { p_entry_id: entryId, p_reserve_profile_id: reserveProfileId, p_official_id: req.user!.entityId });
-    if (error) return res.status(400).json({ error: error.message });
+    if (error) return sendDbError(res, error);
     return res.json({ success: true, result: data });
   } catch (err: any) {
     return sendError(res, err);
@@ -294,7 +295,7 @@ rollCallRouter.post('/prepare', async (req: AuthenticatedRequest, res: Response)
       p_num_lanes: event.max_lanes || 8,
       p_official_id: req.user!.entityId,
     });
-    if (error) return res.status(400).json({ error: error.message });
+    if (error) return sendDbError(res, error);
 
     invalidateCache('live');
     invalidateCache('schedule');

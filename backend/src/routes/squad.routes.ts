@@ -1,6 +1,7 @@
 import { Router, Response } from 'express';
 import { supabase } from '../config/supabase';
 import { authenticate, requireRole, AuthenticatedRequest } from '../middleware/auth';
+import { sendDbError } from '../utils/db-error';
 
 export const squadRouter = Router();
 
@@ -20,7 +21,7 @@ squadRouter.get('/profile', async (req: AuthenticatedRequest, res: Response) => 
       .eq('id', squadId)
       .single();
 
-    if (error) return res.status(400).json({ error: error.message });
+    if (error) return sendDbError(res, error);
     return res.json({ squad });
   } catch (err: any) {
     return res.status(500).json({ error: err.message });
@@ -60,7 +61,7 @@ squadRouter.get('/athletes', async (req: AuthenticatedRequest, res: Response) =>
       .eq('squad_id', squadId)
       .order('created_at', { ascending: true });
 
-    if (error) return res.status(400).json({ error: error.message });
+    if (error) return sendDbError(res, error);
     return res.json({ athletes: athletes || [] });
   } catch (err: any) {
     return res.status(500).json({ error: err.message });
@@ -123,7 +124,7 @@ squadRouter.post('/athletes', async (req: AuthenticatedRequest, res: Response) =
       if (pErr.code === '23505') {
         return res.status(400).json({ error: `USN '${usn}' is already registered in this squad.` });
       }
-      return res.status(400).json({ error: pErr.message });
+      return sendDbError(res, pErr);
     }
 
     // Build registrations
@@ -155,7 +156,7 @@ squadRouter.post('/athletes', async (req: AuthenticatedRequest, res: Response) =
     const { error: regErr } = await supabase.from('registrations').insert(regInserts);
     if (regErr) {
       await supabase.from('profiles').delete().eq('id', profile.id);
-      return res.status(400).json({ error: regErr.message });
+      return sendDbError(res, regErr);
     }
 
     return res.status(201).json({ success: true, athleteId: profile.id });
@@ -188,7 +189,7 @@ squadRouter.delete('/athletes/:id', async (req: AuthenticatedRequest, res: Respo
       .eq('id', athleteId)
       .eq('squad_id', squadId);
 
-    if (error) return res.status(400).json({ error: error.message });
+    if (error) return sendDbError(res, error);
     return res.json({ success: true });
   } catch (err: any) {
     return res.status(500).json({ error: err.message });
@@ -206,7 +207,7 @@ squadRouter.get('/payment/fee', async (req: AuthenticatedRequest, res: Response)
       p_squad_id: squadId,
     });
 
-    if (fErr) return res.status(400).json({ error: fErr.message });
+    if (fErr) return sendDbError(res, fErr);
 
     const { data: settings } = await supabase
       .from('meet_settings')
@@ -260,7 +261,7 @@ squadRouter.post('/payment', async (req: AuthenticatedRequest, res: Response) =>
       if (error.code === '23505') {
         return res.status(400).json({ error: `UTR '${utrNumber}' has already been submitted.` });
       }
-      return res.status(400).json({ error: error.message });
+      return sendDbError(res, error);
     }
 
     return res.status(201).json({ success: true });

@@ -3,6 +3,7 @@ import { notifyHeatStatusChange } from '../utils/push';
 import { supabase } from '../config/supabase';
 import { authenticate, requireRole, AuthenticatedRequest } from '../middleware/auth';
 import { cacheResponse, invalidateCache } from '../middleware/cache';
+import { sendDbError } from '../utils/db-error';
 
 export const scheduleRouter = Router();
 
@@ -33,7 +34,7 @@ scheduleRouter.get('/sessions', cacheResponse(15), async (_req, res: Response) =
       .order('session_date', { ascending: true })
       .order('start_time', { ascending: true });
 
-    if (error) return res.status(400).json({ error: error.message });
+    if (error) return sendDbError(res, error);
     return res.json({ sessions: sessions || [] });
   } catch (err: any) {
     return res.status(500).json({ error: err.message });
@@ -80,7 +81,7 @@ scheduleRouter.get('/heats/:eventId', cacheResponse(10), async (req, res: Respon
       .eq('stage', stage)
       .order('heat_number', { ascending: true });
 
-    if (error) return res.status(400).json({ error: error.message });
+    if (error) return sendDbError(res, error);
     return res.json({ heats: heats || [] });
   } catch (err: any) {
     return res.status(500).json({ error: err.message });
@@ -110,7 +111,7 @@ scheduleRouter.post('/draw', requireRole(['meet_admin']), async (req: Authentica
       p_num_lanes: parseInt(numLanes, 10) || 8,
     });
 
-    if (error) return res.status(400).json({ error: error.message });
+    if (error) return sendDbError(res, error);
     return res.json({ success: true, draw: data });
   } catch (err: any) {
     return res.status(500).json({ error: err.message });
@@ -155,7 +156,7 @@ scheduleRouter.patch('/heats/:heatId/status', requireRole(['meet_admin', 'call_r
       .select()
       .single();
 
-    if (error) return res.status(400).json({ error: error.message });
+    if (error) return sendDbError(res, error);
     // AURA Athletes: push "call room open" to everyone in the heat (best effort, non-blocking)
     if (status) notifyHeatStatusChange(heatId, status);
     return res.json({ success: true, heat: data });
@@ -183,7 +184,7 @@ scheduleRouter.patch('/call-room/:heatAthleteId', requireRole(['meet_admin', 'ca
       .select()
       .single();
 
-    if (error) return res.status(400).json({ error: error.message });
+    if (error) return sendDbError(res, error);
     return res.json({ success: true, athlete: data });
   } catch (err: any) {
     return res.status(500).json({ error: err.message });

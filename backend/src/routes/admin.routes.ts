@@ -2,6 +2,7 @@ import { Router, Response } from 'express';
 import { supabase } from '../config/supabase';
 import { authenticate, requireRole, AuthenticatedRequest } from '../middleware/auth';
 import { generateSquadPassphrase, hashPassword } from '../utils/passphrase';
+import { sendDbError } from '../utils/db-error';
 
 export const adminRouter = Router();
 
@@ -36,7 +37,7 @@ adminRouter.post('/colleges', async (req: AuthenticatedRequest, res: Response) =
       p_ped_email: pedEmail || null,
     });
 
-    if (error) return res.status(400).json({ error: error.message });
+    if (error) return sendDbError(res, error);
 
     return res.status(201).json({
       success: true,
@@ -71,7 +72,7 @@ adminRouter.get('/colleges', async (req: AuthenticatedRequest, res: Response) =>
       .select('id, name, code, district, squads(*)')
       .order('name', { ascending: true });
 
-    if (error) return res.status(400).json({ error: error.message });
+    if (error) return sendDbError(res, error);
     return res.json({ colleges });
   } catch (err: any) {
     return res.status(500).json({ error: err.message });
@@ -84,7 +85,7 @@ adminRouter.get('/colleges', async (req: AuthenticatedRequest, res: Response) =>
 adminRouter.post('/close-registration', async (req: AuthenticatedRequest, res: Response) => {
   try {
     const { data, error } = await supabase.rpc('close_registration_and_generate_bids');
-    if (error) return res.status(400).json({ error: error.message });
+    if (error) return sendDbError(res, error);
     return res.json({ success: true, result: data });
   } catch (err: any) {
     return res.status(500).json({ error: err.message });
@@ -110,7 +111,7 @@ adminRouter.get('/bids', async (req: AuthenticatedRequest, res: Response) => {
       `)
       .order('squad_code', { ascending: true });
 
-    if (error) return res.status(400).json({ error: error.message });
+    if (error) return sendDbError(res, error);
     return res.json({ squads });
   } catch (err: any) {
     return res.status(500).json({ error: err.message });
@@ -133,7 +134,7 @@ adminRouter.post('/amendments/withdraw', async (req: AuthenticatedRequest, res: 
       p_admin_id: req.user!.entityId,
     });
 
-    if (error) return res.status(400).json({ error: error.message });
+    if (error) return sendDbError(res, error);
     return res.json({ success: true, result: data });
   } catch (err: any) {
     return res.status(500).json({ error: err.message });
@@ -168,7 +169,7 @@ adminRouter.post('/amendments/substitute', async (req: AuthenticatedRequest, res
       p_admin_id: req.user!.entityId,
     });
 
-    if (error) return res.status(400).json({ error: error.message });
+    if (error) return sendDbError(res, error);
     return res.json({ success: true, result: data });
   } catch (err: any) {
     return res.status(500).json({ error: err.message });
@@ -193,7 +194,7 @@ adminRouter.get('/amendments', async (req: AuthenticatedRequest, res: Response) 
       `)
       .order('created_at', { ascending: false });
 
-    if (error) return res.status(400).json({ error: error.message });
+    if (error) return sendDbError(res, error);
     return res.json({ amendments });
   } catch (err: any) {
     return res.status(500).json({ error: err.message });

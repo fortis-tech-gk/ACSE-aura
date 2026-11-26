@@ -2,6 +2,7 @@ import { Router, Response } from 'express';
 import { supabase } from '../config/supabase';
 import { authenticate, requireRole, AuthenticatedRequest } from '../middleware/auth';
 import { isClientScanUuid, resolveAthlete } from '../utils/athlete-resolve';
+import { sendDbError } from '../utils/db-error';
 
 export const accreditationRouter = Router();
 
@@ -32,7 +33,7 @@ accreditationRouter.post('/scan', async (req: AuthenticatedRequest, res: Respons
       p_device_timestamp: deviceTimestamp || new Date().toISOString(),
     });
 
-    if (error) return res.status(400).json({ error: error.message });
+    if (error) return sendDbError(res, error);
     return res.json({ success: true, result: data });
   } catch (err: any) {
     return res.status(500).json({ error: err.message });
@@ -53,7 +54,7 @@ accreditationRouter.get('/stats', async (_req: AuthenticatedRequest, res: Respon
       supabase.from('squads').select('college_id, colleges ( attendance_marked_at )').eq('payment_status', 'VERIFIED'),
     ]);
     const err = all.error || done.error || paid.error;
-    if (err) return res.status(400).json({ error: err.message });
+    if (err) return sendDbError(res, err);
 
     const colleges = new Map<string, boolean>();
     for (const sq of (paid.data || []) as any[]) {

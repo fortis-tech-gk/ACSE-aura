@@ -20,7 +20,7 @@ export async function getChampionshipStandings(): Promise<any> {
   inFlight = (async () => {
     try {
       const { data, error } = await supabase.rpc('get_championship_standings');
-      if (error) throw new Error(error.message);
+      if (error) throw error; // keep code/message so callers can tell 400 from 503
       cached = { data, expiresAt: Date.now() + TTL_MS };
       return data;
     } finally {

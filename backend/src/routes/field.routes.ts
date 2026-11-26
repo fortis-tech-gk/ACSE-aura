@@ -2,6 +2,7 @@ import { Router, Response } from 'express';
 import { supabase } from '../config/supabase';
 import { assertCanWriteEntry, finalizeHeat, ProgressionError } from '../utils/progression';
 import { authenticate, requireRole, AuthenticatedRequest } from '../middleware/auth';
+import { sendDbError } from '../utils/db-error';
 
 export const fieldRouter = Router();
 
@@ -22,7 +23,7 @@ fieldRouter.get('/heats/:heatId', async (req: AuthenticatedRequest, res: Respons
       .eq('id', heatId)
       .single();
 
-    if (heatErr) return res.status(400).json({ error: heatErr.message });
+    if (heatErr) return sendDbError(res, heatErr);
 
     const isVertical = (heat.events as any)?.category === 'field_vertical_jump';
 
@@ -40,7 +41,7 @@ fieldRouter.get('/heats/:heatId', async (req: AuthenticatedRequest, res: Respons
       .order('lane_number', { ascending: true });
 
     const { data: athletes, error: athErr } = await athletesQuery;
-    if (athErr) return res.status(400).json({ error: athErr.message });
+    if (athErr) return sendDbError(res, athErr);
 
     return res.json({
       heat,
@@ -88,7 +89,7 @@ fieldRouter.post('/attempt', async (req: AuthenticatedRequest, res: Response) =>
       p_official_id: req.user!.entityId,
     });
 
-    if (error) return res.status(400).json({ error: error.message });
+    if (error) return sendDbError(res, error);
     return res.json({ success: true, result: data });
   } catch (err: any) {
     return res.status(500).json({ error: err.message });
@@ -129,7 +130,7 @@ fieldRouter.post('/vertical-attempt', async (req: AuthenticatedRequest, res: Res
       p_official_id: req.user!.entityId,
     });
 
-    if (error) return res.status(400).json({ error: error.message });
+    if (error) return sendDbError(res, error);
     return res.json({ success: true, result: data });
   } catch (err: any) {
     return res.status(500).json({ error: err.message });
@@ -148,7 +149,7 @@ fieldRouter.get('/standings/:heatId', async (req: AuthenticatedRequest, res: Res
       p_heat_id: heatId,
     });
 
-    if (error) return res.status(400).json({ error: error.message });
+    if (error) return sendDbError(res, error);
     return res.json(data);
   } catch (err: any) {
     return res.status(500).json({ error: err.message });

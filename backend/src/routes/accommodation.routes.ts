@@ -3,6 +3,7 @@ import { supabase } from '../config/supabase';
 import { authenticate, requireRole, AuthenticatedRequest } from '../middleware/auth';
 import { fetchAll } from '../utils/fetch-all';
 import { isClientScanUuid, resolveAthlete } from '../utils/athlete-resolve';
+import { sendDbError } from '../utils/db-error';
 
 export const accommodationRouter = Router();
 
@@ -20,7 +21,7 @@ accommodationRouter.get('/hostels', async (_req: AuthenticatedRequest, res: Resp
       .select('*')
       .order('name');
 
-    if (hostelErr) return res.status(400).json({ error: hostelErr.message });
+    if (hostelErr) return sendDbError(res, hostelErr);
 
     // Fetch scan counts per hostel
     const scans = await fetchAll<{ hostel_id: string; profile_id: string }>((from, to) =>
@@ -99,7 +100,7 @@ accommodationRouter.post('/checkin', async (req: AuthenticatedRequest, res: Resp
       p_device_timestamp: deviceTimestamp || new Date().toISOString(),
     });
 
-    if (error) return res.status(400).json({ error: error.message });
+    if (error) return sendDbError(res, error);
     return res.json({ success: true, result: data });
   } catch (err: any) {
     return res.status(500).json({ error: err.message });
@@ -121,7 +122,7 @@ accommodationRouter.get('/stats', async (_req: AuthenticatedRequest, res: Respon
       active().eq('accommodation_checked_in', true).eq('squads.gender', 'women'),
     ]);
     const err = all.error || inn.error || men.error || women.error;
-    if (err) return res.status(400).json({ error: err.message });
+    if (err) return sendDbError(res, err);
 
     const deposits = await fetchAll<{ caution_deposit: string | number }>((from, to) =>
       supabase.from('accommodation_scans').select('caution_deposit').order('id').range(from, to)
@@ -167,7 +168,7 @@ accommodationRouter.get('/scans', async (req: AuthenticatedRequest, res: Respons
       .order('synced_at', { ascending: false })
       .limit(limit);
 
-    if (error) return res.status(400).json({ error: error.message });
+    if (error) return sendDbError(res, error);
     return res.json({ scans: data || [] });
   } catch (err: any) {
     return res.status(500).json({ error: err.message });

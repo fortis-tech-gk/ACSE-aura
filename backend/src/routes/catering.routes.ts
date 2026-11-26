@@ -2,6 +2,7 @@ import { Router, Response } from 'express';
 import { supabase } from '../config/supabase';
 import { authenticate, requireRole, AuthenticatedRequest } from '../middleware/auth';
 import { isClientScanUuid, resolveAthlete } from '../utils/athlete-resolve';
+import { sendDbError } from '../utils/db-error';
 
 export const cateringRouter = Router();
 
@@ -40,7 +41,7 @@ cateringRouter.post('/scan', async (req: AuthenticatedRequest, res: Response) =>
     });
 
     if (error) {
-      return res.status(400).json({ error: error.message });
+      return sendDbError(res, error);
     }
 
     return res.json({ ...(data as object), athlete_id: who.athleteId });
@@ -57,7 +58,7 @@ cateringRouter.get('/stats', async (_req: AuthenticatedRequest, res: Response) =
   try {
     const { data, error } = await supabase.rpc('get_meal_stats');
     if (error) {
-      return res.status(400).json({ error: error.message });
+      return sendDbError(res, error);
     }
     return res.json(data);
   } catch (err: any) {

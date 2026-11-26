@@ -8,6 +8,7 @@ import { isLoginThrottled, recordLoginFailure, clearLoginFailures, THROTTLE_MESS
 import { verifyPassword } from '../utils/passphrase';
 import { invalidateCache } from '../middleware/cache';
 import { notifyPedsCallRoomClosed } from '../utils/ped-alerts';
+import { sendDbError } from '../utils/db-error';
 
 export const callRoomRouter = Router();
 
@@ -94,7 +95,7 @@ callRoomRouter.post('/override-close', requireRole(['meet_admin', 'referee']), a
     await clearLoginFailures('pin', key);
 
     const { data, error } = await supabase.rpc('advance_heat_to_track', { p_heat_id: heatId, p_official_id: official.id });
-    if (error) return res.status(400).json({ error: error.message });
+    if (error) return sendDbError(res, error);
     await supabase
       .from('heats')
       .update({
@@ -140,7 +141,7 @@ callRoomRouter.get('/heats/:heatId', async (req: AuthenticatedRequest, res: Resp
       .eq('id', heatId)
       .single();
 
-    if (heatErr) return res.status(400).json({ error: heatErr.message });
+    if (heatErr) return sendDbError(res, heatErr);
 
     const { data: athletes, error: athErr } = await supabase
       .from('heat_athletes')
@@ -148,7 +149,7 @@ callRoomRouter.get('/heats/:heatId', async (req: AuthenticatedRequest, res: Resp
       .eq('heat_id', heatId)
       .order('lane_number', { ascending: true });
 
-    if (athErr) return res.status(400).json({ error: athErr.message });
+    if (athErr) return sendDbError(res, athErr);
 
     // Reserves who could come in for an athlete who has not reported (individual events only)
     const reserves: Record<string, { id: string; name: string; bib: number | null }[]> = {};
@@ -210,7 +211,7 @@ callRoomRouter.post('/scan', async (req: AuthenticatedRequest, res: Response) =>
       .from('heat_athletes')
       .select('id, lane_number, profile_id, relay_team_id, call_room_reported, call_room_inspections(reported_status), relay_teams(relay_members(profile_id, leg_order, is_reserve))')
       .eq('heat_id', heatId);
-    if (error) return res.status(400).json({ error: error.message });
+    if (error) return sendDbError(res, error);
 
     let entry: any = (entries || []).find((e: any) => e.profile_id === who.athleteId);
     let relayRole: string | null = null;
@@ -273,7 +274,7 @@ callRoomRouter.post('/scan', async (req: AuthenticatedRequest, res: Response) =>
           .filter(Boolean)
           .join(' '),
       });
-      if (rpcErr) return res.status(400).json({ error: rpcErr.message });
+      if (rpcErr) return sendDbError(res, rpcErr);
     }
 
     return res.json({ success: true, alreadyReported: already, heatAthleteId: entry.id, lane: entry.lane_number, relayRole, athlete });
@@ -326,7 +327,7 @@ callRoomRouter.post('/inspect', async (req: AuthenticatedRequest, res: Response)
         .from('heat_athletes')
         .update({ call_room_reported: false, call_room_reported_at: null })
         .eq('id', heatAthleteId);
-      if (error) return res.status(400).json({ error: error.message });
+      if (error) return sendDbError(res, error);
       return res.json({ success: true, result: { heat_athlete_id: heatAthleteId, reported_status: null } });
     }
 
@@ -342,7 +343,7 @@ callRoomRouter.post('/inspect', async (req: AuthenticatedRequest, res: Response)
         : notes,
     });
 
-    if (error) return res.status(400).json({ error: error.message });
+    if (error) return sendDbError(res, error);
     return res.json({ success: true, result: data });
   } catch (err: any) {
     return res.status(500).json({ error: err.message });
@@ -372,7 +373,7 @@ callRoomRouter.post('/reserve-swap', async (req: AuthenticatedRequest, res: Resp
       p_reserve_profile_id: reserveProfileId,
       p_official_id: req.user!.entityId,
     });
-    if (error) return res.status(400).json({ error: error.message });
+    if (error) return sendDbError(res, error);
     invalidateCache('live');
     invalidateCache('schedule');
     return res.json({ success: true, result: data });
@@ -396,7 +397,7 @@ callRoomRouter.post('/relay-swap', async (req: AuthenticatedRequest, res: Respon
       p_leg_order: parseInt(legOrder, 10),
       p_reserve_profile_id: reserveProfileId,
     });
-    if (error) return res.status(400).json({ error: error.message });
+    if (error) return sendDbError(res, error);
     return res.json({ success: true, result: data });
   } catch (err: any) {
     return res.status(500).json({ error: err.message });
@@ -423,7 +424,7 @@ callRoomRouter.post('/advance/:heatId', async (req: AuthenticatedRequest, res: R
       p_official_id: req.user!.entityId,
     });
 
-    if (error) return res.status(400).json({ error: error.message });
+    if (error) return sendDbError(res, error);
     notifyPedsCallRoomClosed(heatId);
     return res.json({ success: true, result: data });
   } catch (err: any) {

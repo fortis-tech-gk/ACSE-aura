@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import rateLimit from 'express-rate-limit';
 import { supabase } from '../config/supabase';
 import { getChampionshipStandings } from '../utils/standings-cache';
+import { sendDbError } from '../utils/db-error';
 import { signPhotoUrl } from '../utils/photo-links';
 import { authenticate, requireRole, generateToken, AuthenticatedRequest } from '../middleware/auth';
 import { makeAthleteQrToken, verifyAthleteQrToken } from '../utils/athlete-qr';
@@ -26,11 +27,12 @@ const IST_OFFSET = '+05:30';
 /** Fallback when an event has no explicit call room time: report this long before the start */
 const DEFAULT_CALL_ROOM_LEAD_MIN = 30;
 
-// Per-IP cap sized for 3000 athletes logging in over shared venue Wi-Fi / carrier NAT.
-// The real brute-force guard is per bib (8 failures / 15 min, login_attempts table).
+// Per-IP cap: all ~4,000 athletes may log in from ONE venue IP (shared Wi-Fi / carrier NAT),
+// several times each (reinstall, new phone). The real brute-force guard is per bib
+// (8 failures / 15 min, login_attempts table).
 const loginLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 3000,
+  max: 50000,
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: 'Too many login attempts from this network. Please wait 15 minutes.' },
@@ -98,12 +100,13 @@ athleteRouter.post('/login', loginLimiter, async (req: Request, res: Response) =
       profileId = match.id;
     }
 
-    const { data: athlete } = await supabase
+    const { data: athlete, error: athleteErr } = await supabase
       .from('profiles')
       .select('id, sslc_name, bid_number, accreditation_status, squads ( colleges ( id ) )')
       .eq('id', profileId)
       .maybeSingle();
 
+    if (athleteErr) return sendDbError(res, athleteErr);
     if (!athlete || athlete.accreditation_status === 'WITHDrAWN') {
       return res.status(404).json({ error: 'This athlete is not registered for the championship.' });
     }
@@ -139,7 +142,9 @@ athleteRouter.get('/me', authenticate, requireRole(['athlete']), async (req: Aut
       .eq('id', athleteId)
       .maybeSingle();
 
-    if (profErr || !profile || profile.accreditation_status === 'WITHDrAWN') {
+    // A failed lookup is not "not found": the app must retry, never treat it as a missing profile
+    if (profErr) return sendDbError(res, profErr);
+    if (!profile || profile.accreditation_status === 'WITHDrAWN') {
       return res.status(404).json({ error: 'Athlete profile not found.' });
     }
     const squad: any = profile.squads;
@@ -389,11 +394,12 @@ athleteRouter.get('/performance', authenticate, requireRole(['athlete']), async 
   try {
     const athleteId = req.user!.entityId;
 
-    const { data: profile } = await supabase
+    const { data: profile, error: profErr } = await supabase
       .from('profiles')
       .select('id, squad_id, squads ( gender, college_id )')
       .eq('id', athleteId)
       .maybeSingle();
+    if (profErr) return sendDbError(res, profErr);
     if (!profile) return res.status(404).json({ error: 'Athlete profile not found.' });
     const squad: any = profile.squads;
 

@@ -2,6 +2,7 @@ import { Router, Response } from 'express';
 import { supabase } from '../config/supabase';
 import { getChampionshipStandings } from '../utils/standings-cache';
 import { cacheResponse } from '../middleware/cache';
+import { sendDbError } from '../utils/db-error';
 
 export const leaderboardRouter = Router();
 
@@ -15,7 +16,7 @@ leaderboardRouter.get('/standings', cacheResponse(10), async (_req, res: Respons
     try {
       data = await getChampionshipStandings();
     } catch (e: any) {
-      return res.status(400).json({ error: e.message });
+      return sendDbError(res, e);
     }
     return res.json(data);
   } catch (err: any) {
@@ -37,7 +38,7 @@ leaderboardRouter.get('/college/:collegeId', cacheResponse(15), async (req, res:
       .eq('id', collegeId)
       .single();
 
-    if (colErr) return res.status(400).json({ error: colErr.message });
+    if (colErr) return sendDbError(res, colErr);
 
     const { data: points, error: ptsErr } = await supabase
       .from('team_points')
@@ -52,7 +53,7 @@ leaderboardRouter.get('/college/:collegeId', cacheResponse(15), async (req, res:
       .eq('college_id', collegeId)
       .order('place', { ascending: true });
 
-    if (ptsErr) return res.status(400).json({ error: ptsErr.message });
+    if (ptsErr) return sendDbError(res, ptsErr);
 
     // Stored points are the college points (0048): individual 5-3-1, combined events and relays
     // 10-6-2 (ties share); the mixed relay's 10-6-2 counts for Overall only.

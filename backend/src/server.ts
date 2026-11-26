@@ -63,10 +63,24 @@ app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 // so limiting per IP alone would lock everyone out. Logged-in traffic (the AURA apps) is limited
 // per user; anonymous traffic (public leaderboard, logins) gets a high per-IP ceiling — those
 // endpoints are cached. Brute-force protection for logins is per account (login_attempts table).
+// Meet days: athletes, officials, PEDs and spectators can all sit behind ONE venue IP, so per-IP
+// ceilings are set far above real traffic (they only stop a runaway client). Counters are per
+// API instance (memory store), so the effective ceiling grows with the number of instances.
+// Load test 26 Nov 2026: 4,000 athletes from one IP ≈ 180 req/s in total.
 const WINDOW_MS = 15 * 60 * 1000;
+/** Per logged-in device, 15 min. Athlete app ≈ 45; an official's tablet flushing a queue of offline
+ *  scans (one request each) or a busy food counter can send thousands — never throttle staff work. */
+const PER_DEVICE_MAX: Record<string, number> = { athlete: 3000 };
+const STAFF_DEVICE_MAX = 20000;
+/** Anonymous traffic per IP, 15 min (public standings / results / heats, all cached): ~330 req/s */
+const ANON_IP_MAX = 300000;
 const generalLimiter = rateLimit({
   windowMs: WINDOW_MS,
-  max: (req: Request) => (peekUser(req) ? 600 : 20000), // 600 per login/device · 20k per shared IP
+  max: (req: Request) => {
+    const user = peekUser(req);
+    if (!user) return ANON_IP_MAX;
+    return PER_DEVICE_MAX[user.role] ?? STAFF_DEVICE_MAX;
+  },
   keyGenerator: (req: Request) => {
     const user = peekUser(req);
     if (!user) return `ip:${ipKeyGenerator(req.ip || '')}`;
@@ -81,10 +95,11 @@ const generalLimiter = rateLimit({
   message: { error: 'Too many requests. Please wait a minute and try again.' },
 });
 
-// Staff/squad logins: per-IP cap high enough for a venue full of officials on one network
+// Staff/squad logins: per-IP cap high enough for a venue full of officials on one network.
+// Guessing a PIN / passphrase is stopped per account (login_attempts table), not here.
 const authLimiter = rateLimit({
   windowMs: WINDOW_MS,
-  max: 1000,
+  max: 10000,
   keyGenerator: (req: Request) => `ip:${ipKeyGenerator(req.ip || '')}`,
   standardHeaders: true,
   legacyHeaders: false,

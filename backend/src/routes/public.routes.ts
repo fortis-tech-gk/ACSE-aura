@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import { supabase } from '../config/supabase';
 import { getChampionshipStandings } from '../utils/standings-cache';
 import { cacheResponse } from '../middleware/cache';
+import { sendDbError } from '../utils/db-error';
 
 export const publicRouter = Router();
 
@@ -15,7 +16,7 @@ publicRouter.get('/events', cacheResponse(30), async (_req: Request, res: Respon
       .select('*')
       .order('name', { ascending: true });
 
-    if (error) return res.status(400).json({ error: error.message });
+    if (error) return sendDbError(res, error);
     return res.json({ events: events || [] });
   } catch (err: any) {
     return res.status(500).json({ error: err.message });
@@ -59,7 +60,7 @@ publicRouter.get('/live/heats', cacheResponse(5), async (_req: Request, res: Res
       .order('created_at', { ascending: false })
       .limit(20);
 
-    if (error) return res.status(400).json({ error: error.message });
+    if (error) return sendDbError(res, error);
     return res.json({ heats: heats || [] });
   } catch (err: any) {
     return res.status(500).json({ error: err.message });
@@ -95,7 +96,7 @@ publicRouter.get('/live/results', cacheResponse(5), async (_req: Request, res: R
       .order('created_at', { ascending: false })
       .limit(20);
 
-    if (error) return res.status(400).json({ error: error.message });
+    if (error) return sendDbError(res, error);
 
     return res.json({
       status: 'ACTIVE_MEET',
@@ -117,7 +118,7 @@ publicRouter.get('/live/leaderboard', cacheResponse(10), async (_req: Request, r
     try {
       data = await getChampionshipStandings();
     } catch (e: any) {
-      return res.status(400).json({ error: e.message });
+      return sendDbError(res, e);
     }
 
     return res.json({
