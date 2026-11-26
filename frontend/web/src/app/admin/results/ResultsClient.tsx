@@ -79,6 +79,22 @@ export default function ResultsClient({ initialHeats, loadError }: { initialHeat
         <input placeholder="Reason for the change (required, goes in the Audit Log)" value={reason} onChange={(e) => setReason(e.target.value)} style={{ ...input, flex: 1, minWidth: 280 }} />
       </div>
 
+      <div style={{ ...card, background: '#f8fafc' }}>
+        <b>Official result sheets (PDF)</b>
+        <div style={{ color: '#475569', fontSize: 13, margin: '0.25rem 0 0.6rem' }}>
+          Every finished final, one event per page, with the meet header and five signature boxes. Opens in a new tab: use <b>Print / Save as PDF</b>.
+          <b> All finalists</b> = lane order with each athlete&apos;s rank. <b>Medal winners</b> = top 3 with photo, USN, college and contact number.
+        </div>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          {(['men', 'women'] as const).map((g) => (
+            <span key={g} style={{ display: 'contents' }}>
+              <a style={{ ...btnLight, textDecoration: 'none' }} href={`/admin/results/print?group=${g}&format=full`} target="_blank" rel="noopener">{GENDER[g]}: all finalists</a>
+              <a style={{ ...btnLight, textDecoration: 'none' }} href={`/admin/results/print?group=${g}&format=top3`} target="_blank" rel="noopener">{GENDER[g]}: medal winners</a>
+            </span>
+          ))}
+        </div>
+      </div>
+
       {!shown.length && !loadError && <div style={card}>No finished heats yet.</div>}
 
       {shown.map((h) => (
@@ -88,6 +104,12 @@ export default function ResultsClient({ initialHeats, loadError }: { initialHeat
               <b>{h.events?.name}</b> <span style={{ color: '#64748b' }}>{GENDER[h.events?.gender || ''] || ''}</span>
               <div style={{ color: '#475569', fontSize: 13 }}>{STAGE[h.stage] || h.stage}{!(h.stage === 'FINAL' && h.heat_number === 1) ? ` ${h.heat_number}` : ''} · {h.status === 'COMPLETED' ? 'Results done' : h.status}</div>
             </div>
+            {h.stage === 'FINAL' && h.events && (
+              <>
+                <a style={{ ...btnLight, textDecoration: 'none' }} href={`/admin/results/print?group=${h.events.gender === 'mixed' ? 'mixed' : h.events.gender === 'women' ? 'women' : 'men'}&format=full&event=${encodeURIComponent(h.events.code)}`} target="_blank" rel="noopener">Result sheet</a>
+                <a style={{ ...btnLight, textDecoration: 'none' }} href={`/admin/results/print?group=${h.events.gender === 'mixed' ? 'mixed' : h.events.gender === 'women' ? 'women' : 'men'}&format=top3&event=${encodeURIComponent(h.events.code)}`} target="_blank" rel="noopener">Medal winners</a>
+              </>
+            )}
             <button style={btnLight} onClick={() => open(h.id)}>{openId === h.id ? 'Close' : 'View / correct'}</button>
             <button style={btn} disabled={busy} onClick={() => reopen(h)}>Reopen heat</button>
           </div>
