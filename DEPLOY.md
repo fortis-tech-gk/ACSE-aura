@@ -317,4 +317,5 @@ The App Store listing text and the reviewer notes are in `docs/app-store/athlete
 | 2026-11-26 | Database | staging + production | 0053, 0054 | PED app, college check-in |
 | 2026-11-26 | API | production | `ea5b927` | revision `aura-api-00014-pkt` (roll call, photo finish, PED app, college check-in) |
 | 2026-11-26 | API | production | `PED_CRON_SECRET` | revision `aura-api-00015-8f2`; Cloud Scheduler `ped-alerts-tick` every minute |
+| 2026-11-26 | API | staging | `65bbc42` | revision `aura-api-staging-00014-fl6` (with `PED_CRON_SECRET_STAGING`) |
 | — | Website | production | still `700e1d5` | not deployed (unchanged) |
