@@ -154,6 +154,29 @@ gcloud run services update-traffic aura-api --region asia-south1 --project aura-
 
 For staging the service is `aura-api-staging`.
 
+### PED alerts tick (Cloud Scheduler)
+
+Cloud Run scales to zero, so the PED call room alerts (30 / 20 / 10 min, DNS, results) are driven by the
+Cloud Scheduler job **`ped-alerts-tick`** (asia-south1, every minute, Asia/Kolkata). It POSTs to
+`/api/internal/ped-alerts/tick` with the header `X-Cron-Secret`, which must equal the `PED_CRON_SECRET`
+secret (staging: `PED_CRON_SECRET_STAGING`). The deploy script passes the secret to the service.
+
+```bash
+gcloud scheduler jobs describe ped-alerts-tick --location asia-south1 --project aura-2026-514120
+```
+
+If you change the secret, add a new version and update the job's header too, or every tick gets 403:
+
+```bash
+gcloud secrets versions add PED_CRON_SECRET --project aura-2026-514120 --data-file=-
+```
+
+```bash
+gcloud scheduler jobs update http ped-alerts-tick --location asia-south1 --project aura-2026-514120 --update-headers "X-Cron-Secret=$(gcloud secrets versions access latest --secret PED_CRON_SECRET --project aura-2026-514120)"
+```
+
+There is no staging job (the staging API only runs its in-process timer while an instance is up).
+
 ---
 
 ## 3. Website (Vercel)
@@ -279,6 +302,8 @@ The App Store listing text and the reviewer notes are in `docs/app-store/athlete
 | 0041 relay teams built from athlete-form nominations | ✅ | ✅ |
 | 0045 decathlon / heptathlon scoring (World Athletics tables) | ✅ | ✅ |
 | 0046 substitute athlete keeps events, photo, DOB, phone, Aadhaar | ✅ | ✅ |
+| 0053 PED login in the athletes app | ✅ 2026-11-26 | ✅ 2026-11-26 |
+| 0054 college check-in (one scan per college) | ✅ 2026-11-26 | ✅ 2026-11-26 |
 
 ## Deploy log
 
@@ -289,4 +314,7 @@ The App Store listing text and the reviewer notes are in `docs/app-store/athlete
 | 2026-11-21 | API | staging | decathlon / heptathlon | revision `aura-api-staging-00009-dkr` |
 | 2026-11-21 | API | production | decathlon / heptathlon | revision `aura-api-00010-n4v` |
 | 2026-11-21 | Database | staging + production | 0046 | substitute athlete migration |
+| 2026-11-26 | Database | staging + production | 0053, 0054 | PED app, college check-in |
+| 2026-11-26 | API | production | `ea5b927` | revision `aura-api-00014-pkt` (roll call, photo finish, PED app, college check-in) |
+| 2026-11-26 | API | production | `PED_CRON_SECRET` | revision `aura-api-00015-8f2`; Cloud Scheduler `ped-alerts-tick` every minute |
 | — | Website | production | still `700e1d5` | not deployed (unchanged) |

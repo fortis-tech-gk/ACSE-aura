@@ -25,7 +25,8 @@ if [[ "${AURA_ENV:-production}" == "staging" ]]; then
   SERVICE="aura-api-staging"
   SUFFIX="_STAGING"
 fi
-SECRETS=(JWT_SECRET ATHLETE_QR_SECRET SUPABASE_URL SUPABASE_SERVICE_ROLE_KEY)
+# PED_CRON_SECRET: random value Cloud Scheduler sends as X-Cron-Secret to /api/internal/ped-alerts/tick
+SECRETS=(JWT_SECRET ATHLETE_QR_SECRET SUPABASE_URL SUPABASE_SERVICE_ROLE_KEY PED_CRON_SECRET)
 
 gcloud config set project "$PROJECT" >/dev/null
 
@@ -68,7 +69,7 @@ gcloud run deploy "$SERVICE" \
   --cpu-boost \
   --timeout 60s \
   --set-env-vars "NODE_ENV=production,TRUST_PROXY=1" \
-  --set-secrets "JWT_SECRET=JWT_SECRET$SUFFIX:latest,ATHLETE_QR_SECRET=ATHLETE_QR_SECRET$SUFFIX:latest,SUPABASE_URL=SUPABASE_URL$SUFFIX:latest,SUPABASE_SERVICE_ROLE_KEY=SUPABASE_SERVICE_ROLE_KEY$SUFFIX:latest"
+  --set-secrets "JWT_SECRET=JWT_SECRET$SUFFIX:latest,ATHLETE_QR_SECRET=ATHLETE_QR_SECRET$SUFFIX:latest,SUPABASE_URL=SUPABASE_URL$SUFFIX:latest,SUPABASE_SERVICE_ROLE_KEY=SUPABASE_SERVICE_ROLE_KEY$SUFFIX:latest,PED_CRON_SECRET=PED_CRON_SECRET$SUFFIX:latest"
 
 URL="$(gcloud run services describe "$SERVICE" --region "$REGION" --format='value(status.url)')"
 echo
