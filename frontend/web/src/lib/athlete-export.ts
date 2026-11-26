@@ -90,6 +90,113 @@ export function buildExportRows(list: any[]): ExportRow[] {
   });
 }
 
+/* ------------------------------------------------------------------------------------------
+ * Event-wise layout: one block per event (and per Men / Women section), listing every athlete
+ * entered in it — the format of the "ACS-AURA_Athletes_EventWise" sheet.
+ * ---------------------------------------------------------------------------------------- */
+
+export type EnteredAs = 'Event 1' | 'Event 2' | 'Reserve' | 'Relay' | 'Half Marathon';
+
+export interface EventWiseRow {
+  'Sl No': number;
+  'Bib No': string;
+  'Athlete Name': string;
+  USN: string;
+  Sem: string;
+  'College Code': string;
+  'College Name': string;
+  District: string;
+  'Student Phone': string;
+  'Entered As': EnteredAs;
+  'Payment Status': string;
+}
+
+export const EVENT_WISE_COLUMNS: (keyof EventWiseRow)[] = [
+  'Sl No', 'Bib No', 'Athlete Name', 'USN', 'Sem', 'College Code', 'College Name', 'District', 'Student Phone', 'Entered As', 'Payment Status',
+];
+
+export interface EventGroup {
+  key: string;
+  /** "[1] 100 mtrs Run – Men" */
+  title: string;
+  entries: number;
+  reserves: number;
+  rows: EventWiseRow[];
+}
+
+const ENTERED_ORDER: Record<EnteredAs, number> = { 'Event 1': 0, 'Event 2': 0, Relay: 0, 'Half Marathon': 0, Reserve: 1 };
+
+/**
+ * Groups athletes by event. `onlyEventId` keeps just that event (the page's event filter), so
+ * choosing "100m Men" downloads only the 100m Men block. Order: official event code, Men then
+ * Women; inside a block entries before reserves, then college A-Z and name A-Z.
+ */
+export function buildEventGroups(list: any[], onlyEventId?: string | null): EventGroup[] {
+  const groups = new Map<string, { sortCode: number; sortName: string; section: number; title: string; items: { a: any; as: EnteredAs }[] }>();
+
+  for (const a of list) {
+    const sq = a.squads || {};
+    const gender = sq.gender === 'women' ? 'Women' : 'Men';
+    const regs: any[] = a.registrations || [];
+    let regularNo = 0;
+    for (const r of regs) {
+      // Label first (Event 1 / Event 2 counts every regular entry), then apply the event filter
+      const as: EnteredAs =
+        r.kind === 'reserve' ? 'Reserve' : r.kind === 'relay' ? 'Relay' : r.kind === 'half_marathon' ? 'Half Marathon' : regularNo++ === 0 ? 'Event 1' : 'Event 2';
+      if (onlyEventId && r.event_id !== onlyEventId) continue;
+      const ev = r.events || {};
+      const code = String(ev.code || '').toUpperCase();
+      const meta = DB_CODE_TO_OFFICIAL_MAP[code];
+      // Mixed relay is one event, listed per section from the athlete's own squad
+      const section = meta?.section === 'Mixed' || !meta ? gender : meta.section;
+      const key = `${code || ev.name}|${section}`;
+      let g = groups.get(key);
+      if (!g) {
+        const name = meta?.officialName || ev.name || code || 'Event';
+        g = {
+          sortCode: meta?.codeNum ?? 99,
+          sortName: name,
+          section: section === 'Men' ? 0 : 1,
+          title: `${meta ? `[${meta.codeNum}] ` : ''}${name} – ${section}`,
+          items: [],
+        };
+        groups.set(key, g);
+      }
+      g.items.push({ a, as });
+    }
+  }
+
+  return [...groups.entries()]
+    .sort(([, x], [, y]) => x.sortCode - y.sortCode || x.section - y.section || x.sortName.localeCompare(y.sortName))
+    .map(([key, g]) => {
+      const items = g.items.sort(
+        (x, y) =>
+          ENTERED_ORDER[x.as] - ENTERED_ORDER[y.as] ||
+          String(x.a.squads?.colleges?.name || '').localeCompare(String(y.a.squads?.colleges?.name || '')) ||
+          String(x.a.sslc_name || '').localeCompare(String(y.a.sslc_name || ''))
+      );
+      const rows: EventWiseRow[] = items.map(({ a, as }, i) => {
+        const sq = a.squads || {};
+        const col = sq.colleges || {};
+        return {
+          'Sl No': i + 1,
+          'Bib No': a.bid_number ? String(a.bid_number) : 'Pending',
+          'Athlete Name': a.sslc_name || '',
+          USN: a.usn || '',
+          Sem: a.semester ? String(a.semester) : '',
+          'College Code': col.code || (sq.squad_code || '').split('-')[0] || '',
+          'College Name': col.name || '',
+          District: col.district || '',
+          'Student Phone': a.phone || '',
+          'Entered As': as,
+          'Payment Status': PAYMENT_LABEL[normalizePaymentStatus(sq.payment_status)] || '',
+        };
+      });
+      const reserves = rows.filter((r) => r['Entered As'] === 'Reserve').length;
+      return { key, title: g.title, entries: rows.length - reserves, reserves, rows };
+    });
+}
+
 export function exportFileStamp(): string {
   const d = new Date();
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}_${pad(d.getHours())}${pad(d.getMinutes())}`;

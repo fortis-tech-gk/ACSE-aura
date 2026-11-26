@@ -1,9 +1,9 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import * as XLSX from 'xlsx';
 import { normalizePaymentStatus } from '@/lib/payment-status';
-import { buildExportRows, exportFileStamp, type ExportRow } from '@/lib/athlete-export';
+import { buildEventGroups, buildExportRows, exportFileStamp, type EventGroup } from '@/lib/athlete-export';
+import { downloadAthletesXlsx } from '@/lib/athlete-xlsx';
 import type { AthleteFilters } from '@/lib/admin-athletes';
 import { exportAthletesAction } from '@/app/actions/admin-operations';
 import { useUrlFilters } from '../useUrlFilters';
@@ -33,7 +33,15 @@ export default function AthletesClient({ athletes, filteredTotal, totalAthletes,
   const selectedGender = filters.gender || 'ALL';
   const selectedStatus = filters.status || 'ALL';
   const selectedEvent = filters.event || 'ALL';
-  const [pdfReport, setPdfReport] = useState<{ title: string; filters: string; rows: ExportRow[] } | null>(null);
+  const [pdfReport, setPdfReport] = useState<{
+    title: string;
+    filters: string;
+    groups: EventGroup[];
+    athletes: number;
+    men: number;
+    women: number;
+    colleges: number;
+  } | null>(null);
   const [exporting, setExporting] = useState<string | null>(null);
 
   // Search box: typed locally, sent to the server after a short pause
@@ -87,52 +95,57 @@ export default function AthletesClient({ athletes, filteredTotal, totalAthletes,
     }
   }
 
-  // Excel (.xlsx): "Athletes" sheet with a filter arrow on every column + a "Report Info" sheet
-  async function handleExport(filename: string, useFilters: boolean, key: string) {
-    const dataset = await loadForExport(useFilters, key);
-    if (!dataset) return;
-    if (dataset.length === 0) {
-      alert('No athlete records available to export.');
-      return;
-    }
-    const rows = buildExportRows(sortForExport(dataset));
-    const ws = XLSX.utils.json_to_sheet(rows);
-    const headers = Object.keys(rows[0]);
-    ws['!cols'] = headers.map((key) => ({
-      wch: Math.min(48, Math.max(key.length + 2, ...rows.map((r) => String((r as any)[key] ?? '').length + 1))),
-    }));
-    ws['!autofilter'] = { ref: XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: rows.length, c: headers.length - 1 } }) };
-
-    const info = XLSX.utils.aoa_to_sheet([
-      ['Dr. ACS-AURA 2026 — VTU’s 28th Inter-Collegiate State Level Athletic Meet 2026'],
-      ['Athletes list exported from the Admin portal'],
-      [],
-      ['Generated', new Date().toLocaleString('en-IN')],
-      ['Filters', filterSummary(useFilters)],
-      ['Athletes', rows.length],
-      ['Men', rows.filter((r) => r.Gender === 'Men').length],
-      ['Women', rows.filter((r) => r.Gender === 'Women').length],
-      ['Colleges', new Set(rows.map((r) => r['College Code'])).size],
-      [],
-      ['Note', 'Aadhaar numbers show only the last 4 digits.'],
-    ]);
-    info['!cols'] = [{ wch: 14 }, { wch: 80 }];
-
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'Athletes');
-    XLSX.utils.book_append_sheet(wb, info, 'Report Info');
-    XLSX.writeFile(wb, `${filename}.xlsx`);
+  /** Report title: "Athletes by Event — Entire Roster" / "— Filtered View (100m Men)" */
+  function reportTitle(useFilters: boolean): string {
+    if (!useFilters) return 'Athletes by Event — Entire Roster';
+    return selectedEvent !== 'ALL' ? `Athletes by Event — ${eventName}` : 'Athletes by Event — Filtered View';
   }
 
-  // PDF: opens a printable A4-landscape report ("Save as PDF" in the print dialog)
-  async function handlePdf(title: string, useFilters: boolean, key: string) {
+  /**
+   * Loads the athletes and lays them out event by event. With the event filter on (filtered
+   * download), only that event's block is included; otherwise every event.
+   */
+  async function prepareReport(useFilters: boolean, key: string) {
     const dataset = await loadForExport(useFilters, key);
-    if (!dataset) return;
+    if (!dataset) return null;
     if (dataset.length === 0) {
       alert('No athlete records available to export.');
-      return;
+      return null;
     }
-    setPdfReport({ title, filters: filterSummary(useFilters), rows: buildExportRows(sortForExport(dataset)) });
+    const sorted = sortForExport(dataset);
+    const athletes = buildExportRows(sorted);
+    const groups = buildEventGroups(sorted, useFilters && selectedEvent !== 'ALL' ? selectedEvent : null);
+    return { athletes, groups, title: reportTitle(useFilters), filters: filterSummary(useFilters) };
+  }
+
+  // Excel (.xlsx): "Event-wise", "All Athletes" and "Report Info" sheets, each with the meet header
+  async function handleExport(filename: string, useFilters: boolean, key: string) {
+    const report = await prepareReport(useFilters, key);
+    if (!report) return;
+    setExporting(key);
+    try {
+      await downloadAthletesXlsx({ filename, title: report.title, filterSummary: report.filters, groups: report.groups, athletes: report.athletes });
+    } catch (err) {
+      alert(`Could not create the Excel file: ${err instanceof Error ? err.message : err}`);
+    } finally {
+      setExporting(null);
+    }
+  }
+
+  // PDF: printable A4-landscape event-wise report ("Save as PDF" in the print dialog)
+  async function handlePdf(useFilters: boolean, key: string) {
+    const report = await prepareReport(useFilters, key);
+    if (!report) return;
+    const men = report.athletes.filter((r) => r.Gender === 'Men').length;
+    setPdfReport({
+      title: report.title,
+      filters: report.filters,
+      groups: report.groups,
+      athletes: report.athletes.length,
+      men,
+      women: report.athletes.length - men,
+      colleges: new Set(report.athletes.map((r) => r['College Code'])).size,
+    });
   }
 
   const exportBtn = (key: string, label: string, icon: string, primary: boolean, onClick: () => void, id: string) => (
@@ -156,21 +169,21 @@ export default function AthletesClient({ athletes, filteredTotal, totalAthletes,
       <div className="admin-page-header">
         <div className="admin-title-group">
           <h2>Athletes Delegation Management</h2>
-          <p>Complete athlete directory with filters &bull; download as Excel (.xlsx) or PDF</p>
+          <p>Complete athlete directory with filters &bull; download an event-wise list as Excel (.xlsx) or PDF</p>
         </div>
 
         {/* Downloads: entire roster or the current filtered view, as Excel or PDF */}
         <div className="admin-actions-group" style={{ flexWrap: 'wrap' }}>
           <div className="athlete-export-group">
             <span className="athlete-export-label">Entire roster ({totalAthletes})</span>
-            {exportBtn('all-xlsx', 'Excel', '📥', false, () => handleExport(`ACS-AURA_Athletes_All_${exportFileStamp()}`, false, 'all-xlsx'), 'btn-export-entire')}
-            {exportBtn('all-pdf', 'PDF', '📄', false, () => handlePdf('Athletes List — Entire Roster', false, 'all-pdf'), 'btn-export-entire-pdf')}
+            {exportBtn('all-xlsx', 'Excel', '📥', false, () => handleExport(`ACS-AURA_Athletes_EventWise_All_${exportFileStamp()}`, false, 'all-xlsx'), 'btn-export-entire')}
+            {exportBtn('all-pdf', 'PDF', '📄', false, () => handlePdf(false, 'all-pdf'), 'btn-export-entire-pdf')}
           </div>
 
           <div className="athlete-export-group">
             <span className="athlete-export-label">Filtered view ({filteredTotal})</span>
-            {exportBtn('f-xlsx', 'Excel', '📊', true, () => handleExport(`ACS-AURA_Athletes_Filtered_${exportFileStamp()}`, true, 'f-xlsx'), 'btn-export-filtered')}
-            {exportBtn('f-pdf', 'PDF', '📄', true, () => handlePdf('Athletes List — Filtered View', true, 'f-pdf'), 'btn-export-filtered-pdf')}
+            {exportBtn('f-xlsx', 'Excel', '📊', true, () => handleExport(`ACS-AURA_Athletes_EventWise_Filtered_${exportFileStamp()}`, true, 'f-xlsx'), 'btn-export-filtered')}
+            {exportBtn('f-pdf', 'PDF', '📄', true, () => handlePdf(true, 'f-pdf'), 'btn-export-filtered-pdf')}
           </div>
         </div>
       </div>
@@ -485,7 +498,11 @@ export default function AthletesClient({ athletes, filteredTotal, totalAthletes,
         <AthletesPdfReport
           title={pdfReport.title}
           filterSummary={pdfReport.filters}
-          rows={pdfReport.rows}
+          groups={pdfReport.groups}
+          athletes={pdfReport.athletes}
+          men={pdfReport.men}
+          women={pdfReport.women}
+          colleges={pdfReport.colleges}
           onClose={() => setPdfReport(null)}
         />
       )}
