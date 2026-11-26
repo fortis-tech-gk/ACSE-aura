@@ -1,5 +1,6 @@
 import { Router, Response } from 'express';
 import { supabase } from '../config/supabase';
+import { getChampionshipStandings } from '../utils/standings-cache';
 import { cacheResponse } from '../middleware/cache';
 
 export const leaderboardRouter = Router();
@@ -10,8 +11,12 @@ export const leaderboardRouter = Router();
  */
 leaderboardRouter.get('/standings', cacheResponse(10), async (_req, res: Response) => {
   try {
-    const { data, error } = await supabase.rpc('get_championship_standings');
-    if (error) return res.status(400).json({ error: error.message });
+    let data: any;
+    try {
+      data = await getChampionshipStandings();
+    } catch (e: any) {
+      return res.status(400).json({ error: e.message });
+    }
     return res.json(data);
   } catch (err: any) {
     return res.status(500).json({ error: err.message });

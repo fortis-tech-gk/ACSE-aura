@@ -4,7 +4,13 @@
 #
 #   ./deploy-cloudrun.sh <gcp-project-id> [--meet]
 #
-#   --meet   meet-day sizing (7–10 Dec): 2 always-warm instances. Without it: 0 (scale to zero).
+#   (none)   normal sizing: CPU always on, production keeps 1 warm instance (staging scales to zero).
+#   --meet   meet sizing (6–10 Dec, ~4000 athletes): 6 warm instances, up to 60, 1 GiB each.
+#
+# Resize the running service without rebuilding (about a minute; use on the morning of 6 Dec
+# and again after the meet):
+#   ./deploy-cloudrun.sh <gcp-project-id> --resize-meet
+#   ./deploy-cloudrun.sh <gcp-project-id> --resize-normal
 #
 # First run only — store the secrets (values are read from your terminal, never from git):
 #   ./deploy-cloudrun.sh <gcp-project-id> --init-secrets
@@ -16,7 +22,7 @@
 # =============================================================================
 set -euo pipefail
 
-PROJECT="${1:?usage: ./deploy-cloudrun.sh <gcp-project-id> [--meet|--init-secrets]}"
+PROJECT="${1:?usage: ./deploy-cloudrun.sh <gcp-project-id> [--meet|--resize-meet|--resize-normal|--init-secrets]}"
 MODE="${2:-}"
 REGION="asia-south1"          # Mumbai — same region as Supabase
 SERVICE="aura-api"
@@ -51,8 +57,30 @@ if [[ "$MODE" == "--init-secrets" ]]; then
   exit 0
 fi
 
+# CPU is always allocated (instance-based billing) so send-and-forget pushes (heat status,
+# results, PED swap notices) always finish after the response. The every-minute
+# ped-alerts-tick keeps one instance up anyway (~₹150/day), which is within budget.
+# Meet sizing for ~4000 athletes: the apps poll standings ~30 s / results ~60 s, so ~250 req/s
+# at peak (bursts higher after results). One 1-vCPU Node instance at concurrency 80 serves well
+# over 100 req/s of these mostly-I/O requests; 6 warm instances absorb bursts with no cold start,
+# and up to 60 can start if needed.
 MIN_INSTANCES=0
-[[ "$MODE" == "--meet" ]] && MIN_INSTANCES=2
+[[ "${AURA_ENV:-production}" != "staging" ]] && MIN_INSTANCES=1
+MAX_INSTANCES=20
+MEMORY=512Mi
+if [[ "$MODE" == "--meet" || "$MODE" == "--resize-meet" ]]; then
+  MIN_INSTANCES=6
+  MAX_INSTANCES=60
+  MEMORY=1Gi
+fi
+SIZING=(--cpu 1 --memory "$MEMORY" --concurrency 80 --min-instances "$MIN_INSTANCES" --max-instances "$MAX_INSTANCES" --no-cpu-throttling --cpu-boost --timeout 60s)
+
+if [[ "$MODE" == "--resize-meet" || "$MODE" == "--resize-normal" ]]; then
+  gcloud run services update "$SERVICE" --region "$REGION" "${SIZING[@]}"
+  gcloud run services describe "$SERVICE" --region "$REGION" \
+    --format='value(spec.template.metadata.annotations,spec.template.spec.containers[0].resources.limits)' | tr ';' '\n' | grep -E 'Scale|throttling|memory|cpu'
+  exit 0
+fi
 
 cd "$(dirname "$0")"
 gcloud run deploy "$SERVICE" \
@@ -60,14 +88,7 @@ gcloud run deploy "$SERVICE" \
   --region "$REGION" \
   --allow-unauthenticated \
   --port 8080 \
-  --cpu 1 \
-  --memory 512Mi \
-  --concurrency 80 \
-  --min-instances "$MIN_INSTANCES" \
-  --max-instances 20 \
-  --no-cpu-throttling \
-  --cpu-boost \
-  --timeout 60s \
+  "${SIZING[@]}" \
   --set-env-vars "NODE_ENV=production,TRUST_PROXY=1" \
   --set-secrets "JWT_SECRET=JWT_SECRET$SUFFIX:latest,ATHLETE_QR_SECRET=ATHLETE_QR_SECRET$SUFFIX:latest,SUPABASE_URL=SUPABASE_URL$SUFFIX:latest,SUPABASE_SERVICE_ROLE_KEY=SUPABASE_SERVICE_ROLE_KEY$SUFFIX:latest,PED_CRON_SECRET=PED_CRON_SECRET$SUFFIX:latest"
 

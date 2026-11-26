@@ -120,13 +120,24 @@ cd backend && AURA_ENV=staging ./deploy-cloudrun.sh aura-2026-514120
 cd backend && ./deploy-cloudrun.sh aura-2026-514120
 ```
 
-**Meet days (7–10 Dec):** keep 2 instances always warm (costs more, so only for the meet):
+**Sizing (26 Nov, budget up to ₹30,000):** CPU is always on (`--no-cpu-throttling`) so
+send-and-forget pushes always finish. Normal: production keeps 1 warm instance (max 20, 512 MiB);
+staging scales to zero. ~₹150/day for production.
+
+**Meet days — morning of 6 Dec (PED swaps start) through 10 Dec**, sized for ~4000 athletes:
+6 warm instances, up to 60, 1 GiB each. Resize the running service (about a minute, no rebuild):
 
 ```bash
-cd backend && ./deploy-cloudrun.sh aura-2026-514120 --meet
+cd backend && ./deploy-cloudrun.sh aura-2026-514120 --resize-meet
 ```
 
-**After the meet**, run the normal production command again to scale back to zero.
+A code deploy during the meet must keep the meet sizing: `./deploy-cloudrun.sh aura-2026-514120 --meet`.
+
+**After the meet**: `./deploy-cloudrun.sh aura-2026-514120 --resize-normal`.
+
+**Database for the meet:** the production Supabase project runs the smallest compute (60
+connections, 224 MB cache). Before 6 Dec, raise it in Supabase → Project Settings → Compute and
+Disk (Medium or larger) and lower it again after 10 Dec.
 
 **First time only** (stores JWT / QR / Supabase secrets in Secret Manager, typed in the terminal):
 

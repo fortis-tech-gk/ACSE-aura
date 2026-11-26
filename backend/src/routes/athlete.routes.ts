@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import rateLimit from 'express-rate-limit';
 import { supabase } from '../config/supabase';
+import { getChampionshipStandings } from '../utils/standings-cache';
 import { signPhotoUrl } from '../utils/photo-links';
 import { authenticate, requireRole, generateToken, AuthenticatedRequest } from '../middleware/auth';
 import { makeAthleteQrToken, verifyAthleteQrToken } from '../utils/athlete-qr';
@@ -532,7 +533,7 @@ athleteRouter.get('/performance', authenticate, requireRole(['athlete']), async 
     let collegeStanding: any = null;
     let bestAthlete: { rank: number; waPoints: number; event: string | null } | null = null;
     try {
-      const { data: standings } = await supabase.rpc('get_championship_standings');
+      const standings = await getChampionshipStandings();
       const s: any = standings || {};
       const find = (list: any[]) => (list || []).find((r: any) => r.college_id === squad?.college_id) || null;
       const overall = find(s.combined);
