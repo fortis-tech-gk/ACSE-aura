@@ -526,7 +526,7 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 function StatusPill({ status }: { status: string }) {
   const map: Record<string, { bg: string; fg: string; text: string }> = {
     ACCREDITED: { bg: '#ecfdf5', fg: '#047857', text: 'Active' },
-    REGISTERED: { bg: '#f1f5f9', fg: '#475569', text: 'Awaiting check-in' },
+    REGISTERED: { bg: '#ecfdf5', fg: '#047857', text: 'Active' },
     WITHDRAWN: { bg: '#fef2f2', fg: '#b91c1c', text: 'Cancelled' },
   };
   const s = map[status] || map.REGISTERED;

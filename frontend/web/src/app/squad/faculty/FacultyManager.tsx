@@ -279,8 +279,8 @@ export default function FacultyManager({ delegates, canEdit, blockReason, colleg
       </section>
 
       <p style={{ marginTop: '1rem', fontSize: '0.8rem', color: '#64748b', maxWidth: '80ch' }}>
-        A pass starts working at the food counters once the college fee is verified <em>and</em> the college has checked in
-        at the accreditation desk. Each pass is good for one breakfast, lunch, snacks and dinner per day.
+        Every pass works from the moment it is issued — no fee and no check-in. It is scanned at the food counters (one
+        breakfast, lunch, snacks and dinner per day) and, if accommodation was asked for, at the hostel.
       </p>
 
       {(editing || adding) && (
@@ -516,8 +516,8 @@ function Kpi({ label, value, hint, tone }: { label: string; value: number; hint:
 
 function StatusPill({ status }: { status: string }) {
   const map: Record<string, { bg: string; fg: string; text: string }> = {
-    ACCREDITED: { bg: '#ecfdf5', fg: '#047857', text: 'Accredited' },
-    REGISTERED: { bg: '#f1f5f9', fg: '#475569', text: 'Awaiting check-in' },
+    ACCREDITED: { bg: '#ecfdf5', fg: '#047857', text: 'Active' },
+    REGISTERED: { bg: '#ecfdf5', fg: '#047857', text: 'Active' },
     WITHDRAWN: { bg: '#fef2f2', fg: '#b91c1c', text: 'Cancelled' },
   };
   const s = map[status] || map.REGISTERED;

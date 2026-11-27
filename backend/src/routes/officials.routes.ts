@@ -143,7 +143,7 @@ type RosterRow = {
 
 officialsRouter.get('/roster', async (_req: AuthenticatedRequest, res: Response) => {
   try {
-    const [rows, allocations, delegateRows, squadPayments] = await Promise.all([
+    const [rows, allocations, delegateRows] = await Promise.all([
       fetchAll<RosterRow>((from, to) =>
         supabase
           .from('profiles')
@@ -170,9 +170,6 @@ officialsRouter.get('/roster', async (_req: AuthenticatedRequest, res: Response)
           .order('id')
           .range(from, to) as any
       ),
-      fetchAll<{ college_id: string; payment_status: string }>((from, to) =>
-        supabase.from('squads').select('college_id, payment_status').order('id').range(from, to) as any
-      ),
     ]);
 
     const bySquad = new Map(allocations.map((a) => [a.squad_id, a]));
@@ -198,10 +195,6 @@ officialsRouter.get('/roster', async (_req: AuthenticatedRequest, res: Response)
       };
     });
 
-    // Colleges whose fee is verified on either squad (one payment per college)
-    const paidColleges = new Set(
-      squadPayments.filter((s) => s.payment_status === 'VERIFIED').map((s) => s.college_id)
-    );
     const delegates = delegateRows.map((d) => {
       const college = Array.isArray(d.colleges) ? (d.colleges as any)[0] : d.colleges;
       const role =
@@ -217,8 +210,9 @@ officialsRouter.get('/roster', async (_req: AuthenticatedRequest, res: Response)
         gender: null,
         collegeCode: college?.code ?? (d.organisation || 'AURA 2026'),
         collegeName: college?.name ?? (d.organisation || 'Meet organising committee'),
-        feesVerified: d.college_id ? paidColleges.has(d.college_id) : true,
-        accredited: d.accreditation_status === 'ACCREDITED',
+        // Passes are free and need no check-in: always clear to eat
+        feesVerified: true,
+        accredited: true,
         checkedIn: false,
         hostelId: null,
         hostelName: null,

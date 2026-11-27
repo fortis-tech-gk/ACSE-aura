@@ -342,7 +342,7 @@ function addInstructionsSheet(wb: Workbook, ctx: TemplateContext) {
     ctx.manualReturn
       ? '• The meet office prints the passes and hands them over at the accreditation desk.'
       : '• Print them from the portal: "Faculty & Officials" → Print passes.',
-    '• The pass works at the food counters as soon as the college fee is verified and the college has checked in at the accreditation desk. Meet officials are active as soon as the meet office enters them.',
+    '• Every pass is active from the moment it is issued: no fee and no check-in. The QR is scanned only at the food counters and, if accommodation was asked for, at the hostel.',
     '• Faculty and official passes are free of charge — nothing is added to the college fee.',
   ];
 

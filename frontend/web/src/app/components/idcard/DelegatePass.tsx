@@ -97,7 +97,7 @@ export default function DelegatePass({ delegate }: { delegate: PassDelegate }) {
               <div className="idc-qr-missing">QR unavailable</div>
             )}
           </div>
-          <div className="idc-qr-label">SCAN AT ENTRY &amp; FOOD COUNTER</div>
+          <div className="idc-qr-label">SCAN FOR MEALS{delegate.accommodation_required ? ' & STAY' : ''}</div>
 
           <div className="idc-bib" style={{ marginTop: '10px' }}>
             <div className="idc-bib-label">PASS NO</div>

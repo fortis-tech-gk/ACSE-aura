@@ -17,9 +17,12 @@
 -- officials app scanner and the API need no new QR grammar: the uuid simply
 -- belongs to delegates instead of profiles, and the RPCs below work out which.
 --   * scan_meal_coupon          — falls back to delegates, logs delegate_meal_logs
---   * process_accreditation_scan— a faculty pass checks in the whole college too
---   * check_in_college          — accredits the college's delegates as well
+--   * process_delegate_accommodation_checkin — hostel check-in for a pass that
+--                                 asked for a bed (the API calls it for a pass)
 --   * get_meal_stats            — counts athlete + delegate meals
+-- Passes are free and need no check-in: active from the moment they are issued
+-- until the meet office cancels one. The QR is used only at food and, when the
+-- holder asked for it, the hostel.
 -- Pass numbers are typeable like a bib (90001+), outside the athlete bib ranges
 -- (men 100-2000, women 2001+), so a damaged pass can be keyed in by hand.
 --
@@ -129,23 +132,14 @@ CREATE TRIGGER trg_delegates_cap
   FOR EACH ROW EXECUTE FUNCTION trg_delegate_cap();
 
 -- -----------------------------------------------------------------------------
--- 5. Accreditation: a delegate of a college that has already checked in is
---    accredited at once; a host official needs no check-in at all.
+-- 5. Every pass is active from the moment it is issued: no fee, no check-in.
+--    Only the meet office cancelling it (WITHDRAWN) stops it.
 -- -----------------------------------------------------------------------------
 CREATE OR REPLACE FUNCTION trg_delegate_auto_accredit()
 RETURNS TRIGGER LANGUAGE plpgsql AS $$
 BEGIN
-  IF NEW.accreditation_status = 'REGISTERED' THEN
-    IF NEW.college_id IS NULL THEN
-      NEW.accreditation_status := 'ACCREDITED';
-    ELSIF EXISTS (
-      SELECT 1 FROM squads s JOIN colleges c ON c.id = s.college_id
-      WHERE s.college_id = NEW.college_id AND s.payment_status = 'VERIFIED' AND c.attendance_marked_at IS NOT NULL
-    ) THEN
-      NEW.accreditation_status := 'ACCREDITED';
-    END IF;
-  END IF;
-  IF NEW.accreditation_status = 'ACCREDITED' THEN
+  IF NEW.accreditation_status <> 'WITHDRAWN' THEN
+    NEW.accreditation_status := 'ACCREDITED';
     NEW.accredited_at := COALESCE(NEW.accredited_at, timezone('utc'::text, now()));
   END IF;
   NEW.updated_at := timezone('utc'::text, now());
@@ -159,8 +153,8 @@ CREATE TRIGGER trg_delegates_auto_accredit
   FOR EACH ROW EXECUTE FUNCTION trg_delegate_auto_accredit();
 
 -- -----------------------------------------------------------------------------
--- 6. College check-in also accredits the college's faculty / PEDs
---    (same body as 0054 plus the delegates update and its count)
+-- 6. College check-in is for athletes only. (An earlier draft of this migration
+--    made it accredit passes too; this puts back the 0054 function unchanged.)
 -- -----------------------------------------------------------------------------
 CREATE OR REPLACE FUNCTION check_in_college(p_college_id UUID, p_marked_by TEXT)
 RETURNS JSONB
@@ -169,10 +163,8 @@ DECLARE
   r_college RECORD;
   v_already BOOLEAN;
   v_new INTEGER := 0;
-  v_new_delegates INTEGER := 0;
   v_men INTEGER;
   v_women INTEGER;
-  v_delegates INTEGER;
 BEGIN
   SELECT id, name, code, attendance_marked_at INTO r_college
   FROM colleges WHERE id = p_college_id
@@ -207,23 +199,10 @@ BEGIN
   )
   SELECT count(*) INTO v_new FROM upd;
 
-  -- Faculty / PEDs of the college get their meal pass the moment the college is present
-  WITH updd AS (
-    UPDATE delegates d
-    SET accreditation_status = 'ACCREDITED'
-    WHERE d.college_id = p_college_id
-      AND d.accreditation_status = 'REGISTERED'
-    RETURNING d.id
-  )
-  SELECT count(*) INTO v_new_delegates FROM updd;
-
   SELECT count(*) FILTER (WHERE s.gender = 'men'), count(*) FILTER (WHERE s.gender = 'women')
   INTO v_men, v_women
   FROM profiles p JOIN squads s ON s.id = p.squad_id
   WHERE s.college_id = p_college_id AND p.accreditation_status = 'ACCREDITED';
-
-  SELECT count(*) INTO v_delegates
-  FROM delegates d WHERE d.college_id = p_college_id AND d.accreditation_status = 'ACCREDITED';
 
   RETURN jsonb_build_object(
     'college_id', r_college.id,
@@ -231,14 +210,11 @@ BEGIN
     'college_code', r_college.code,
     'already_present', v_already,
     'newly_accredited', v_new,
-    'newly_accredited_delegates', v_new_delegates,
     'accredited_men', v_men,
-    'accredited_women', v_women,
-    'accredited_delegates', v_delegates
+    'accredited_women', v_women
   );
 END;
 $$;
-
 
 -- -----------------------------------------------------------------------------
 -- 7. Food counter: the same RPC serves athletes and delegates.
@@ -258,7 +234,6 @@ DECLARE
   r_athlete RECORD;
   r_del RECORD;
   r_existing_meal RECORD;
-  v_paid BOOLEAN;
   v_role TEXT;
   -- Never in the future; an offline scan keeps its own time
   v_at TIMESTAMPTZ := LEAST(COALESCE(p_scanned_at, now()), now());
@@ -321,29 +296,7 @@ BEGIN
       );
     END IF;
 
-    -- College faculty eat once their college has paid and reported at accreditation
-    IF r_del.college_id IS NOT NULL THEN
-      SELECT EXISTS (SELECT 1 FROM squads WHERE college_id = r_del.college_id AND payment_status = 'VERIFIED')
-      INTO v_paid;
-      IF NOT v_paid THEN
-        RETURN jsonb_build_object(
-          'success', false, 'status', 'NOT_PAID', 'meal_type', p_meal_type,
-          'subject_kind', 'delegate', 'role', v_role,
-          'athlete_name', r_del.full_name, 'bid_number', r_del.pass_no, 'pass_no', r_del.pass_no,
-          'college_name', r_del.college_name, 'college_code', r_del.college_code,
-          'message', 'NOT ELIGIBLE: the college''s registration fee is not verified yet. Send them to the meet office.'
-        );
-      END IF;
-      IF r_del.accreditation_status <> 'ACCREDITED' THEN
-        RETURN jsonb_build_object(
-          'success', false, 'status', 'NOT_ACCREDITED', 'meal_type', p_meal_type,
-          'subject_kind', 'delegate', 'role', v_role,
-          'athlete_name', r_del.full_name, 'bid_number', r_del.pass_no, 'pass_no', r_del.pass_no,
-          'college_name', r_del.college_name, 'college_code', r_del.college_code,
-          'message', 'NOT ELIGIBLE: the college has not checked in at the accreditation desk yet.'
-        );
-      END IF;
-    END IF;
+    -- No fee and no check-in for passes: issued and not cancelled is enough
 
     SELECT scanned_at INTO r_existing_meal
     FROM delegate_meal_logs
@@ -455,20 +408,15 @@ END;
 $$;
 
 -- -----------------------------------------------------------------------------
--- 8. Accreditation desk: a faculty pass checks the college in just like an
---    athlete card; a host official's pass just confirms the official.
+-- 8a. Passes are not used at the accreditation desk. (An earlier draft of this
+--     migration let a pass check a college in; this puts back the 0055 function.)
 -- -----------------------------------------------------------------------------
-CREATE OR REPLACE FUNCTION process_accreditation_scan(
-  p_client_uuid UUID,
-  p_profile_id UUID,
-  p_volunteer_id UUID,
-  p_device_timestamp TIMESTAMPTZ DEFAULT NULL
-)
-RETURNS JSONB
-LANGUAGE plpgsql AS $$
+CREATE OR REPLACE FUNCTION public.process_accreditation_scan(p_client_uuid uuid, p_profile_id uuid, p_volunteer_id uuid, p_device_timestamp timestamp with time zone DEFAULT NULL::timestamp with time zone)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+AS $function$
 DECLARE
   r_profile RECORD;
-  r_del RECORD;
   v_scan_exists BOOLEAN := FALSE;
   v_by TEXT;
   v_college JSONB;
@@ -482,50 +430,8 @@ BEGIN
   JOIN colleges c ON s.college_id = c.id
   WHERE p.id = p_profile_id;
 
-  -- A faculty / PED / official pass was scanned instead of an athlete card
   IF NOT FOUND THEN
-    SELECT d.id, d.full_name, d.pass_no, d.category, d.designation, d.college_id,
-           d.accreditation_status, c.name AS college_name, c.code AS college_code
-    INTO r_del
-    FROM delegates d LEFT JOIN colleges c ON c.id = d.college_id
-    WHERE d.id = p_profile_id;
-
-    IF NOT FOUND THEN
-      RAISE EXCEPTION 'Athlete profile not found.';
-    END IF;
-    IF r_del.accreditation_status = 'WITHDRAWN' THEN
-      RAISE EXCEPTION 'This pass has been cancelled by the meet office.';
-    END IF;
-
-    SELECT display_name INTO v_by FROM staff WHERE id = p_volunteer_id;
-
-    IF r_del.college_id IS NOT NULL THEN
-      v_college := check_in_college(r_del.college_id, COALESCE(v_by, 'Accreditation desk'));
-    ELSE
-      UPDATE delegates SET accreditation_status = 'ACCREDITED' WHERE id = r_del.id;
-      v_college := jsonb_build_object('already_present', true, 'newly_accredited', 0);
-    END IF;
-
-    RETURN v_college || jsonb_build_object(
-      'success', true,
-      'subject_kind', 'delegate',
-      'is_duplicate_sync', false,
-      'already_accredited', COALESCE((v_college->>'already_present')::boolean, false),
-      'athlete_id', r_del.id,
-      'sslc_name', r_del.full_name,
-      'usn', NULL,
-      'bid_number', r_del.pass_no,
-      'pass_no', r_del.pass_no,
-      'role', CASE r_del.category
-                WHEN 'PED' THEN 'Physical Education Director'
-                WHEN 'FACULTY' THEN COALESCE(NULLIF(r_del.designation, ''), 'Faculty')
-                ELSE COALESCE(NULLIF(r_del.designation, ''), 'Meet official')
-              END,
-      'college_name', COALESCE(r_del.college_name, 'Meet organising committee'),
-      'squad_code', '',
-      'events', '[]'::jsonb,
-      'status', 'ACCREDITED'
-    );
+    RAISE EXCEPTION 'Athlete profile not found.';
   END IF;
 
   SELECT TRUE INTO v_scan_exists FROM accreditation_scans WHERE client_scan_uuid = p_client_uuid;
@@ -562,6 +468,126 @@ BEGIN
     'squad_code', r_profile.squad_code,
     'events', COALESCE(v_events, '[]'::jsonb),
     'status', 'ACCREDITED'
+  );
+END;
+$function$;
+
+-- -----------------------------------------------------------------------------
+-- 8b. Accommodation: a pass whose holder asked for a bed checks in at the hostel
+--    with the same scan as an athlete. Passes are not tied to a squad's hostel
+--    allotment, so the warden picks the hostel in the app.
+-- -----------------------------------------------------------------------------
+ALTER TABLE delegates ADD COLUMN IF NOT EXISTS accommodation_checked_in BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE delegates ADD COLUMN IF NOT EXISTS accommodation_checked_in_at TIMESTAMPTZ;
+
+CREATE TABLE IF NOT EXISTS delegate_accommodation_scans (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  client_scan_uuid UUID UNIQUE NOT NULL,
+  delegate_id UUID NOT NULL REFERENCES delegates(id) ON DELETE CASCADE,
+  hostel_id UUID NOT NULL REFERENCES hostels(id) ON DELETE CASCADE,
+  scanned_by UUID REFERENCES staff(id) ON DELETE SET NULL,
+  room_assigned TEXT NOT NULL DEFAULT 'General Dorm',
+  device_timestamp TIMESTAMPTZ,
+  synced_at TIMESTAMPTZ NOT NULL DEFAULT timezone('utc'::text, now())
+);
+CREATE INDEX IF NOT EXISTS idx_delegate_stay_hostel ON delegate_accommodation_scans (hostel_id);
+
+CREATE OR REPLACE FUNCTION process_delegate_accommodation_checkin(
+  p_client_uuid UUID,
+  p_delegate_id UUID,
+  p_hostel_id UUID,
+  p_warden_id UUID,
+  p_room_assigned TEXT DEFAULT 'General Dorm',
+  p_device_timestamp TIMESTAMPTZ DEFAULT NULL
+)
+RETURNS JSONB
+LANGUAGE plpgsql AS $$
+DECLARE
+  r_del RECORD;
+  r_hostel RECORD;
+  r_prev RECORD;
+  v_role TEXT;
+  v_college TEXT;
+BEGIN
+  SELECT d.id, d.full_name, d.pass_no, d.category, d.designation, d.gender, d.organisation,
+         d.accommodation_required, d.accommodation_checked_in, d.accommodation_checked_in_at,
+         d.accreditation_status, c.name AS college_name
+  INTO r_del
+  FROM delegates d LEFT JOIN colleges c ON c.id = d.college_id
+  WHERE d.id = p_delegate_id;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'Pass not found.';
+  END IF;
+
+  v_role := CASE r_del.category WHEN 'PED' THEN 'Physical Education Director'
+                                ELSE COALESCE(NULLIF(r_del.designation, ''), initcap(r_del.category)) END;
+  v_college := COALESCE(r_del.college_name, NULLIF(r_del.organisation, ''), 'AURA 2026 Organising Committee');
+
+  -- Same scan re-sent (offline sync retry)
+  SELECT a.room_assigned, h.id AS hostel_id, h.name AS hostel_name
+  INTO r_prev
+  FROM delegate_accommodation_scans a JOIN hostels h ON h.id = a.hostel_id
+  WHERE a.client_scan_uuid = p_client_uuid;
+  IF FOUND THEN
+    RETURN jsonb_build_object(
+      'success', true, 'is_duplicate_sync', true, 'already_checked_in', false, 'subject_kind', 'delegate',
+      'athlete_id', r_del.id, 'sslc_name', COALESCE(r_del.full_name, v_role), 'usn', v_role,
+      'bid_number', r_del.pass_no, 'pass_no', r_del.pass_no, 'college_name', v_college, 'squad_code', '',
+      'hostel_id', r_prev.hostel_id, 'hostel_name', r_prev.hostel_name, 'room_assigned', r_prev.room_assigned
+    );
+  END IF;
+
+  IF r_del.accreditation_status = 'WITHDRAWN' THEN
+    RAISE EXCEPTION 'This pass has been cancelled by the meet office.';
+  END IF;
+  IF NOT r_del.accommodation_required THEN
+    RAISE EXCEPTION 'Pass % was issued without accommodation. Send them to the meet office.', r_del.pass_no;
+  END IF;
+
+  -- Already checked in: report where, add nothing
+  IF r_del.accommodation_checked_in THEN
+    SELECT a.room_assigned, h.id AS hostel_id, h.name AS hostel_name
+    INTO r_prev
+    FROM delegate_accommodation_scans a JOIN hostels h ON h.id = a.hostel_id
+    WHERE a.delegate_id = p_delegate_id
+    ORDER BY a.synced_at ASC LIMIT 1;
+    RETURN jsonb_build_object(
+      'success', true, 'is_duplicate_sync', false, 'already_checked_in', true, 'subject_kind', 'delegate',
+      'checked_in_at', r_del.accommodation_checked_in_at,
+      'athlete_id', r_del.id, 'sslc_name', COALESCE(r_del.full_name, v_role), 'usn', v_role,
+      'bid_number', r_del.pass_no, 'pass_no', r_del.pass_no, 'college_name', v_college, 'squad_code', '',
+      'hostel_id', r_prev.hostel_id, 'hostel_name', r_prev.hostel_name, 'room_assigned', r_prev.room_assigned
+    );
+  END IF;
+
+  SELECT id, name, gender, total_capacity INTO r_hostel FROM hostels WHERE id = p_hostel_id;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'Pick the hostel in the app and scan again.';
+  END IF;
+  -- Gender is optional on a pass: check it only when it is known
+  IF (r_del.gender = 'MALE' AND LOWER(r_hostel.gender) = 'women')
+     OR (r_del.gender = 'FEMALE' AND LOWER(r_hostel.gender) = 'men') THEN
+    RAISE EXCEPTION 'Gender mismatch: % is a % hostel.', r_hostel.name, LOWER(r_hostel.gender);
+  END IF;
+
+  UPDATE delegates
+  SET accommodation_checked_in = TRUE,
+      accommodation_checked_in_at = COALESCE(accommodation_checked_in_at, COALESCE(p_device_timestamp, now()))
+  WHERE id = p_delegate_id;
+
+  INSERT INTO delegate_accommodation_scans (client_scan_uuid, delegate_id, hostel_id, scanned_by, room_assigned, device_timestamp)
+  VALUES (p_client_uuid, p_delegate_id, p_hostel_id, p_warden_id,
+          COALESCE(NULLIF(p_room_assigned, ''), 'General Dorm'),
+          COALESCE(p_device_timestamp, timezone('utc'::text, now())));
+
+  RETURN jsonb_build_object(
+    'success', true, 'is_duplicate_sync', false, 'already_checked_in', false, 'subject_kind', 'delegate',
+    'athlete_id', r_del.id, 'sslc_name', COALESCE(r_del.full_name, v_role), 'usn', v_role,
+    'bid_number', r_del.pass_no, 'pass_no', r_del.pass_no, 'college_name', v_college, 'squad_code', '',
+    'hostel_id', r_hostel.id, 'hostel_name', r_hostel.name,
+    'room_assigned', COALESCE(NULLIF(p_room_assigned, ''), 'General Dorm'),
+    'caution_deposit', 0, 'caution_receipt_no', '',
+    'total_capacity', r_hostel.total_capacity
   );
 END;
 $$;
@@ -617,21 +643,24 @@ $$;
 -- -----------------------------------------------------------------------------
 ALTER TABLE delegates ENABLE ROW LEVEL SECURITY;
 ALTER TABLE delegate_meal_logs ENABLE ROW LEVEL SECURITY;
+ALTER TABLE delegate_accommodation_scans ENABLE ROW LEVEL SECURITY;
 
 DO $$
 BEGIN
   IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'service_role') THEN
-    GRANT ALL ON delegates, delegate_meal_logs TO service_role;
+    GRANT ALL ON delegates, delegate_meal_logs, delegate_accommodation_scans TO service_role;
     GRANT ALL ON SEQUENCE delegate_pass_no_seq TO service_role;
   END IF;
   REVOKE EXECUTE ON FUNCTION scan_meal_coupon(TEXT, UUID, TEXT, UUID, TIMESTAMPTZ) FROM PUBLIC;
   REVOKE EXECUTE ON FUNCTION process_accreditation_scan(UUID, UUID, UUID, TIMESTAMPTZ) FROM PUBLIC;
   REVOKE EXECUTE ON FUNCTION get_meal_stats(DATE) FROM PUBLIC;
+  REVOKE EXECUTE ON FUNCTION process_delegate_accommodation_checkin(UUID, UUID, UUID, UUID, TEXT, TIMESTAMPTZ) FROM PUBLIC;
   REVOKE EXECUTE ON FUNCTION check_in_college(UUID, TEXT) FROM PUBLIC;
   IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'service_role') THEN
     GRANT EXECUTE ON FUNCTION scan_meal_coupon(TEXT, UUID, TEXT, UUID, TIMESTAMPTZ) TO service_role;
     GRANT EXECUTE ON FUNCTION process_accreditation_scan(UUID, UUID, UUID, TIMESTAMPTZ) TO service_role;
     GRANT EXECUTE ON FUNCTION get_meal_stats(DATE) TO service_role;
+    GRANT EXECUTE ON FUNCTION process_delegate_accommodation_checkin(UUID, UUID, UUID, UUID, TEXT, TIMESTAMPTZ) TO service_role;
     GRANT EXECUTE ON FUNCTION check_in_college(UUID, TEXT) TO service_role;
   END IF;
 END $$;

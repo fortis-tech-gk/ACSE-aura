@@ -67,6 +67,22 @@ accommodationRouter.post('/checkin', async (req: AuthenticatedRequest, res: Resp
     const who = await resolveAthlete(req.body);
     if (!who.ok) return res.status(who.status).json({ error: who.error });
 
+    // A faculty / PED / official pass (migration 0057): free, no college check-in, and not
+    // tied to a squad's hostel allotment — the warden picks the hostel in the app.
+    const { data: pass } = await supabase.from('delegates').select('id').eq('id', who.athleteId).maybeSingle();
+    if (pass) {
+      const { data, error } = await supabase.rpc('process_delegate_accommodation_checkin', {
+        p_client_uuid: clientScanUuid,
+        p_delegate_id: who.athleteId,
+        p_hostel_id: hostelId ?? null,
+        p_warden_id: req.user!.entityId,
+        p_room_assigned: roomAssigned || 'General Dorm',
+        p_device_timestamp: deviceTimestamp || new Date().toISOString(),
+      });
+      if (error) return sendDbError(res, error);
+      return res.json({ success: true, result: data, collegeCheckedIn: true });
+    }
+
     let roomRange: string | null = null;
     if (!hostelId) {
       const { data: prof } = await supabase
