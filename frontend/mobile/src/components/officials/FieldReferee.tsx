@@ -1,9 +1,9 @@
 import React, { useMemo, useState } from 'react';
-import { StyleSheet, Text, TextInput, View } from 'react-native';
+import { Platform, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useOfficialSession } from '@/lib/officials/session';
 import { useHeat } from '@/lib/officials/useHeat';
 import { confirm, notify } from '@/lib/officials/confirm';
-import { parseMetres } from '@/lib/officials/heats';
+import { needsWind, parseMetres, parseWind } from '@/lib/officials/heats';
 import { HeatHeader } from './HeatHeader';
 import { afterFinalize } from './finalize';
 import { entryName, entrySub, type EntryPerson } from './entry';
@@ -32,7 +32,9 @@ export function FieldReferee({ heatId, startAt }: { heatId: string; startAt?: st
   const { data, offline, savedAt, error, reload, pending } = useHeat<HeatData>(heatId, `/field/heats/${heatId}`, 20000);
   const [sel, setSel] = useState<{ id: string; round: number } | null>(null);
   const [mark, setMark] = useState('');
+  const [wind, setWind] = useState('');
   const [busy, setBusy] = useState(false);
+  const withWind = needsWind(data?.heat.events.code);
 
   // Strict call room: once it has closed, anyone who did not report is out (DNS) and locked
   const entries = useMemo(() => data?.athletes || [], [data]);
@@ -98,6 +100,7 @@ export function FieldReferee({ heatId, startAt }: { heatId: string; startAt?: st
     setSel({ id, round });
     const a = attempts.get(id)?.get(round);
     setMark(a?.attempt_type === 'VALID' && a.mark_meters != null ? Number(a.mark_meters).toFixed(2) : '');
+    setWind(a?.wind_reading != null ? `${Number(a.wind_reading) > 0 ? '+' : ''}${Number(a.wind_reading).toFixed(1)}` : '');
   }
 
   /** After saving, jump to the next athlete in the order for the same round */
@@ -121,15 +124,20 @@ export function FieldReferee({ heatId, startAt }: { heatId: string; startAt?: st
       m = parseMetres(mark);
       if (m == null) return notify('Check the mark', 'Type the distance in metres, like 7.42');
     }
+    // Wind only for a measured jump in LJ / TJ (fouls and passes have none)
+    const w = withWind && type === 'VALID' ? parseWind(wind) : null;
+    if (w === undefined) return notify('Check the wind', 'Type the wind in m/s as the gauge shows it, like +1.2 or -0.4');
+    const windText = w != null ? ` (${w > 0 ? '+' : ''}${w.toFixed(1)})` : '';
     const r = await submitOp({
       path: '/field/attempt',
       heatId,
-      label: `${entryName(e)} R${sel.round}: ${type === 'VALID' ? `${m!.toFixed(2)} m` : type === 'FOUL' ? 'foul' : 'pass'}`,
-      body: { heatAthleteId: e.id, roundNumber: sel.round, attemptType: type, markMeters: m },
+      label: `${entryName(e)} R${sel.round}: ${type === 'VALID' ? `${m!.toFixed(2)} m${windText}` : type === 'FOUL' ? 'foul' : 'pass'}`,
+      body: { heatAthleteId: e.id, roundNumber: sel.round, attemptType: type, markMeters: m, windReading: w },
     });
     if (r.status === 'rejected') return notify('Not saved', r.message);
     if (r.status === 'ok') reload();
     setMark('');
+    setWind('');
     next(e.id, sel.round);
   }
 
@@ -176,6 +184,18 @@ export function FieldReferee({ heatId, startAt }: { heatId: string; startAt?: st
               accessibilityLabel="Mark in metres"
               onSubmitEditing={() => record('VALID')}
             />
+            {withWind && (
+              <TextInput
+                value={wind}
+                onChangeText={(t) => setWind(t.replace(/[^0-9.,+-]/g, '').slice(0, 5))}
+                placeholder="Wind"
+                placeholderTextColor="#94a3b8"
+                keyboardType={Platform.OS === 'ios' ? 'numbers-and-punctuation' : 'numeric'}
+                style={[s.input, { width: 110, fontSize: 22 }]}
+                accessibilityLabel="Wind in metres per second, for example plus 1.2"
+                onSubmitEditing={() => record('VALID')}
+              />
+            )}
           </View>
           <View style={s.edRow}>
             <Button title="✓ Save mark" onPress={() => record('VALID')} style={{ flex: 2 }} />

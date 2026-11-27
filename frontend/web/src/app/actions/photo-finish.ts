@@ -89,7 +89,7 @@ export async function saveManualHeatAction(
     .eq('event_id', eventId);
   const later = (allHeats || []).filter((h: any) => rank(h.stage) > rank(stage));
   if (later.length && !existing) return { success: false, error: `${(ev as any).name} already has a later round, so no heat can be added to an earlier round.` };
-  if (stage === 'FINAL' && hn > 1) return { success: false, error: 'A sprint, hurdles or relay final is one race: use heat number 1.' };
+  if (stage === 'FINAL' && hn > 1) return { success: false, error: 'A final is one race: use heat number 1.' };
   const earlierStages = [...new Set((allHeats || []).filter((h: any) => rank(h.stage) < rank(stage)).map((h: any) => h.stage as string))];
   const prevStage = earlierStages.sort((a, b) => rank(b) - rank(a))[0];
   const prevHeats = (allHeats || []).filter((h: any) => h.stage === prevStage);
@@ -284,7 +284,7 @@ export async function saveHeatTimesAction(heatId: string, rows: TimeRow[]): Prom
     .eq('id', heatId)
     .maybeSingle();
   if (!heat) return { success: false, error: 'Heat not found.' };
-  if (!isHeatEvent(one<any>((heat as any).events)?.code)) return { success: false, error: 'Times are entered here only for 100m, 200m, 400m, hurdles and relays.' };
+  if (!isHeatEvent(one<any>((heat as any).events)?.code)) return { success: false, error: 'Times are entered here only for 100m, 200m, 400m, 800m, 1500m, hurdles and relays.' };
   if (DONE.includes((heat as any).status)) return { success: false, error: 'This heat is finalized. Reopen it from Results & Corrections to change a time.' };
   if (['SCHEDULED', 'DELAYED', 'CALL_ROOM'].includes((heat as any).status)) return { success: false, error: "The call room for this heat isn't closed yet." };
 

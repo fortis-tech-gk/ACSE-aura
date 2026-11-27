@@ -101,7 +101,10 @@ accommodationRouter.post('/checkin', async (req: AuthenticatedRequest, res: Resp
     });
 
     if (error) return sendDbError(res, error);
-    return res.json({ success: true, result: data });
+    // Allowed, but the warden is warned when the athlete's college has not checked in at the
+    // accreditation desk yet (decision after the 27-11-2026 rehearsal)
+    const { data: acc } = await supabase.from('profiles').select('accreditation_status').eq('id', who.athleteId).maybeSingle();
+    return res.json({ success: true, result: data, collegeCheckedIn: acc?.accreditation_status === 'ACCREDITED' });
   } catch (err: any) {
     return res.status(500).json({ error: err.message });
   }

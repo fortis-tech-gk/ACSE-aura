@@ -11,6 +11,7 @@ import { entryName, type EntryPerson } from './entry';
 import { Cell, POSITION_WORD, PrintSheetButton, SheetGrid, SheetInfo, SheetNote, SheetRow, SheetTitle, type Col } from './ScoreSheet';
 import { Button, Card, Muted, OfflineBanner, colors } from '@/components/ui';
 import { CallRoomGate, callRoomClosed, canEnterResults, notifyCallRoomOpen } from './CallRoomGate';
+import { useOfficialsLayout } from '@/lib/officials/layout';
 
 type Result = { time_seconds: number | null; status: 'FINISHED' | 'DNF' | 'DQ' | 'DNS'; dq_rule: string | null };
 type Entry = EntryPerson & {
@@ -76,6 +77,9 @@ export function TrackReferee({ heatId, startAt }: { heatId: string; startAt?: st
 
   const [drafts, setDrafts] = useState<Record<string, Draft>>({});
   const [busy, setBusy] = useState(false);
+  // On a phone the sheet scrolls sideways: with the time column in view, bib, name and the save state
+  // are off-screen. Repeat them under each time box (rehearsal 27-11-2026).
+  const narrow = useOfficialsLayout().width < 900;
 
   const valueOf = (id: string): Draft =>
     locked(id) ? { time: '', status: 'DNS', dq: '' } : drafts[id] ?? saved.get(id) ?? { time: '', status: 'FINISHED', dq: '' };
@@ -202,7 +206,7 @@ export function TrackReferee({ heatId, startAt }: { heatId: string; startAt?: st
     .filter((r) => r.v)
     .sort((a, b) => (a.place ?? 99) - (b.place ?? 99) || a.e.lane_number - b.e.lane_number);
 
-  const W = { lane: 54, bib: 64, name: 210, unit: 80, status: 220, perf: 120, rem: 180, save: 112 };
+  const W = { lane: 54, bib: 64, name: 210, unit: 80, status: 220, perf: narrow ? 170 : 120, rem: 180, save: 112 };
   const entryCols: Col[] = [
     { key: 'lane', title: lanes ? 'LANE No.' : 'ORDER', width: W.lane },
     { key: 'bib', title: 'BIB No.', width: W.bib },
@@ -314,6 +318,12 @@ export function TrackReferee({ heatId, startAt }: { heatId: string; startAt?: st
                 ) : (
                   <Text style={s.cellStatus}>{locked(e.id) ? notReported.get(e.id) : v.status}</Text>
                 )}
+                {narrow && (
+                  <Text style={[s.cellWho, { color: dirty && v.status === 'FINISHED' && v.time && parseTime(v.time) == null ? colors.red : dirty || waiting ? colors.amber : colors.muted }]} numberOfLines={1}>
+                    {bibOf(e)} · {entryName(e)}
+                    {done ? '' : dirty && v.status === 'FINISHED' && v.time && parseTime(v.time) == null ? ' · check time' : dirty ? ' · not saved yet' : waiting ? ' · queued' : saved.has(e.id) ? ' · saved ✓' : ''}
+                  </Text>
+                )}
               </Cell>
               <Cell width={W.rem}>
                 {v.status === 'DQ' ? (
@@ -387,6 +397,7 @@ const s = StyleSheet.create({
   stOn: { borderColor: colors.blue, backgroundColor: colors.blueSoft },
   stText: { fontSize: 11, fontWeight: '800', color: colors.muted },
   stTextOn: { color: colors.blue },
+  cellWho: { fontSize: 11, fontWeight: '700', textAlign: 'center', marginTop: 2 },
   cellInput: { minHeight: 36, fontSize: 18, fontWeight: '800', color: colors.text, textAlign: 'center', paddingVertical: 2, backgroundColor: '#fffbea' },
   cellStatus: { fontSize: 15, fontWeight: '900', color: colors.red, textAlign: 'center' },
   cellRemark: { fontSize: 13, fontWeight: '800', color: colors.blue, textAlign: 'center' },

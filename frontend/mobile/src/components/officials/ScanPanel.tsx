@@ -33,6 +33,10 @@ export function ScanPanel({
   const [result, setResult] = useState<Outcome | null>(null);
   const [busy, setBusy] = useState(false);
   const [bib, setBib] = useState('');
+  // Typing a bib: shrink the camera so the box and Check stay above the keyboard, and show the
+  // answer right under the box (the big card can be off-screen / under the keyboard; rehearsal 27-11-2026)
+  const [typing, setTyping] = useState(false);
+  const [fromBib, setFromBib] = useState(false);
   const lastCode = useRef<{ data: string; at: number } | null>(null);
   const busyRef = useRef(false);
   const clearTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -72,6 +76,7 @@ export function ScanPanel({
       const prev = lastCode.current;
       if (prev && prev.data === data && Date.now() - prev.at < SAME_CARD_COOLDOWN_MS) return;
       lastCode.current = { data, at: Date.now() };
+      setFromBib(false);
       run({ qrToken: data });
     },
     [result, run]
@@ -82,12 +87,13 @@ export function ScanPanel({
     if (!/^\d{1,5}$/.test(b)) return;
     setBib('');
     lastCode.current = null;
+    setFromBib(true);
     run({ bib: b });
   }
 
   return (
     <View style={{ gap: 12 }}>
-      <View style={[s.cameraBox, { height: cameraHeight }]}>
+      <View style={[s.cameraBox, { height: typing ? Math.min(cameraHeight, 150) : cameraHeight }]}>
         {!permission ? null : !permission.granted ? (
           <View style={s.permission}>
             <Text style={s.permissionText}>Camera access is needed to scan ID cards.</Text>
@@ -110,7 +116,7 @@ export function ScanPanel({
           </>
         )}
 
-        {result && <ResultCard result={result} onClose={close} large={large} />}
+        {result && !typing && <ResultCard result={result} onClose={close} large={large} />}
       </View>
 
       <View style={s.bibRow}>
@@ -122,12 +128,29 @@ export function ScanPanel({
           keyboardType="number-pad"
           returnKeyType="done"
           onSubmitEditing={submitBib}
+          onFocus={() => setTyping(true)}
+          onBlur={() => setTyping(false)}
           style={s.bibInput}
           accessibilityLabel="Bib number"
           maxLength={5}
         />
         <Button title="Check" onPress={submitBib} disabled={!bib || busy || !!result} style={{ minWidth: 96 }} />
       </View>
+      {result && (typing || fromBib) && (
+        <Pressable
+          onPress={close}
+          accessibilityRole="button"
+          accessibilityLabel={`${result.title}. ${result.athlete?.name || ''}. Tap to scan next.`}
+          style={[s.inline, { backgroundColor: TONE[result.tone].bg }]}
+        >
+          <Text style={s.inlineTitle} numberOfLines={1}>
+            {TONE[result.tone].icon} {result.title}
+            {result.athlete ? ` · ${result.athlete.name}${result.athlete.bib != null ? ` #${result.athlete.bib}` : ''}` : ''}
+          </Text>
+          {!!result.detail && <Text style={s.inlineDetail} numberOfLines={2}>{result.detail}</Text>}
+          <Text style={s.inlineDetail}>{result.tone === 'green' ? 'Next scan in a moment…' : 'Tap to scan the next card'}</Text>
+        </Pressable>
+      )}
     </View>
   );
 }
@@ -212,6 +235,9 @@ const s = StyleSheet.create({
   detail: { color: '#fff', fontSize: 16, fontWeight: '600', lineHeight: 22 },
   tapNext: { color: '#fff', opacity: 0.8, fontSize: 13, textAlign: 'center', marginTop: Platform.OS === 'web' ? 0 : 4 },
   bibRow: { flexDirection: 'row', gap: 10, alignItems: 'center' },
+  inline: { borderRadius: 14, paddingHorizontal: 14, paddingVertical: 10, gap: 2 },
+  inlineTitle: { color: '#fff', fontSize: 17, fontWeight: '900' },
+  inlineDetail: { color: '#f1f5f9', fontSize: 13, fontWeight: '600' },
   bibInput: { flex: 1, minWidth: 0, minHeight: 52, borderWidth: 1.5, borderColor: colors.border, borderRadius: 14, paddingHorizontal: 14, fontSize: 18, fontWeight: '800', backgroundColor: '#fffdf8', color: colors.text },
   pill: { flexDirection: 'row', alignItems: 'center', gap: 5, borderRadius: 999, paddingHorizontal: 11, paddingVertical: 7 },
   pillText: { fontSize: 13, fontWeight: '800' },

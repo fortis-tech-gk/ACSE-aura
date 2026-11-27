@@ -101,6 +101,7 @@ function SwapSheet({ event, onClose, onDone }: { event: PedEvent; onClose: () =>
               </View>
             ) : null}
             {error ? <Text style={s.error}>{error}</Text> : null}
+            {needsGiveUp && res && !giveUpEvent ? <Muted style={{ color: colors.amber }}>Choose the event to give up, then tap Swap in.</Muted> : null}
             <Button title="Swap in" variant="gold" onPress={save} loading={saving} disabled={!ready} />
             <Button title="Cancel" variant="ghost" onPress={onClose} />
           </ScrollView>

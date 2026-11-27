@@ -6,6 +6,7 @@ import { useHeat } from '@/lib/officials/useHeat';
 import { useOfficialsLayout } from '@/lib/officials/layout';
 import { athleteIdFromQr } from '@/lib/officials/scan-logic';
 import { confirm, notify } from '@/lib/officials/confirm';
+import { isHeatEvent } from '@/lib/officials/heats';
 import type { AthleteRef, OpPayload } from '@/lib/officials/types';
 import { ScanPanel } from './ScanPanel';
 import { Button, Card, Muted, OfflineBanner, Pill, colors, shadow } from '@/components/ui';
@@ -123,9 +124,11 @@ export function RollCall({ eventId, stage }: { eventId: string; stage: string })
 
   async function prepareHeats() {
     const lanes = data?.event.max_lanes || 8;
-    const heats = field ? 1 : Math.max(1, Math.ceil(counts.present / lanes));
+    // 5000m and up, road and walk races are one race whatever the number (as the server draws them)
+    const oneRace = !field && !isHeatEvent(data?.event.code);
+    const heats = field || oneRace ? 1 : Math.max(1, Math.ceil(counts.present / lanes));
     const msg = [
-      `${counts.present} present${field ? '' : ` → about ${heats} heat${heats === 1 ? '' : 's'}`}.`,
+      `${counts.present} present${field ? '' : oneRace ? ' → one race (straight final)' : ` → about ${heats} heat${heats === 1 ? '' : 's'}`}.`,
       counts.missing ? `${counts.missing} not reported will be DNS (did not start).` : 'Everyone on the list has reported.',
       'The heats go straight to the referee and cannot be redrawn here.',
     ].join(' ');

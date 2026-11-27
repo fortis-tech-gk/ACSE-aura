@@ -66,6 +66,24 @@ export function showTime(sec: number | null | undefined): string {
 }
 
 /** Distance or height typed in metres: "7.42" → 7.42 (0.01–120 m) */
+/**
+ * Wind in m/s as the gauge shows it: "+1.2", "-0.4", "1,2". Empty → null (no reading).
+ * Returns undefined for something that is not a wind reading.
+ */
+export function parseWind(input: string): number | null | undefined {
+  const s = input.trim().replace(',', '.').replace(/^\+/, '');
+  if (!s) return null;
+  if (!/^-?\d{1,2}(\.\d)?$/.test(s)) return undefined;
+  const v = Number(s);
+  return Math.abs(v) < 20 ? v : undefined;
+}
+
+/** Same rule as is_heat_event() in the database (0058): only these events are split into heats */
+export const isHeatEvent = (code: string | null | undefined) => /^(100M|200M|400M|800M|1500M|110H|100H|400H|4X)/i.test(String(code || ''));
+
+/** Long jump and triple jump: the wind of every trial is recorded (wind-legal marks, records) */
+export const needsWind = (code: string | null | undefined) => /^(LJ|TJ)-/i.test(String(code || ''));
+
 export function parseMetres(input: string): number | null {
   const v = Number(input.trim().replace(',', '.'));
   return Number.isFinite(v) && v > 0 && v < 120 ? Math.round(v * 100) / 100 : null;

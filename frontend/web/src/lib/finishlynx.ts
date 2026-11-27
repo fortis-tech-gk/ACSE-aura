@@ -17,7 +17,7 @@
 import { parseTime } from './result-marks';
 
 /** Same rule as is_heat_event() in the database: only these events have heats and rounds */
-export const isHeatEvent = (code: string | null | undefined) => /^(100M|200M|400M|110H|100H|400H|4X)/i.test(String(code || ''));
+export const isHeatEvent = (code: string | null | undefined) => /^(100M|200M|400M|800M|1500M|110H|100H|400H|4X)/i.test(String(code || ''));
 
 export const ROUND_NO: Record<string, number> = { QUALIFYING: 1, HEATS: 1, SEMI_FINAL: 2, FINAL: 3 };
 

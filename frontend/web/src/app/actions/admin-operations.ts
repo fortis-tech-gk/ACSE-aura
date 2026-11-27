@@ -10,6 +10,7 @@ import { normalizePaymentStatus, totalCredited } from '@/lib/payment-status';
 import { tryMakeAthleteQrToken } from '@/lib/athlete-qr';
 import { signAthletePhotos } from '@/lib/photo-links';
 import { OFFICIAL_UPI_ID, OFFICIAL_ACCOUNT_NAME } from '@/lib/payment-config';
+import { isHeatEvent } from '@/lib/finishlynx';
 import { VTU_DIVISIONS, collegeDivision } from '@/lib/college-regions';
 
 /** Athletes registered from one VTU division, split Men / Women. */
@@ -494,7 +495,7 @@ export async function verifySquadPaymentAction(
 }
 
 /**
- * 7. Draws every lane event (sprints, hurdles, relays) through the database draw
+ * 7. Draws every event that has heats (sprints, hurdles, relays, 800m, 1500m) through the database draw
  *    (generate_heat_draw): only accredited athletes of paid colleges, teammates in different
  *    heats, random lanes. An event that fits in one race is drawn straight as a FINAL; a
  *    bigger one gets HEATS. Events that are already under way are left alone.
@@ -516,11 +517,11 @@ export async function generateTrackHeatsAction(): Promise<{
   const { data: trackEvents, error: evErr } = await supabaseAdmin
     .from('events')
     .select('id, name, code, max_lanes, start_type, heats(status)')
-    .eq('start_type', 'lanes')
+    .in('start_type', ['lanes', 'waterfall', 'mass'])
     .order('code', { ascending: true });
 
   if (evErr || !trackEvents || trackEvents.length === 0) {
-    return { success: false, error: evErr?.message || 'No lane-based track events found.' };
+    return { success: false, error: evErr?.message || 'No track events with heats found.' };
   }
 
   let totalHeatsCreated = 0;
@@ -530,7 +531,8 @@ export async function generateTrackHeatsAction(): Promise<{
   const draw = async (eventId: string, stage: 'HEATS' | 'FINAL', lanes: number) =>
     supabaseAdmin.rpc('generate_heat_draw', { p_event_id: eventId, p_stage: stage, p_num_lanes: lanes });
 
-  for (const event of trackEvents as any[]) {
+  // 800m / 1500m have heats too (0058); 5000m and up stay one race and are drawn by their roll call
+  for (const event of (trackEvents as any[]).filter((e) => isHeatEvent(e.code))) {
     if ((event.heats || []).some((h: any) => h.status !== 'SCHEDULED')) {
       skipped.push(`${event.name}: already under way`);
       continue;

@@ -203,6 +203,13 @@ async function sendScan(q: QueuedScan, token: string, fallback: ScanAthlete | nu
           outcome: { tone: 'amber', title: 'Already checked in', detail: `${where}${x.checked_in_at ? ` · since ${fmtClock(x.checked_in_at)}` : ''}`, athlete },
         };
       }
+      if (r.collegeCheckedIn === false) {
+        return {
+          kind: 'done',
+          status: 'ok',
+          outcome: { tone: 'amber', title: 'Checked in — college not at accreditation yet', detail: `${where ? `${where} · ` : ''}Send the team manager to the accreditation desk.`, athlete },
+        };
+      }
       return { kind: 'done', status: 'ok', outcome: { tone: 'green', title: 'Checked in', detail: where, athlete } };
     }
 
@@ -453,6 +460,10 @@ export function OfficialSessionProvider({ children }: { children: React.ReactNod
         }
         const title = input.kind === 'meal' ? `${MEAL_LABEL[input.mealType as MealType]} — serve` : 'Checked in';
         const detail = input.kind === 'checkin' ? [known!.hostelName, input.room ? `Room ${input.room}` : known!.roomRange].filter(Boolean).join(' · ') : undefined;
+        // Hostel before the college checked in: allowed, with a warning
+        if (input.kind === 'checkin' && !known!.accredited) {
+          return { tone: 'amber', title: 'Checked in — college not at accreditation yet', detail: `${detail ? `${detail} · ` : ''}Send the team manager to the accreditation desk.`, athlete, offline: true };
+        }
         return { tone: 'green', title, detail, athlete, offline: true };
       }
 
@@ -526,6 +537,10 @@ export function OfficialSessionProvider({ children }: { children: React.ReactNod
 
   const submitOp = useCallback(
     async (op: OpPayload, opts: { queueable?: boolean; flushFirst?: boolean } = {}): Promise<OpResult> => {
+      // Never throws: every screen sets a "busy" spinner around this call and clears it when it
+      // returns, so an exception here (storage, a sync pass) would leave the button spinning for good
+      // (rehearsal 27-11-2026: Finish / Open call room stuck "busy" after an offline try).
+      try {
       const queueable = opts.queueable !== false;
       const t = tokenRef.current;
       // "Finish" must reach the server AFTER the results saved before it: send those first,
@@ -590,6 +605,9 @@ export function OfficialSessionProvider({ children }: { children: React.ReactNod
       await setQueue((q) => [...q, item]);
       if (waiting) syncNow();
       return { status: 'queued' };
+      } catch {
+        return { status: 'offline', message: 'Not saved: something went wrong on this device. Check the network and try again.' };
+      }
     },
     [sessionExpired, setQueue, syncNow, networkLooksDown, noteNetwork]
   );
@@ -679,6 +697,16 @@ export function OfficialSessionProvider({ children }: { children: React.ReactNod
     }, SCANNER_ROSTER_REFRESH_MS);
     return () => clearInterval(timer);
   }, [status, staff, refreshRoster, networkLooksDown]);
+
+  // Warden: the free beds shown on each hostel button were read once at login and never dropped
+  // (rehearsal 27-11-2026). Re-read them every minute (a handful of wardens, one small request each).
+  useEffect(() => {
+    if (status !== 'signedIn' || staff?.role !== 'warden') return;
+    const timer = setInterval(() => {
+      if (!networkLooksDown()) refreshHostels(staff.role);
+    }, 60 * 1000);
+    return () => clearInterval(timer);
+  }, [status, staff, refreshHostels, networkLooksDown]);
 
   // Keep sending saved scans; refresh the roster when the app comes back to the front
   useEffect(() => {
