@@ -19,6 +19,7 @@ export function SquadNav({ collegeName, collegeCode, gender }: SquadNavProps) {
   const navLinks = [
     { href: '/squad/dashboard', label: 'Contingent Overview', icon: '📊' },
     { href: '/squad/athletes', label: 'Athlete Roster & Events', icon: '🏃' },
+    { href: '/squad/faculty', label: 'Faculty & Officials', icon: '🎟️' },
     { href: '/squad/payment', label: 'Fee Settlement', icon: '💳' },
     { href: '/squad/certificate', label: 'Attendance Certificate', icon: '📜' },
   ];

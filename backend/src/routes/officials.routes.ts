@@ -8,6 +8,8 @@ import { fetchAll } from '../utils/fetch-all';
  * AURA Officials app support.
  * GET /api/officials/roster — every registered athlete, small enough to keep on the phone, so a
  * scanner can still show who the athlete is (name, college, bib, photo) with no network.
+ * Faculty, PEDs and meet officials with a meal pass (migration 0057) ride on the same list:
+ * their pass number stands in for the bib, so the food counter works offline for them too.
  */
 export const officialsRouter = Router();
 
@@ -115,6 +117,18 @@ officialsRouter.get(
   }
 );
 
+type DelegateRosterRow = {
+  id: string;
+  full_name: string;
+  pass_no: number;
+  category: string;
+  designation: string | null;
+  organisation: string | null;
+  college_id: string | null;
+  accreditation_status: string;
+  colleges: { code: string; name: string } | null;
+};
+
 type RosterRow = {
   id: string;
   sslc_name: string;
@@ -129,7 +143,7 @@ type RosterRow = {
 
 officialsRouter.get('/roster', async (_req: AuthenticatedRequest, res: Response) => {
   try {
-    const [rows, allocations] = await Promise.all([
+    const [rows, allocations, delegateRows, squadPayments] = await Promise.all([
       fetchAll<RosterRow>((from, to) =>
         supabase
           .from('profiles')
@@ -142,6 +156,22 @@ officialsRouter.get('/roster', async (_req: AuthenticatedRequest, res: Response)
       ),
       fetchAll<{ squad_id: string; hostel_id: string; room_range: string | null; hostels: { name: string } | null }>((from, to) =>
         supabase.from('hostel_allocations').select('squad_id, hostel_id, room_range, hostels ( name )').order('id').range(from, to) as any
+      ),
+      // Passes without meals stay off the list on purpose: the counter must ask the server,
+      // so a phone can never wave through someone the meet office issued "no meals" to.
+      fetchAll<DelegateRosterRow>((from, to) =>
+        supabase
+          .from('delegates')
+          .select(
+            'id, full_name, pass_no, category, designation, organisation, college_id, accreditation_status, colleges ( code, name )'
+          )
+          .eq('meals_included', true)
+          .neq('accreditation_status', 'WITHDRAWN')
+          .order('id')
+          .range(from, to) as any
+      ),
+      fetchAll<{ college_id: string; payment_status: string }>((from, to) =>
+        supabase.from('squads').select('college_id, payment_status').order('id').range(from, to) as any
       ),
     ]);
 
@@ -168,7 +198,44 @@ officialsRouter.get('/roster', async (_req: AuthenticatedRequest, res: Response)
       };
     });
 
-    return res.json({ generatedAt: new Date().toISOString(), count: athletes.length, athletes });
+    // Colleges whose fee is verified on either squad (one payment per college)
+    const paidColleges = new Set(
+      squadPayments.filter((s) => s.payment_status === 'VERIFIED').map((s) => s.college_id)
+    );
+    const delegates = delegateRows.map((d) => {
+      const college = Array.isArray(d.colleges) ? (d.colleges as any)[0] : d.colleges;
+      const role =
+        d.category === 'PED' ? 'Physical Education Director' : d.designation || (d.category === 'FACULTY' ? 'Faculty' : 'Meet official');
+      return {
+        id: d.id,
+        name: d.full_name,
+        // The app shows the USN line under the name: say what this person is instead
+        usn: role,
+        // The pass number is typeable at a counter exactly like a bib (90001+)
+        bib: d.pass_no,
+        photoUrl: null,
+        gender: null,
+        collegeCode: college?.code ?? (d.organisation || 'AURA 2026'),
+        collegeName: college?.name ?? (d.organisation || 'Meet organising committee'),
+        feesVerified: d.college_id ? paidColleges.has(d.college_id) : true,
+        accredited: d.accreditation_status === 'ACCREDITED',
+        checkedIn: false,
+        hostelId: null,
+        hostelName: null,
+        roomRange: null,
+        isDelegate: true,
+        role,
+      };
+    });
+
+    const all = [...athletes, ...delegates];
+    return res.json({
+      generatedAt: new Date().toISOString(),
+      count: all.length,
+      athleteCount: athletes.length,
+      delegateCount: delegates.length,
+      athletes: all,
+    });
   } catch (err: any) {
     return res.status(500).json({ error: err.message });
   }
