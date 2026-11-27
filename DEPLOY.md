@@ -188,6 +188,43 @@ gcloud scheduler jobs update http ped-alerts-tick --location asia-south1 --proje
 
 There is no staging job (the staging API only runs its in-process timer while an instance is up).
 
+### Logs and meet numbers (set up 27 Nov)
+
+**Every API request is one structured log line** (`backend/src/middleware/request-log.ts`): route
+(ids replaced by `:id`), status, time taken, role, a hash of the login (`device`), the offline scan
+id and meal for food scans, and `errorText` on a failure. Never bodies, tokens, names, PINs or phone
+numbers. Find a problem in **Logs Explorer** (project `aura-2026-514120`):
+
+```
+resource.labels.service_name="aura-api" AND severity=ERROR
+resource.labels.service_name="aura-api" AND jsonPayload.route="/api/catering/scan" AND jsonPayload.status>=400
+resource.labels.service_name="aura-api" AND jsonPayload.scanId="<scan id from the app's history>"
+```
+
+**Kept for good in BigQuery.** Cloud Logging keeps logs 30 days. The sink `aura-api-logs` copies
+every log line of `aura-api` and `aura-api-staging` into dataset `aura_logs` (Mumbai):
+`run_googleapis_com_requests` (Cloud Run's record of every request) and `run_googleapis_com_stdout`
+(our lines). Each API start writes one `type = 'schema'` line with every field, so BigQuery has all
+columns before real traffic (a line that brings a new column can otherwise be held back or lost).
+
+**Alert:** policy "AURA API (production): server errors" e-mails the project owner account when
+production returns more than 10 server errors (5xx) in 5 minutes.
+
+**The numbers after the meet:**
+
+```bash
+psql "$PROD_DB" -X -f scripts/reports/meet_numbers.sql
+```
+
+```bash
+bq --project_id=aura-2026-514120 query --use_legacy_sql=false < scripts/reports/meet_traffic.bq.sql
+```
+
+The first is the database (athletes, colleges, fees, heats, results, meals per day and per minute,
+hostel, passes). The second is traffic (requests per day, peak and average per minute, busiest
+minutes, latency p50/p95, busiest routes, roles and devices, every server error, good-minute %).
+Also save a copy of the production database after the meet (`pg_dump`) before it is resized or reset.
+
 ---
 
 ## 3. Website (Vercel)
@@ -354,3 +391,6 @@ triggers, indexes, constraints, policies, grants) — they must have 0 differenc
 | 2026-11-27 | API | staging | `3ed6852` | revision `aura-api-staging-00022-dtv`; pass in roster + typed pass number served once, refused twice |
 | 2026-11-27 | API | production | `3ed6852` | revision `aura-api-00029-r4z`, normal sizing (min 1 / max 20 / 512 MiB); health 200 |
 | 2026-11-27 | Website | staging + production | `3ed6852` | passes: `/admin/officials`, `/squad/faculty` (PED Passes), template download |
+| 2026-11-27 | API | staging | request logs | revision `aura-api-staging-00025-4ng`; failed food scan found in BigQuery by its scan id |
+| 2026-11-27 | API | production | request logs | revision `aura-api-00030-kxn`, normal sizing; lines reach BigQuery in ~10 s |
+| 2026-11-27 | Logging | project | sink + alert | sink `aura-api-logs` → BigQuery `aura_logs`; alert "AURA API (production): server errors" (>10 5xx / 5 min) |

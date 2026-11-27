@@ -7,6 +7,7 @@ import rateLimit, { ipKeyGenerator } from 'express-rate-limit';
 import dotenv from 'dotenv';
 import { supabase } from './config/supabase';
 import { peekUser } from './middleware/auth';
+import { requestLog, logFatal, logSchemaWarmup } from './middleware/request-log';
 import { authRouter } from './routes/auth.routes';
 import { squadRouter } from './routes/squad.routes';
 import { adminRouter } from './routes/admin.routes';
@@ -57,6 +58,10 @@ app.use(cors({
 app.use(compression()); // gzip JSON — the officials roster is ~1 MB raw
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+
+// One structured log line per request (meet-day debugging + traffic numbers). After the body
+// parsers so it can pick up an offline scan's id; before the limiters so a 429 is logged too.
+app.use(requestLog);
 
 // 4. Rate Limiting — designed for shared networks.
 // At the venue hundreds of phones share ONE public IP (stadium Wi-Fi, Jio/Airtel carrier NAT),
@@ -201,7 +206,7 @@ app.use((_req: Request, res: Response) => {
 
 // 8. Global Error Handler
 app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
-  console.error('[Unhandled Error]:', err);
+  logFatal('unhandled_route_error', err);
   const statusCode = err.status || err.statusCode || 500;
   res.status(statusCode).json({
     error: err.message || 'Internal Server Error',
@@ -219,6 +224,7 @@ if (process.env.NODE_ENV === 'production' || process.env.PED_ALERT_TIMER === '1'
 }
 
 const server = app.listen(PORT, () => {
+  logSchemaWarmup();
   console.log(`=============================================`);
   console.log(`🚀 VTU SportsOS Backend API running`);
   console.log(`   Port: http://localhost:${PORT}`);
@@ -239,6 +245,11 @@ const gracefulShutdown = (signal: string) => {
   }, 10000);
 };
 
+process.on('unhandledRejection', (reason) => logFatal('unhandled_rejection', reason));
+process.on('uncaughtException', (err) => {
+  logFatal('uncaught_exception', err);
+  process.exit(1);
+});
 process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
 process.on('SIGINT', () => gracefulShutdown('SIGINT'));
 
