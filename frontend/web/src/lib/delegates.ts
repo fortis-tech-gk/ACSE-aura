@@ -7,7 +7,7 @@
  * can use it too.
  */
 
-export type DelegateCategory = 'FACULTY' | 'PED' | 'OFFICIAL';
+export type DelegateCategory = 'FACULTY' | 'PED' | 'VOLUNTEER' | 'OFFICIAL';
 export type SquadScope = 'MEN' | 'WOMEN' | 'BOTH';
 export type DelegateGender = 'MALE' | 'FEMALE' | 'OTHER';
 export type DelegateStatus = 'REGISTERED' | 'ACCREDITED' | 'WITHDRAWN';
@@ -17,7 +17,8 @@ export interface DelegateRow {
   category: DelegateCategory;
   college_id: string | null;
   pass_no: number;
-  full_name: string;
+  /** null on a blank pass (name written by hand) */
+  full_name: string | null;
   designation: string;
   department: string;
   organisation: string;
@@ -31,14 +32,31 @@ export interface DelegateRow {
   accreditation_status: DelegateStatus;
   remarks: string;
   created_at?: string;
-  colleges?: { name?: string | null; code?: string | null } | null;
+  colleges?: { name?: string | null; code?: string | null; region?: string | null } | null;
 }
 
 export const CATEGORY_LABEL: Record<DelegateCategory, string> = {
-  FACULTY: 'Faculty / Team Official',
+  FACULTY: 'ACS Faculty',
   PED: 'Physical Education Director',
-  OFFICIAL: 'Meet Official',
+  VOLUNTEER: 'Volunteer',
+  OFFICIAL: 'Technical Official',
 };
+
+/** The coloured bar across each pass: what the food counter reads from a distance. */
+export const PASS_TYPE: Record<DelegateCategory, { word: string; band: string; theme: string }> = {
+  FACULTY: { word: 'ACS FACULTY', band: 'HOST FACULTY', theme: 'faculty' },
+  PED: { word: 'P.E.D.', band: 'PHYSICAL EDUCATION DIRECTOR', theme: 'ped' },
+  VOLUNTEER: { word: 'VOLUNTEER', band: 'MEET VOLUNTEER', theme: 'vol' },
+  OFFICIAL: { word: 'TECHNICAL OFFICIAL', band: 'TECHNICAL OFFICIAL', theme: 'off' },
+};
+
+/** Passes that may be printed with no name, in numbered batches. */
+export const BLANK_PASS_CATEGORIES: DelegateCategory[] = ['FACULTY', 'VOLUNTEER'];
+
+/** A name to show on screens for a pass, blank or not. */
+export function passDisplayName(d: { full_name?: string | null; pass_no: number; category: DelegateCategory }): string {
+  return d.full_name?.trim() || `Blank ${CATEGORY_LABEL[d.category]} pass ${d.pass_no}`;
+}
 
 /** Designations for host-college (Dr. ACS) faculty and staff on duty at the meet (sheet 1). */
 export const FACULTY_DESIGNATIONS = [
@@ -53,9 +71,10 @@ export const FACULTY_DESIGNATIONS = [
   'Other',
 ] as const;
 
-/** Roles for the host side: referees, technical officials, volunteers and the rest (sheet 3). */
+/** Roles for referees and technical officials (sheet 3). "Volunteer" there makes a volunteer pass. */
 export const OFFICIAL_ROLES = [
-  'Referee',
+  'Track Referee',
+  'Field Referee',
   'Technical Official',
   'Jury of Appeal',
   'Starter',
@@ -65,11 +84,11 @@ export const OFFICIAL_ROLES = [
   'Photo Finish Operator',
   'Announcer',
   'Marshal',
-  'Volunteer',
   'Medical Team',
   'Media',
   'Transport',
   'Guest of Honour',
+  'Volunteer',
   'Other',
 ] as const;
 

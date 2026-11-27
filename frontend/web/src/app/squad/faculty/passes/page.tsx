@@ -15,10 +15,10 @@ export default async function SquadPassesPage() {
   return (
     <PassSheet
       delegates={delegates}
-      title="Faculty & PED Passes — 4×6″ Portrait"
-      subtitle={`${session.collegeName || session.collegeCode} · ${delegates.length} pass${delegates.length === 1 ? '' : 'es'}. Print them on card stock and hand one to each person; the QR is scanned at the gate and the food counters.`}
+      title="PED Passes — 4×6″ Portrait"
+      subtitle={`${session.collegeName || session.collegeCode} · ${delegates.length} pass${delegates.length === 1 ? '' : 'es'}. Print them on card stock; the QR is scanned at the food counters and, if accommodation was asked for, at the hostel.`}
       backHref="/squad/faculty"
-      backLabel="Back to Faculty & Officials"
+      backLabel="Back to PED Passes"
     />
   );
 }

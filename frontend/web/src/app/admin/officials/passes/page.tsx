@@ -1,7 +1,7 @@
 import { requireAdmin } from '@/lib/auth-guard';
 import { listAllDelegatesAction, type AdminDelegateFilters } from '@/app/actions/delegates';
 import PassSheet from '@/app/components/idcard/PassSheet';
-import type { DelegateCategory } from '@/lib/delegates';
+import { CATEGORY_LABEL, type DelegateCategory } from '@/lib/delegates';
 
 export const dynamic = 'force-dynamic';
 
@@ -18,20 +18,29 @@ export default async function AdminPassesPage({
   const sp = await searchParams;
   const one = (k: string) => (Array.isArray(sp[k]) ? sp[k]?.[0] : sp[k]) || '';
   const cat = one('category').toUpperCase();
+  const names = one('names');
   const filters: AdminDelegateFilters = {
-    category: (['FACULTY', 'PED', 'OFFICIAL'].includes(cat) ? cat : 'ALL') as DelegateCategory | 'ALL',
+    category: (['FACULTY', 'PED', 'VOLUNTEER', 'OFFICIAL'].includes(cat) ? cat : 'ALL') as DelegateCategory | 'ALL',
     college: one('college'),
     q: one('q'),
+    names: names === 'blank' || names === 'named' ? names : '',
   };
 
   const delegates = await listAllDelegatesAction(filters);
-  const where = [filters.college, filters.category !== 'ALL' ? filters.category : '', filters.q].filter(Boolean).join(' · ');
+  const where = [
+    filters.college,
+    filters.category !== 'ALL' ? CATEGORY_LABEL[filters.category as DelegateCategory] : '',
+    filters.names === 'blank' ? 'blank passes' : filters.names === 'named' ? 'named passes' : '',
+    filters.q,
+  ]
+    .filter(Boolean)
+    .join(' · ');
 
   return (
     <PassSheet
       delegates={delegates}
-      title="Faculty & Official Passes — 4×6″ Portrait"
-      subtitle={`${delegates.length} pass${delegates.length === 1 ? '' : 'es'}${where ? ` · ${where}` : ' · everyone with a pass'}. Cancelled passes are printed with a red "Pass cancelled" chip — leave those out of the envelope.`}
+      title="Passes — ACS Faculty · PED · Volunteer · Technical Official (4×6″)"
+      subtitle={`${delegates.length} pass${delegates.length === 1 ? '' : 'es'}${where ? ` · ${where}` : ' · everyone with a pass'}. Cancelled passes print with a red CANCELLED stamp — leave those out of the envelope.`}
       backHref="/admin/officials"
       backLabel="Back to Faculty & Officials"
     />

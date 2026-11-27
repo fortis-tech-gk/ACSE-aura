@@ -1,10 +1,13 @@
 'use server';
 
 /**
- * Faculty, PED and meet-official passes (migration 0057).
+ * Passes for everyone who is not an athlete (migration 0057):
+ *   FACULTY (ACS host faculty) · PED (participating colleges) · VOLUNTEER · OFFICIAL
  *
- * A college PED works on their own college's rows from the Contingent Portal
- * (/squad/faculty); the meet office works on everyone from /admin/officials.
+ * Passes are free and need no check-in; the QR is used only at food and, when asked for,
+ * the hostel. A college PED manages their own college's PED rows from the Contingent Portal
+ * (/squad/faculty); the meet office manages everyone from /admin/officials, including blank
+ * numbered batches of ACS faculty and volunteer passes that are filled in by hand.
  * Both intake paths share the same Excel workbook — see lib/delegate-workbook.ts.
  */
 
@@ -15,6 +18,8 @@ import { canEditRoster } from '@/lib/roster-window';
 import { fetchAllRows } from '@/lib/db-fetch-all';
 import { tryMakeDelegateQrToken } from '@/lib/delegate-qr';
 import {
+  BLANK_PASS_CATEGORIES,
+  PED_DESIGNATION,
   cleanEmail,
   cleanName,
   isValidDelegatePhone,
@@ -24,6 +29,7 @@ import {
   parseScope,
   type DelegateCategory,
   type DelegateRow,
+  type SquadScope,
 } from '@/lib/delegates';
 import {
   looksLikeXlsx,
@@ -33,12 +39,15 @@ import {
 } from '@/lib/delegate-workbook';
 
 const MAX_UPLOAD_BYTES = 4 * 1024 * 1024;
+const MAX_BLANK_BATCH = 500;
+const CATEGORIES: DelegateCategory[] = ['FACULTY', 'PED', 'VOLUNTEER', 'OFFICIAL'];
 const SELECT =
-  'id, category, college_id, pass_no, full_name, designation, department, organisation, gender, phone, email, blood_group, squad_scope, meals_included, accommodation_required, accreditation_status, remarks, created_at';
+  'id, category, college_id, pass_no, full_name, designation, department, organisation, gender, phone, email, blood_group, squad_scope, meals_included, accommodation_required, accreditation_status, remarks, created_at, colleges ( name, code, region )';
 
 export interface DelegateActionResult {
   success: boolean;
   error?: string;
+  message?: string;
 }
 
 export interface ImportResult extends DelegateActionResult {
@@ -46,11 +55,11 @@ export interface ImportResult extends DelegateActionResult {
   updated?: number;
   rejected?: RejectedRow[];
   missingSheets?: string[];
-  /** Sheet 3 rows a college tried to upload (ignored, with a note) */
-  officialsIgnored?: boolean;
+  /** A college upload reads sheet 2 only (sheets 1 and 3 are the meet office's) */
+  otherSheetsIgnored?: boolean;
 }
 
-/** A delegate with its printed pass QR (null when ATHLETE_QR_SECRET is not set). */
+/** A pass with its printed QR (null when ATHLETE_QR_SECRET is not set). */
 export type DelegateWithQr = DelegateRow & { qr_token: string | null };
 
 // -----------------------------------------------------------------------------
@@ -58,9 +67,9 @@ export type DelegateWithQr = DelegateRow & { qr_token: string | null };
 // -----------------------------------------------------------------------------
 
 /**
- * Faculty entries follow the roster window: open while registration is open, or while the
- * admin has opened a late-entry window for the squad. They carry no fee, so a verified
- * payment does NOT freeze them (unlike athlete events).
+ * PED entries follow the roster window: open while registration is open, or while the admin
+ * has opened a late-entry window for the squad. Passes are free, so a verified payment does
+ * NOT freeze them.
  */
 async function squadMayEditDelegates(squadId: string): Promise<string | null> {
   const [{ data: meet }, { data: squad, error }] = await Promise.all([
@@ -69,25 +78,32 @@ async function squadMayEditDelegates(squadId: string): Promise<string | null> {
   ]);
   if (error || !squad) return 'Unable to verify your squad. Please try again.';
   if (canEditRoster(meet?.registration_open !== false, squad)) return null;
-  return 'Championship registrations are closed. Ask the VTU Directorate / meet office to add or change a faculty pass.';
+  return 'Championship registrations are closed. Ask the meet office to add or change a PED pass.';
 }
 
-function withQr(rows: DelegateRow[]): DelegateWithQr[] {
-  return rows.map((d) => ({ ...d, qr_token: tryMakeDelegateQrToken(d.id) }));
+function withQr(rows: any[]): DelegateWithQr[] {
+  return rows.map((d) => ({
+    ...d,
+    colleges: Array.isArray(d.colleges) ? d.colleges[0] ?? null : d.colleges ?? null,
+    qr_token: tryMakeDelegateQrToken(d.id),
+  }));
 }
 
-/** Rows typed into a form, normalised the same way the Excel importer does. */
+const ORDER: Record<string, number> = { FACULTY: 0, PED: 1, OFFICIAL: 2, VOLUNTEER: 3 };
+function byTypeThenNumber(a: { category: string; pass_no: number }, b: { category: string; pass_no: number }) {
+  return (ORDER[a.category] ?? 9) - (ORDER[b.category] ?? 9) || a.pass_no - b.pass_no;
+}
+
+/** A form, normalised the same way the Excel importer does. */
 function readFormDelegate(formData: FormData, category: DelegateCategory) {
-  const fullName = cleanName(formData.get('fullName'));
-  const phone = normalizeDelegatePhone(formData.get('phone'));
   return {
     category,
-    full_name: fullName,
+    full_name: cleanName(formData.get('fullName')) || null,
     designation: cleanName(formData.get('designation')).slice(0, 60),
     department: cleanName(formData.get('department')).slice(0, 60),
     organisation: cleanName(formData.get('organisation')).slice(0, 80),
     gender: parseGender(formData.get('gender')),
-    phone,
+    phone: normalizeDelegatePhone(formData.get('phone')),
     email: cleanEmail(formData.get('email')) || null,
     blood_group: parseBloodGroup(formData.get('bloodGroup')),
     squad_scope: parseScope(formData.get('scope')),
@@ -97,50 +113,57 @@ function readFormDelegate(formData: FormData, category: DelegateCategory) {
   };
 }
 
-function validateDelegate(d: { full_name: string; designation: string; phone: string }): string | null {
-  if (d.full_name.length < 3 || d.full_name.length > 80) return 'Enter the full name (3–80 characters).';
-  if (!/[A-Za-z]/.test(d.full_name)) return 'The name must contain letters.';
-  if (!d.designation) return 'Choose a designation / role.';
+function validateDelegate(d: { category: DelegateCategory; full_name: string | null; designation: string; phone: string }): string | null {
+  const name = d.full_name || '';
+  if (!name && !BLANK_PASS_CATEGORIES.includes(d.category)) return 'Enter the full name.';
+  if (name && (name.length < 3 || name.length > 80)) return 'The name must be 3–80 characters.';
+  if (name && !/[A-Za-z]/.test(name)) return 'The name must contain letters.';
+  if (d.category === 'OFFICIAL' && !d.designation) return 'Choose a role.';
   if (d.phone && !isValidDelegatePhone(d.phone)) return 'Enter a valid 10-digit Indian mobile number, or leave it blank.';
   return null;
 }
 
-/** "already there" check, matching the database's unique indexes. */
+/** Default designation per pass type, when none was given. */
+function defaultDesignation(category: DelegateCategory, given: string): string {
+  if (given) return given;
+  return category === 'PED' ? PED_DESIGNATION : category === 'FACULTY' ? 'ACS Faculty' : category === 'VOLUNTEER' ? 'Volunteer' : 'Technical Official';
+}
+
+/** "Already there" check, matching the database's unique indexes. Blank passes never match. */
 async function findExisting(
   category: DelegateCategory,
   collegeId: string | null,
-  fullName: string,
+  fullName: string | null,
   phone: string
 ): Promise<{ id: string } | null> {
-  const name = fullName.trim().toUpperCase();
-  if (collegeId) {
-    const { data } = await supabaseAdmin
-      .from('delegates')
-      .select('id, full_name')
-      .eq('college_id', collegeId)
-      .eq('category', category);
-    return (data || []).find((r: any) => String(r.full_name).trim().toUpperCase() === name) ?? null;
-  }
-  const { data } = await supabaseAdmin
-    .from('delegates')
-    .select('id, full_name, phone')
-    .is('college_id', null)
-    .eq('phone', phone);
-  return (data || []).find((r: any) => String(r.full_name).trim().toUpperCase() === name) ?? null;
+  const name = (fullName || '').trim().toUpperCase();
+  if (!name) return null;
+  let q = supabaseAdmin.from('delegates').select('id, full_name').eq('category', category);
+  q = collegeId ? q.eq('college_id', collegeId) : q.is('college_id', null).eq('phone', phone);
+  const { data } = await q;
+  return (data || []).find((r: any) => String(r.full_name || '').trim().toUpperCase() === name) ?? null;
 }
 
 function dbError(err: { message?: string; code?: string } | null): string {
   const msg = String(err?.message || '');
   if (/may nominate at most/i.test(msg)) return msg.replace(/^.*?ERROR:\s*/i, '');
-  if (err?.code === '23505' || /duplicate key/i.test(msg)) return 'This person is already on the list.';
+  if (err?.code === '23505' || /duplicate key/i.test(msg)) return 'This person already has a pass.';
+  if (/delegate_pass_no_seq/i.test(msg)) return 'All pass numbers (90001–99999) are used up.';
   return msg || 'The database refused the change. Please try again.';
+}
+
+async function collegeCodeMap(): Promise<Map<string, string>> {
+  const rows = await fetchAllRows<{ id: string; code: string }>(
+    () => supabaseAdmin.from('colleges').select('id, code').order('id') as any
+  );
+  return new Map(rows.map((c) => [String(c.code).toUpperCase(), c.id]));
 }
 
 // -----------------------------------------------------------------------------
 // Reading
 // -----------------------------------------------------------------------------
 
-/** The logged-in squad's college: faculty and PEDs (both squads share one list). */
+/** The logged-in squad's college: its PED passes (both squads share one list). */
 export async function listSquadDelegatesAction(): Promise<{
   delegates: DelegateWithQr[];
   canEdit: boolean;
@@ -148,47 +171,41 @@ export async function listSquadDelegatesAction(): Promise<{
 }> {
   const session = await requireSquad();
   const [{ data }, blockReason] = await Promise.all([
-    supabaseAdmin
-      .from('delegates')
-      .select(SELECT)
-      .eq('college_id', session.collegeId)
-      .order('category', { ascending: true })
-      .order('pass_no', { ascending: true }),
+    supabaseAdmin.from('delegates').select(SELECT).eq('college_id', session.collegeId).order('pass_no', { ascending: true }),
     squadMayEditDelegates(session.squadId),
   ]);
-  return { delegates: withQr((data || []) as DelegateRow[]), canEdit: !blockReason, blockReason };
+  return { delegates: withQr(data || []), canEdit: !blockReason, blockReason };
 }
 
 export interface AdminDelegateFilters {
   category?: DelegateCategory | 'ALL';
   college?: string;
   q?: string;
+  /** "blank" = only passes with no name, "named" = only named ones */
+  names?: 'blank' | 'named' | '';
 }
 
 /** Everyone with a pass, for the meet office. */
 export async function listAllDelegatesAction(filters: AdminDelegateFilters = {}): Promise<DelegateWithQr[]> {
   await requireAdmin();
   const rows = await fetchAllRows<any>(() => {
-    let q = supabaseAdmin
-      .from('delegates')
-      .select(`${SELECT}, colleges ( name, code )`)
-      .order('id', { ascending: true });
+    let q = supabaseAdmin.from('delegates').select(SELECT).order('id', { ascending: true });
     if (filters.category && filters.category !== 'ALL') q = q.eq('category', filters.category);
+    if (filters.names === 'blank') q = q.is('full_name', null);
+    if (filters.names === 'named') q = q.not('full_name', 'is', null);
     return q as any;
   });
 
   const code = filters.college?.trim().toUpperCase();
   const needle = filters.q?.trim().toLowerCase();
-  const filtered = rows.filter((d) => {
+  const filtered = withQr(rows).filter((d) => {
     if (code && String(d.colleges?.code || '').toUpperCase() !== code) return false;
     if (!needle) return true;
     return [d.full_name, d.designation, d.organisation, d.phone, String(d.pass_no), d.colleges?.name, d.colleges?.code]
       .filter(Boolean)
-      .some((v: string) => String(v).toLowerCase().includes(needle));
+      .some((v) => String(v).toLowerCase().includes(needle));
   });
-  const order: Record<string, number> = { PED: 0, FACULTY: 1, OFFICIAL: 2 };
-  filtered.sort((a, b) => (order[a.category] ?? 9) - (order[b.category] ?? 9) || a.pass_no - b.pass_no);
-  return withQr(filtered as DelegateRow[]);
+  return filtered.sort(byTypeThenNumber);
 }
 
 // -----------------------------------------------------------------------------
@@ -205,8 +222,8 @@ async function applyParsedRows(
   const rejected: RejectedRow[] = [];
 
   for (const r of rows) {
-    const collegeId = r.category === 'OFFICIAL' ? null : codeToId.get(r.collegeCode) ?? null;
-    if (r.category !== 'OFFICIAL' && !collegeId) {
+    const collegeId = r.category === 'PED' ? codeToId.get(r.collegeCode) ?? null : null;
+    if (r.category === 'PED' && !collegeId) {
       rejected.push({ sheet: r.sheet, excelRow: r.excelRow, name: r.fullName, reason: `No college with code "${r.collegeCode}" is registered for the meet.` });
       continue;
     }
@@ -215,7 +232,7 @@ async function applyParsedRows(
       category: r.category,
       college_id: collegeId,
       full_name: r.fullName,
-      designation: r.designation,
+      designation: defaultDesignation(r.category, r.designation),
       department: r.department,
       organisation: r.organisation,
       gender: r.gender,
@@ -230,24 +247,14 @@ async function applyParsedRows(
     };
 
     const existing = await findExisting(r.category, collegeId, r.fullName, r.phone);
-    if (existing) {
-      const { error } = await supabaseAdmin.from('delegates').update(payload).eq('id', existing.id);
-      if (error) rejected.push({ sheet: r.sheet, excelRow: r.excelRow, name: r.fullName, reason: dbError(error) });
-      else updated++;
-    } else {
-      const { error } = await supabaseAdmin.from('delegates').insert(payload);
-      if (error) rejected.push({ sheet: r.sheet, excelRow: r.excelRow, name: r.fullName, reason: dbError(error) });
-      else added++;
-    }
+    const { error } = existing
+      ? await supabaseAdmin.from('delegates').update(payload).eq('id', existing.id)
+      : await supabaseAdmin.from('delegates').insert(payload);
+    if (error) rejected.push({ sheet: r.sheet, excelRow: r.excelRow, name: r.fullName, reason: dbError(error) });
+    else if (existing) updated++;
+    else added++;
   }
   return { added, updated, rejected };
-}
-
-async function collegeCodeMap(): Promise<Map<string, string>> {
-  const rows = await fetchAllRows<{ id: string; code: string }>(
-    () => supabaseAdmin.from('colleges').select('id, code').order('id') as any
-  );
-  return new Map(rows.map((c) => [String(c.code).toUpperCase(), c.id]));
 }
 
 async function readUpload(formData: FormData): Promise<{ buf?: Buffer; error?: string }> {
@@ -261,7 +268,7 @@ async function readUpload(formData: FormData): Promise<{ buf?: Buffer; error?: s
   return { buf };
 }
 
-/** A PED uploads the filled workbook for their own college. */
+/** A PED uploads the filled workbook: sheet 2 (their own college's PEDs) is read. */
 export async function importSquadDelegatesAction(formData: FormData): Promise<ImportResult> {
   try {
     const session = await requireSquad();
@@ -279,28 +286,27 @@ export async function importSquadDelegatesAction(formData: FormData): Promise<Im
     if (!parsed.rows.length && !parsed.rejected.length) {
       return {
         success: false,
-        error: 'No faculty or PED rows were found in the sheet. Fill in the "1. Faculty" or "2. PEDs" sheet of the template and upload it again.',
+        error: 'No PED rows were found. Fill in the "2. PEDs" sheet of the template and upload it again.',
         missingSheets: parsed.missingSheets,
       };
     }
 
     const res = await applyParsedRows(parsed.rows, codeToId, `${session.squadCode || session.collegeCode} (PED)`);
     revalidatePath('/squad/faculty');
-    revalidatePath('/squad/dashboard');
     return {
       success: true,
       added: res.added,
       updated: res.updated,
       rejected: [...parsed.rejected, ...res.rejected],
       missingSheets: parsed.missingSheets,
-      officialsIgnored: true,
+      otherSheetsIgnored: true,
     };
   } catch (err: any) {
     return { success: false, error: err?.message || 'The sheet could not be read. Please try again.' };
   }
 }
 
-/** The meet office uploads any sheet of the workbook, for any college. */
+/** The meet office uploads any sheet of the workbook. */
 export async function importAdminDelegatesAction(formData: FormData): Promise<ImportResult> {
   try {
     const session = await requireAdmin();
@@ -328,7 +334,7 @@ export async function importAdminDelegatesAction(formData: FormData): Promise<Im
 }
 
 // -----------------------------------------------------------------------------
-// One person at a time
+// College PED: one at a time
 // -----------------------------------------------------------------------------
 
 export async function addSquadDelegateAction(formData: FormData): Promise<DelegateActionResult> {
@@ -337,17 +343,17 @@ export async function addSquadDelegateAction(formData: FormData): Promise<Delega
     const block = await squadMayEditDelegates(session.squadId);
     if (block) return { success: false, error: block };
 
-    const category = formData.get('category') === 'PED' ? 'PED' : 'FACULTY';
-    const d = readFormDelegate(formData, category);
+    const d = readFormDelegate(formData, 'PED');
     const bad = validateDelegate(d);
     if (bad) return { success: false, error: bad };
 
-    if (await findExisting(category, session.collegeId, d.full_name, d.phone)) {
-      return { success: false, error: `${d.full_name} is already on your college's list.` };
+    if (await findExisting('PED', session.collegeId, d.full_name, d.phone)) {
+      return { success: false, error: `${d.full_name} already has a PED pass for your college.` };
     }
 
     const { error } = await supabaseAdmin.from('delegates').insert({
       ...d,
+      designation: defaultDesignation('PED', d.designation),
       college_id: session.collegeId,
       organisation: '',
       added_by: `${session.squadCode || session.collegeCode} (PED)`,
@@ -371,16 +377,16 @@ export async function updateSquadDelegateAction(formData: FormData): Promise<Del
     const { data: row } = await supabaseAdmin.from('delegates').select('id, college_id, category').eq('id', id).maybeSingle();
     if (!row || row.college_id !== session.collegeId) return { success: false, error: 'That pass does not belong to your college.' };
 
-    const d = readFormDelegate(formData, row.category as DelegateCategory);
+    const d = readFormDelegate(formData, 'PED');
     const bad = validateDelegate(d);
     if (bad) return { success: false, error: bad };
 
-    const clash = await findExisting(row.category as DelegateCategory, session.collegeId, d.full_name, d.phone);
-    if (clash && clash.id !== id) return { success: false, error: `${d.full_name} is already on your college's list.` };
+    const clash = await findExisting('PED', session.collegeId, d.full_name, d.phone);
+    if (clash && clash.id !== id) return { success: false, error: `${d.full_name} already has a PED pass for your college.` };
 
     const { error } = await supabaseAdmin
       .from('delegates')
-      .update({ ...d, organisation: '' })
+      .update({ ...d, designation: defaultDesignation('PED', d.designation), organisation: '' })
       .eq('id', id);
     if (error) return { success: false, error: dbError(error) };
 
@@ -419,16 +425,16 @@ export async function saveAdminDelegateAction(formData: FormData): Promise<Deleg
     const session = await requireAdmin();
     const id = String(formData.get('id') || '');
     const category = String(formData.get('category') || 'OFFICIAL') as DelegateCategory;
-    if (!['FACULTY', 'PED', 'OFFICIAL'].includes(category)) return { success: false, error: 'Pick a category.' };
+    if (!CATEGORIES.includes(category)) return { success: false, error: 'Pick a pass type.' };
 
     const d = readFormDelegate(formData, category);
     const bad = validateDelegate(d);
     if (bad) return { success: false, error: bad };
 
     let collegeId: string | null = null;
-    if (category !== 'OFFICIAL') {
+    if (category === 'PED') {
       const code = String(formData.get('collegeCode') || '').trim().toUpperCase();
-      if (!code) return { success: false, error: 'Faculty and PEDs must name a college.' };
+      if (!code) return { success: false, error: 'A PED pass must name the college.' };
       collegeId = (await collegeCodeMap()).get(code) ?? null;
       if (!collegeId) return { success: false, error: `No college with code "${code}" is registered for the meet.` };
     }
@@ -436,7 +442,12 @@ export async function saveAdminDelegateAction(formData: FormData): Promise<Deleg
     const clash = await findExisting(category, collegeId, d.full_name, d.phone);
     if (clash && clash.id !== id) return { success: false, error: `${d.full_name} already has a pass.` };
 
-    const payload = { ...d, college_id: collegeId, added_by: session.displayName || 'Meet office' };
+    const payload = {
+      ...d,
+      designation: defaultDesignation(category, d.designation),
+      college_id: collegeId,
+      added_by: session.displayName || 'Meet office',
+    };
     const { error } = id
       ? await supabaseAdmin.from('delegates').update(payload).eq('id', id)
       : await supabaseAdmin.from('delegates').insert(payload);
@@ -446,6 +457,106 @@ export async function saveAdminDelegateAction(formData: FormData): Promise<Deleg
     return { success: true };
   } catch (err: any) {
     return { success: false, error: err?.message || 'Could not save. Please try again.' };
+  }
+}
+
+/**
+ * A numbered batch of blank ACS-faculty or volunteer passes: each has its own QR and pass
+ * number, and the holder's name is written on the card by hand.
+ */
+export async function generateBlankPassesAction(formData: FormData): Promise<DelegateActionResult> {
+  try {
+    const session = await requireAdmin();
+    const category = String(formData.get('category') || '') as DelegateCategory;
+    if (!BLANK_PASS_CATEGORIES.includes(category)) return { success: false, error: 'Blank passes are for ACS faculty and volunteers.' };
+    const count = Math.floor(Number(formData.get('count')));
+    if (!Number.isFinite(count) || count < 1 || count > MAX_BLANK_BATCH) {
+      return { success: false, error: `Enter how many passes to make (1–${MAX_BLANK_BATCH}).` };
+    }
+
+    const rows = Array.from({ length: count }, () => ({
+      category,
+      college_id: null,
+      full_name: null,
+      designation: defaultDesignation(category, ''),
+      meals_included: formData.get('meals') !== 'no',
+      accommodation_required: formData.get('accommodation') === 'yes',
+      added_by: `${session.displayName || 'Meet office'} (blank batch)`,
+    }));
+    const { data, error } = await supabaseAdmin.from('delegates').insert(rows).select('pass_no');
+    if (error) return { success: false, error: dbError(error) };
+
+    const nums = (data || []).map((r: any) => r.pass_no as number).sort((a, b) => a - b);
+    revalidatePath('/admin/officials');
+    return {
+      success: true,
+      message: `${nums.length} blank ${category === 'FACULTY' ? 'ACS faculty' : 'volunteer'} passes made: ${nums[0]}–${nums[nums.length - 1]}.`,
+    };
+  } catch (err: any) {
+    return { success: false, error: err?.message || 'Could not make the passes. Please try again.' };
+  }
+}
+
+/**
+ * One PED pass per PED named in this year's registration (squads.ped_name). The same person
+ * on both squads of a college gets one pass for both; anyone who already has a PED pass for
+ * the college is left as it is.
+ */
+export async function createPedPassesFromRegistrationAction(): Promise<DelegateActionResult> {
+  try {
+    const session = await requireAdmin();
+    const [squads, existing] = await Promise.all([
+      fetchAllRows<{ college_id: string; gender: string; ped_name: string | null; ped_phone: string | null; ped_email: string | null }>(
+        () => supabaseAdmin.from('squads').select('college_id, gender, ped_name, ped_phone, ped_email').order('id') as any
+      ),
+      fetchAllRows<{ college_id: string; full_name: string | null }>(
+        () => supabaseAdmin.from('delegates').select('college_id, full_name').eq('category', 'PED').order('id') as any
+      ),
+    ]);
+
+    const have = new Set(existing.map((e) => `${e.college_id}|${String(e.full_name || '').trim().toUpperCase()}`));
+    const people = new Map<string, { college_id: string; name: string; phone: string; email: string; men: boolean; women: boolean }>();
+    for (const s of squads) {
+      const name = cleanName(s.ped_name);
+      if (!name || name.length < 3) continue;
+      const key = `${s.college_id}|${name.toUpperCase()}`;
+      const p = people.get(key) || { college_id: s.college_id, name, phone: '', email: '', men: false, women: false };
+      const phone = normalizeDelegatePhone(s.ped_phone);
+      if (!p.phone && isValidDelegatePhone(phone)) p.phone = phone;
+      if (!p.email) p.email = cleanEmail(s.ped_email);
+      if (s.gender === 'men') p.men = true;
+      else p.women = true;
+      people.set(key, p);
+    }
+
+    const rows = [...people.entries()]
+      .filter(([key]) => !have.has(key))
+      .map(([, p]) => ({
+        category: 'PED' as const,
+        college_id: p.college_id,
+        full_name: p.name,
+        designation: PED_DESIGNATION,
+        phone: p.phone,
+        email: p.email || null,
+        squad_scope: (p.men && p.women ? 'BOTH' : p.men ? 'MEN' : 'WOMEN') as SquadScope,
+        meals_included: true,
+        accommodation_required: false,
+        added_by: `${session.displayName || 'Meet office'} (from registration)`,
+      }));
+
+    if (rows.length) {
+      const { error } = await supabaseAdmin.from('delegates').insert(rows);
+      if (error) return { success: false, error: dbError(error) };
+    }
+    revalidatePath('/admin/officials');
+    return {
+      success: true,
+      message: rows.length
+        ? `${rows.length} PED passes made from registration (${people.size - rows.length} already had one).`
+        : 'Every PED named in registration already has a pass.',
+    };
+  } catch (err: any) {
+    return { success: false, error: err?.message || 'Could not make the PED passes. Please try again.' };
   }
 }
 

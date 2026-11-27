@@ -6,11 +6,13 @@
 -- volunteers had no ID card and nothing to show at the food counter.
 --
 -- This migration adds ONE table for every non-athlete who needs a pass:
---   delegates.category = 'FACULTY'  — college faculty / team manager / coach
---                        'PED'      — Physical Education Director of a college
---                        'OFFICIAL' — host side: referee, technical official,
---                                     jury, volunteer, medical, media, guest
--- College rows carry college_id; host officials have college_id = NULL.
+--   delegates.category = 'FACULTY'   — faculty / staff of Dr. ACS (the host)
+--                        'PED'       — Physical Education Director of a
+--                                      participating college (college_id set)
+--                        'VOLUNTEER' — meet volunteer
+--                        'OFFICIAL'  — referee, technical official, jury, ...
+-- Only PED rows carry college_id. FACULTY and VOLUNTEER passes may be printed
+-- blank (full_name NULL) in numbered batches; the name is written by hand.
 --
 -- The pass QR is the SAME signed format as the athlete card
 -- ("AURA26.<uuid>.<sig>", see frontend/web/src/lib/athlete-qr.ts), so the
@@ -42,11 +44,12 @@ CREATE SEQUENCE IF NOT EXISTS delegate_pass_no_seq
 -- -----------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS delegates (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  category TEXT NOT NULL CHECK (category IN ('FACULTY', 'PED', 'OFFICIAL')),
-  -- College faculty / PED: the college that nominated them. NULL for host officials.
+  category TEXT NOT NULL CHECK (category IN ('FACULTY', 'PED', 'VOLUNTEER', 'OFFICIAL')),
+  -- PED: the college that nominated them. NULL for everyone else.
   college_id UUID REFERENCES colleges(id) ON DELETE CASCADE,
   pass_no INTEGER NOT NULL UNIQUE DEFAULT nextval('delegate_pass_no_seq'),
-  full_name TEXT NOT NULL,
+  -- NULL on a blank pass (ACS faculty / volunteers write the name by hand)
+  full_name TEXT,
   -- "Physical Education Director", "Team Manager", "Coach", "Referee", "Volunteer", ...
   designation TEXT NOT NULL DEFAULT '',
   department TEXT NOT NULL DEFAULT '',
@@ -68,20 +71,28 @@ CREATE TABLE IF NOT EXISTS delegates (
   added_by TEXT NOT NULL DEFAULT '',
   created_at TIMESTAMPTZ NOT NULL DEFAULT timezone('utc'::text, now()),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT timezone('utc'::text, now()),
-  -- A faculty member or PED always belongs to a college; a host official never does
-  CONSTRAINT chk_delegate_college CHECK (
-    (category = 'OFFICIAL' AND college_id IS NULL) OR
-    (category <> 'OFFICIAL' AND college_id IS NOT NULL)
-  )
+  -- A PED always belongs to a college; nobody else does
+  CONSTRAINT chk_delegate_college CHECK ((category = 'PED') = (college_id IS NOT NULL))
 );
 
+-- Databases that ran an earlier draft of this migration: bring them to the same shape
+ALTER TABLE delegates ALTER COLUMN full_name DROP NOT NULL;
+ALTER TABLE delegates DROP CONSTRAINT IF EXISTS delegates_category_check;
+ALTER TABLE delegates ADD CONSTRAINT delegates_category_check
+  CHECK (category IN ('FACULTY', 'PED', 'VOLUNTEER', 'OFFICIAL'));
+ALTER TABLE delegates DROP CONSTRAINT IF EXISTS chk_delegate_college;
+ALTER TABLE delegates ADD CONSTRAINT chk_delegate_college CHECK ((category = 'PED') = (college_id IS NOT NULL));
+DROP INDEX IF EXISTS uq_delegate_college_person;
+DROP INDEX IF EXISTS uq_delegate_official_person;
+
 -- Re-uploading the same filled sheet must update people, not duplicate them
+-- (blank passes have no name, so they never clash)
 CREATE UNIQUE INDEX IF NOT EXISTS uq_delegate_college_person
   ON delegates (college_id, category, upper(btrim(full_name)))
-  WHERE college_id IS NOT NULL;
+  WHERE college_id IS NOT NULL AND full_name IS NOT NULL;
 CREATE UNIQUE INDEX IF NOT EXISTS uq_delegate_official_person
-  ON delegates (upper(btrim(full_name)), phone)
-  WHERE college_id IS NULL;
+  ON delegates (category, upper(btrim(full_name)), phone)
+  WHERE college_id IS NULL AND full_name IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_delegates_college ON delegates (college_id, category);
 CREATE INDEX IF NOT EXISTS idx_delegates_category ON delegates (category, accreditation_status);
 
@@ -235,6 +246,7 @@ DECLARE
   r_del RECORD;
   r_existing_meal RECORD;
   v_role TEXT;
+  v_name TEXT;
   -- Never in the future; an offline scan keeps its own time
   v_at TIMESTAMPTZ := LEAST(COALESCE(p_scanned_at, now()), now());
   v_date DATE := (LEAST(COALESCE(p_scanned_at, now()), now()) AT TIME ZONE 'Asia/Kolkata')::date;
@@ -263,14 +275,17 @@ BEGIN
 
     v_role := CASE r_del.category
                 WHEN 'PED' THEN 'Physical Education Director'
-                WHEN 'FACULTY' THEN COALESCE(NULLIF(r_del.designation, ''), 'Faculty')
-                ELSE COALESCE(NULLIF(r_del.designation, ''), 'Meet official')
+                WHEN 'FACULTY' THEN 'ACS Faculty'
+                WHEN 'VOLUNTEER' THEN 'Volunteer'
+                ELSE COALESCE(NULLIF(r_del.designation, ''), 'Technical Official')
               END;
+    -- A blank pass has no name: the counter sees what it is and its number
+    v_name := COALESCE(NULLIF(btrim(r_del.full_name), ''), v_role || ' · Pass ' || r_del.pass_no);
 
     IF r_del.accreditation_status = 'WITHDRAWN' THEN
       RETURN jsonb_build_object(
         'success', false, 'status', 'WITHDRAWN', 'subject_kind', 'delegate', 'role', v_role,
-        'athlete_name', r_del.full_name, 'bid_number', r_del.pass_no, 'pass_no', r_del.pass_no,
+        'athlete_name', v_name, 'bid_number', r_del.pass_no, 'pass_no', r_del.pass_no,
         'college_name', r_del.college_name, 'college_code', r_del.college_code,
         'message', 'This pass has been cancelled by the meet office.'
       );
@@ -281,7 +296,7 @@ BEGIN
       RETURN jsonb_build_object(
         'success', true, 'status', 'GRANTED', 'is_duplicate_sync', true, 'meal_type', p_meal_type,
         'subject_kind', 'delegate', 'role', v_role,
-        'athlete_name', r_del.full_name, 'bid_number', r_del.pass_no, 'pass_no', r_del.pass_no,
+        'athlete_name', v_name, 'bid_number', r_del.pass_no, 'pass_no', r_del.pass_no,
         'college_name', r_del.college_name, 'college_code', r_del.college_code
       );
     END IF;
@@ -290,7 +305,7 @@ BEGIN
       RETURN jsonb_build_object(
         'success', false, 'status', 'NO_MEAL_PASS', 'meal_type', p_meal_type,
         'subject_kind', 'delegate', 'role', v_role,
-        'athlete_name', r_del.full_name, 'bid_number', r_del.pass_no, 'pass_no', r_del.pass_no,
+        'athlete_name', v_name, 'bid_number', r_del.pass_no, 'pass_no', r_del.pass_no,
         'college_name', r_del.college_name, 'college_code', r_del.college_code,
         'message', 'NOT ELIGIBLE: this pass was issued without meals. Send them to the meet office.'
       );
@@ -307,7 +322,7 @@ BEGIN
         'success', false, 'status', 'ALREADY_SERVED', 'meal_type', p_meal_type,
         'served_at', r_existing_meal.scanned_at,
         'subject_kind', 'delegate', 'role', v_role,
-        'athlete_name', r_del.full_name, 'bid_number', r_del.pass_no, 'pass_no', r_del.pass_no,
+        'athlete_name', v_name, 'bid_number', r_del.pass_no, 'pass_no', r_del.pass_no,
         'college_name', r_del.college_name, 'college_code', r_del.college_code,
         'message', 'ALREADY CLAIMED: ' || p_meal_type || ' was already served at '
           || to_char(r_existing_meal.scanned_at AT TIME ZONE 'Asia/Kolkata', 'HH12:MI AM') || '.'
@@ -321,7 +336,7 @@ BEGIN
       RETURN jsonb_build_object(
         'success', false, 'status', 'ALREADY_SERVED', 'meal_type', p_meal_type,
         'subject_kind', 'delegate', 'role', v_role,
-        'athlete_name', r_del.full_name, 'bid_number', r_del.pass_no, 'pass_no', r_del.pass_no,
+        'athlete_name', v_name, 'bid_number', r_del.pass_no, 'pass_no', r_del.pass_no,
         'college_name', r_del.college_name, 'college_code', r_del.college_code,
         'message', 'ALREADY CLAIMED: ' || p_meal_type || ' was already served today.'
       );
@@ -330,7 +345,7 @@ BEGIN
     RETURN jsonb_build_object(
       'success', true, 'status', 'GRANTED', 'meal_type', p_meal_type, 'served_at', v_at,
       'subject_kind', 'delegate', 'role', v_role,
-      'athlete_name', r_del.full_name, 'bid_number', r_del.pass_no, 'pass_no', r_del.pass_no,
+      'athlete_name', v_name, 'bid_number', r_del.pass_no, 'pass_no', r_del.pass_no,
       'college_name', r_del.college_name, 'college_code', r_del.college_code,
       'message', 'SERVE ' || p_meal_type || ' — ' || v_role
     );
@@ -520,7 +535,9 @@ BEGIN
   END IF;
 
   v_role := CASE r_del.category WHEN 'PED' THEN 'Physical Education Director'
-                                ELSE COALESCE(NULLIF(r_del.designation, ''), initcap(r_del.category)) END;
+                                WHEN 'FACULTY' THEN 'ACS Faculty'
+                                WHEN 'VOLUNTEER' THEN 'Volunteer'
+                                ELSE COALESCE(NULLIF(r_del.designation, ''), 'Technical Official') END;
   v_college := COALESCE(r_del.college_name, NULLIF(r_del.organisation, ''), 'AURA 2026 Organising Committee');
 
   -- Same scan re-sent (offline sync retry)
@@ -531,7 +548,7 @@ BEGIN
   IF FOUND THEN
     RETURN jsonb_build_object(
       'success', true, 'is_duplicate_sync', true, 'already_checked_in', false, 'subject_kind', 'delegate',
-      'athlete_id', r_del.id, 'sslc_name', COALESCE(r_del.full_name, v_role), 'usn', v_role,
+      'athlete_id', r_del.id, 'sslc_name', COALESCE(NULLIF(btrim(r_del.full_name), ''), v_role || ' · Pass ' || r_del.pass_no), 'usn', v_role,
       'bid_number', r_del.pass_no, 'pass_no', r_del.pass_no, 'college_name', v_college, 'squad_code', '',
       'hostel_id', r_prev.hostel_id, 'hostel_name', r_prev.hostel_name, 'room_assigned', r_prev.room_assigned
     );
@@ -554,7 +571,7 @@ BEGIN
     RETURN jsonb_build_object(
       'success', true, 'is_duplicate_sync', false, 'already_checked_in', true, 'subject_kind', 'delegate',
       'checked_in_at', r_del.accommodation_checked_in_at,
-      'athlete_id', r_del.id, 'sslc_name', COALESCE(r_del.full_name, v_role), 'usn', v_role,
+      'athlete_id', r_del.id, 'sslc_name', COALESCE(NULLIF(btrim(r_del.full_name), ''), v_role || ' · Pass ' || r_del.pass_no), 'usn', v_role,
       'bid_number', r_del.pass_no, 'pass_no', r_del.pass_no, 'college_name', v_college, 'squad_code', '',
       'hostel_id', r_prev.hostel_id, 'hostel_name', r_prev.hostel_name, 'room_assigned', r_prev.room_assigned
     );
@@ -582,7 +599,7 @@ BEGIN
 
   RETURN jsonb_build_object(
     'success', true, 'is_duplicate_sync', false, 'already_checked_in', false, 'subject_kind', 'delegate',
-    'athlete_id', r_del.id, 'sslc_name', COALESCE(r_del.full_name, v_role), 'usn', v_role,
+    'athlete_id', r_del.id, 'sslc_name', COALESCE(NULLIF(btrim(r_del.full_name), ''), v_role || ' · Pass ' || r_del.pass_no), 'usn', v_role,
     'bid_number', r_del.pass_no, 'pass_no', r_del.pass_no, 'college_name', v_college, 'squad_code', '',
     'hostel_id', r_hostel.id, 'hostel_name', r_hostel.name,
     'room_assigned', COALESCE(NULLIF(p_room_assigned, ''), 'General Dorm'),

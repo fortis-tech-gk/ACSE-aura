@@ -119,7 +119,7 @@ officialsRouter.get(
 
 type DelegateRosterRow = {
   id: string;
-  full_name: string;
+  full_name: string | null;
   pass_no: number;
   category: string;
   designation: string | null;
@@ -198,10 +198,17 @@ officialsRouter.get('/roster', async (_req: AuthenticatedRequest, res: Response)
     const delegates = delegateRows.map((d) => {
       const college = Array.isArray(d.colleges) ? (d.colleges as any)[0] : d.colleges;
       const role =
-        d.category === 'PED' ? 'Physical Education Director' : d.designation || (d.category === 'FACULTY' ? 'Faculty' : 'Meet official');
+        d.category === 'PED'
+          ? 'Physical Education Director'
+          : d.category === 'FACULTY'
+            ? 'ACS Faculty'
+            : d.category === 'VOLUNTEER'
+              ? 'Volunteer'
+              : d.designation || 'Technical Official';
       return {
         id: d.id,
-        name: d.full_name,
+        // Blank ACS-faculty / volunteer passes carry no name: show what the pass is
+        name: d.full_name?.trim() || `${role} · Pass ${d.pass_no}`,
         // The app shows the USN line under the name: say what this person is instead
         usn: role,
         // The pass number is typeable at a counter exactly like a bib (90001+)

@@ -120,7 +120,7 @@ const PED_COLS: Col[] = [
 const OFFICIAL_COLS: Col[] = [
   SNO,
   NAME,
-  { head: 'Role', width: 22, key: 'designation', required: true, list: '$B$2:$B$17' },
+  { head: 'Role', width: 22, key: 'designation', required: true, list: `$B$2:$B$${OFFICIAL_ROLES.length + 1}` },
   { head: 'Organisation / College', width: 30, key: 'organisation' },
   GENDER,
   PHONE,
@@ -148,7 +148,7 @@ export const SHEETS: { name: string; category: DelegateCategory; cols: Col[]; bl
     name: SHEET_OFFICIALS,
     category: 'OFFICIAL',
     cols: OFFICIAL_COLS,
-    blurb: 'MEET OFFICE ONLY — referees, technical officials, jury, call room officials, volunteers, medical, media and guests. Rows a college fills here are ignored.',
+    blurb: 'MEET OFFICE ONLY — referees, technical officials, jury, call room officials, medical, media, guests and named volunteers (Role = Volunteer). Blank volunteer passes need no rows here.',
   },
 ];
 
@@ -313,7 +313,7 @@ function addInstructionsSheet(wb: Workbook, ctx: TemplateContext) {
     ['The three sheets'],
     `• "${SHEET_FACULTY}" — faculty and staff of Dr. ACS College of Engineering (host) on duty at the meet. Filled by the host college only.`,
     `• "${SHEET_PED}" — Physical Education Directors of the participating colleges who come with their squads. Write the college code on every row.`,
-    `• "${SHEET_OFFICIALS}" — MEET OFFICE ONLY: referees, technical officials, jury, call room officials, volunteers, medical team, media and guests. A college does not fill this sheet.`,
+    `• "${SHEET_OFFICIALS}" — MEET OFFICE ONLY: referees, technical officials, jury, call room officials, medical team, media and guests. Pick "Volunteer" as the role to make a volunteer pass. A college does not fill this sheet.`,
     '',
     ['Filling it in'],
     '• One person per row. Columns marked * must be filled; leave the rest blank if you do not have it.',
@@ -512,7 +512,8 @@ export async function parseDelegateWorkbook(buf: Buffer, opts: ParseOptions = {}
       continue;
     }
     // A college's upload never brings in meet officials
-    if (spec.category === 'OFFICIAL' && opts.forcedCollegeCode) continue;
+    // A college's upload only brings in its own PEDs (sheet 2)
+    if (spec.category !== 'PED' && opts.forcedCollegeCode) continue;
 
     const head = mapHeaders(ws);
     if (!head) {
@@ -592,7 +593,8 @@ export async function parseDelegateWorkbook(buf: Buffer, opts: ParseOptions = {}
       rows.push({
         sheet: spec.name,
         excelRow: r,
-        category: spec.category,
+        // Sheet 3: "Volunteer" as the role makes a volunteer pass
+        category: spec.category === 'OFFICIAL' && /^volunteers?$/i.test(designation) ? 'VOLUNTEER' : spec.category,
         collegeCode,
         fullName,
         designation,

@@ -1,11 +1,12 @@
 'use client';
 
 /**
- * Meet office → Faculty & Officials.
+ * Meet office → Passes (ACS faculty · PED · volunteer · technical official).
  *
- * The same workbook the colleges fill, but here all three sheets are read: the meet office
- * uploads its own referees, technical officials and volunteers (sheet 3), and can fix or
- * add a college's faculty row for a PED who cannot. Passes print from here too.
+ * Four ways in: upload the workbook (all three sheets), make a numbered batch of BLANK
+ * ACS-faculty / volunteer passes that are filled in by hand, make PED passes from this year's
+ * registration, or add one person. Every pass is free, needs no check-in, and its QR is used
+ * only at food and (when asked for) the hostel. Passes print from here, one per 4×6 page.
  */
 
 import { useEffect, useRef, useState, useTransition } from 'react';
@@ -14,15 +15,19 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { useUrlFilters } from '../useUrlFilters';
 import {
   BLOOD_GROUPS,
+  BLANK_PASS_CATEGORIES,
   CATEGORY_LABEL,
   FACULTY_DESIGNATIONS,
   OFFICIAL_ROLES,
   PED_DESIGNATION,
   SCOPE_LABEL,
+  passDisplayName,
   type DelegateCategory,
 } from '@/lib/delegates';
 import {
+  createPedPassesFromRegistrationAction,
   deleteAdminDelegateAction,
+  generateBlankPassesAction,
   importAdminDelegatesAction,
   saveAdminDelegateAction,
   setDelegateStatusAction,
@@ -37,10 +42,12 @@ interface Props {
   colleges: { code: string; name: string }[];
 }
 
+/** Same colours as the type bar on the printed pass */
 const CAT_BADGE: Record<DelegateCategory, { bg: string; fg: string; label: string }> = {
-  PED: { bg: '#ede9fe', fg: '#5b21b6', label: 'PED' },
-  FACULTY: { bg: '#dbeafe', fg: '#1e40af', label: 'Faculty' },
-  OFFICIAL: { bg: '#fef3c7', fg: '#92400e', label: 'Official' },
+  FACULTY: { bg: '#dbeafe', fg: '#1d4ed8', label: 'ACS Faculty' },
+  PED: { bg: '#ede9fe', fg: '#6d28d9', label: 'PED' },
+  VOLUNTEER: { bg: '#dcfce7', fg: '#15803d', label: 'Volunteer' },
+  OFFICIAL: { bg: '#fee2e2', fg: '#b91c1c', label: 'Official' },
 };
 
 export default function OfficialsClient({ delegates, filters, colleges }: Props) {
@@ -67,11 +74,11 @@ export default function OfficialsClient({ delegates, filters, colleges }: Props)
     return () => clearTimeout(t);
   }, [search]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const counts = {
-    all: delegates.length,
-    meals: delegates.filter((d) => d.meals_included && d.accreditation_status !== 'WITHDRAWN').length,
-    stay: delegates.filter((d) => d.accommodation_required).length,
-  };
+  const counts = (Object.keys(CAT_BADGE) as DelegateCategory[]).map((c) => ({
+    c,
+    n: delegates.filter((d) => d.category === c).length,
+  }));
+  const blanks = delegates.filter((d) => !d.full_name).length;
 
   async function onUpload(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -91,29 +98,34 @@ export default function OfficialsClient({ delegates, filters, colleges }: Props)
     router.refresh();
   }
 
-  function act(label: string, run: () => Promise<{ success: boolean; error?: string }>) {
+  function act(label: string, run: () => Promise<{ success: boolean; error?: string; message?: string }>) {
     startTransition(async () => {
       const res = await run();
-      setNotice(res.success ? { tone: 'ok', text: label } : { tone: 'bad', text: res.error || 'That did not work.' });
+      setNotice(res.success ? { tone: 'ok', text: res.message || label } : { tone: 'bad', text: res.error || 'That did not work.' });
       if (res.success) router.refresh();
     });
+  }
+
+  function onBlankBatch(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    const form = new FormData(e.currentTarget);
+    act('Blank passes made.', () => generateBlankPassesAction(form));
   }
 
   return (
     <div>
       <div className="admin-page-header no-print">
         <div className="admin-title-group">
-          <h2>Faculty, PEDs &amp; Meet Officials</h2>
+          <h2>Passes — ACS Faculty, PEDs, Volunteers &amp; Officials</h2>
           <p>
-            Accreditation passes for everyone who is not an athlete. Colleges send their faculty and PEDs from the
-            Contingent Portal; the meet office fills in sheet&nbsp;3 of the same workbook for referees, technical
-            officials, jury, volunteers, medical, media and guests. Every pass carries a QR the gate and food counters
-            scan, and a pass number from 90001.
+            Free passes for everyone who is not an athlete. No fee and no check-in: a pass works from the moment it is
+            made until you cancel it. Its QR is scanned only at the food counters and, if accommodation was asked for, at
+            the hostel. Pass numbers start at 90001 and can be typed at a counter like a bib.
           </p>
         </div>
         <div className="admin-actions-group" style={{ display: 'flex', gap: '0.6rem', flexWrap: 'wrap', alignItems: 'center' }}>
           <a href="/api/delegate-template" className="btn-admin" style={BTN_GHOST} download>
-            ⬇️ Blank template
+            ⬇️ Blank Excel template
           </a>
           <button type="button" className="btn-admin" style={BTN_GHOST} onClick={() => setAdding(true)}>
             ➕ Add one person
@@ -129,27 +141,68 @@ export default function OfficialsClient({ delegates, filters, colleges }: Props)
         </div>
       </div>
 
-      {/* Upload */}
-      <section className="no-print" style={{ ...CARD, marginBottom: '1rem' }}>
-        <form onSubmit={onUpload} style={{ display: 'flex', flexWrap: 'wrap', gap: '0.65rem', alignItems: 'center' }}>
-          <strong style={{ fontSize: '0.9rem', color: '#0f172a' }}>📤 Upload a filled workbook</strong>
-          <input
-            ref={fileRef}
-            type="file"
-            name="file"
-            accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-            required
-            disabled={importing}
-            style={{ fontSize: '0.85rem' }}
-          />
-          <button type="submit" style={BTN_PRIMARY} disabled={importing}>
-            {importing ? 'Reading…' : 'Import all three sheets'}
+      {/* Ways in */}
+      <div className="no-print" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '0.85rem', marginBottom: '1rem' }}>
+        <section style={CARD}>
+          <h3 style={H3}>🎟️ Blank numbered passes</h3>
+          <p style={P}>ACS faculty and volunteer passes with a QR and number but no name — written in by hand.</p>
+          <form onSubmit={onBlankBatch} style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', alignItems: 'center' }}>
+            <select name="category" defaultValue="VOLUNTEER" style={{ ...INPUT, width: 'auto' }}>
+              {BLANK_PASS_CATEGORIES.map((c) => (
+                <option key={c} value={c}>
+                  {CATEGORY_LABEL[c]}
+                </option>
+              ))}
+            </select>
+            <input name="count" type="number" min={1} max={500} defaultValue={50} required style={{ ...INPUT, width: 90 }} aria-label="How many" />
+            <select name="accommodation" defaultValue="no" style={{ ...INPUT, width: 'auto' }} aria-label="Accommodation">
+              <option value="no">No stay</option>
+              <option value="yes">With stay</option>
+            </select>
+            <button type="submit" style={BTN_PRIMARY} disabled={pending}>
+              Make passes
+            </button>
+          </form>
+        </section>
+
+        <section style={CARD}>
+          <h3 style={H3}>🏫 PED passes from registration</h3>
+          <p style={P}>
+            One pass for each PED named by the colleges when they registered (same person on both squads = one pass).
+            Anyone who already has a PED pass is skipped, so it is safe to run again.
+          </p>
+          <button
+            type="button"
+            style={BTN_PRIMARY}
+            disabled={pending}
+            onClick={() => act('PED passes made.', () => createPedPassesFromRegistrationAction())}
+          >
+            Make PED passes
           </button>
-          <span style={{ fontSize: '0.8rem', color: '#64748b' }}>
-            Faculty / PED rows must carry a College Code. Re-uploading updates the same people.
-          </span>
-        </form>
-      </section>
+        </section>
+
+        <section style={CARD}>
+          <h3 style={H3}>📤 Upload the filled workbook</h3>
+          <p style={P}>
+            Sheet 1 ACS faculty, sheet 2 PEDs (with college code), sheet 3 officials — role &quot;Volunteer&quot; makes a
+            volunteer pass. Re-uploading updates the same people.
+          </p>
+          <form onSubmit={onUpload} style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', alignItems: 'center' }}>
+            <input
+              ref={fileRef}
+              type="file"
+              name="file"
+              accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+              required
+              disabled={importing}
+              style={{ fontSize: '0.82rem', maxWidth: 220 }}
+            />
+            <button type="submit" style={BTN_PRIMARY} disabled={importing}>
+              {importing ? 'Reading…' : 'Import'}
+            </button>
+          </form>
+        </section>
+      </div>
 
       {notice && (
         <div
@@ -184,7 +237,10 @@ export default function OfficialsClient({ delegates, filters, colleges }: Props)
             <ul style={{ margin: '0.5rem 0 0', paddingLeft: '1.2rem', fontSize: '0.82rem', color: '#991b1b', maxHeight: 240, overflowY: 'auto' }}>
               {report.rejected.map((r, i) => (
                 <li key={i}>
-                  <strong>{r.sheet} row {r.excelRow}</strong> — {r.name}: {r.reason}
+                  <strong>
+                    {r.sheet} row {r.excelRow}
+                  </strong>{' '}
+                  — {r.name}: {r.reason}
                 </li>
               ))}
             </ul>
@@ -204,10 +260,17 @@ export default function OfficialsClient({ delegates, filters, colleges }: Props)
             style={{ minWidth: 240 }}
           />
           <select value={filters.category || 'ALL'} onChange={(e) => set({ category: e.target.value })} className="filter-control">
-            <option value="ALL">All categories</option>
-            <option value="PED">PEDs</option>
-            <option value="FACULTY">College faculty</option>
-            <option value="OFFICIAL">Meet officials &amp; volunteers</option>
+            <option value="ALL">All pass types</option>
+            {(Object.keys(CAT_BADGE) as DelegateCategory[]).map((c) => (
+              <option key={c} value={c}>
+                {CATEGORY_LABEL[c]}
+              </option>
+            ))}
+          </select>
+          <select value={filters.names || ''} onChange={(e) => set({ names: e.target.value })} className="filter-control">
+            <option value="">Named and blank</option>
+            <option value="named">Named only</option>
+            <option value="blank">Blank only</option>
           </select>
           <select value={filters.college || ''} onChange={(e) => set({ college: e.target.value })} className="filter-control">
             <option value="">All colleges</option>
@@ -218,8 +281,13 @@ export default function OfficialsClient({ delegates, filters, colleges }: Props)
             ))}
           </select>
         </div>
-        <div style={{ fontSize: '0.85rem', color: '#64748b' }}>
-          <strong>{counts.all}</strong> passes · <strong>{counts.meals}</strong> with meals · <strong>{counts.stay}</strong> want a bed
+        <div style={{ fontSize: '0.84rem', color: '#64748b', display: 'flex', gap: '0.6rem', flexWrap: 'wrap' }}>
+          {counts.map(({ c, n }) => (
+            <span key={c}>
+              <strong style={{ color: CAT_BADGE[c].fg }}>{n}</strong> {CAT_BADGE[c].label}
+            </span>
+          ))}
+          <span>· {blanks} blank</span>
         </div>
       </div>
 
@@ -229,10 +297,8 @@ export default function OfficialsClient({ delegates, filters, colleges }: Props)
       ) : delegates.length === 0 ? (
         <div style={{ ...CARD, textAlign: 'center', color: '#94a3b8', padding: '3rem 1rem' }}>
           <div style={{ fontSize: '2.4rem' }}>🎟️</div>
-          <div style={{ fontWeight: 700, color: '#475569', marginTop: '0.3rem' }}>Nobody matches these filters</div>
-          <div style={{ fontSize: '0.84rem', marginTop: '0.2rem' }}>
-            Upload the workbook above, or add one person by hand.
-          </div>
+          <div style={{ fontWeight: 700, color: '#475569', marginTop: '0.3rem' }}>No passes match these filters</div>
+          <div style={{ fontSize: '0.84rem', marginTop: '0.2rem' }}>Make a blank batch, make PED passes, upload the workbook, or add one person.</div>
         </div>
       ) : (
         <div style={{ ...CARD, padding: 0, overflowX: 'auto' }}>
@@ -241,10 +307,9 @@ export default function OfficialsClient({ delegates, filters, colleges }: Props)
               <tr style={{ background: '#f8fafc', color: '#475569', textAlign: 'left' }}>
                 <Th>Pass</Th>
                 <Th>Name</Th>
-                <Th>Category / role</Th>
+                <Th>Type / role</Th>
                 <Th>College / body</Th>
                 <Th>Mobile</Th>
-                <Th>Meals</Th>
                 <Th>Stay</Th>
                 <Th>Status</Th>
                 <Th align="right">Actions</Th>
@@ -255,25 +320,36 @@ export default function OfficialsClient({ delegates, filters, colleges }: Props)
                 const badge = CAT_BADGE[d.category];
                 return (
                   <tr key={d.id} style={{ borderTop: '1px solid #f1f5f9' }}>
-                    <Td><strong>{d.pass_no}</strong></Td>
                     <Td>
-                      <div style={{ fontWeight: 700, color: '#0f172a' }}>{d.full_name}</div>
-                      <div style={{ fontSize: '0.76rem', color: '#64748b' }}>{d.department || d.email || '—'}</div>
+                      <strong>{d.pass_no}</strong>
+                    </Td>
+                    <Td>
+                      <div style={{ fontWeight: 700, color: d.full_name ? '#0f172a' : '#94a3b8', fontStyle: d.full_name ? 'normal' : 'italic' }}>
+                        {d.full_name || 'Blank — name written by hand'}
+                      </div>
+                      <div style={{ fontSize: '0.76rem', color: '#64748b' }}>{d.department || d.email || ''}</div>
                     </Td>
                     <Td>
                       <span style={{ display: 'inline-block', padding: '0.12rem 0.45rem', borderRadius: 6, fontSize: '0.7rem', fontWeight: 800, background: badge.bg, color: badge.fg }}>
                         {badge.label}
                       </span>
-                      <div style={{ fontSize: '0.78rem', color: '#334155', marginTop: '0.15rem' }}>{d.designation}</div>
+                      {d.category === 'OFFICIAL' && <div style={{ fontSize: '0.78rem', color: '#334155', marginTop: '0.15rem' }}>{d.designation}</div>}
                     </Td>
                     <Td>
-                      <div style={{ color: '#0f172a' }}>{d.colleges?.name || d.organisation || 'Meet organising committee'}</div>
-                      <div style={{ fontSize: '0.76rem', color: '#64748b' }}>
-                        {d.colleges?.code ? `${d.colleges.code} · ${SCOPE_LABEL[d.squad_scope]}` : 'Host side'}
-                      </div>
+                      {d.category === 'PED' ? (
+                        <>
+                          <div style={{ color: '#0f172a' }}>{d.colleges?.name}</div>
+                          <div style={{ fontSize: '0.76rem', color: '#64748b' }}>
+                            {d.colleges?.code} · {SCOPE_LABEL[d.squad_scope]}
+                          </div>
+                        </>
+                      ) : d.category === 'FACULTY' ? (
+                        'Dr. ACS (host)'
+                      ) : (
+                        d.organisation || '—'
+                      )}
                     </Td>
                     <Td>{d.phone || '—'}</Td>
-                    <Td>{d.meals_included ? '✓' : '—'}</Td>
                     <Td>{d.accommodation_required ? '✓' : '—'}</Td>
                     <Td>
                       <StatusPill status={d.accreditation_status} />
@@ -287,7 +363,7 @@ export default function OfficialsClient({ delegates, filters, colleges }: Props)
                           type="button"
                           style={BTN_TINY}
                           disabled={pending}
-                          onClick={() => act(`${d.full_name}'s pass is active again.`, () => setDelegateStatusAction(d.id, 'REGISTERED'))}
+                          onClick={() => act(`Pass ${d.pass_no} is active again.`, () => setDelegateStatusAction(d.id, 'ACCREDITED'))}
                         >
                           Restore
                         </button>
@@ -296,7 +372,7 @@ export default function OfficialsClient({ delegates, filters, colleges }: Props)
                           type="button"
                           style={{ ...BTN_TINY, color: '#b45309', borderColor: '#fed7aa', background: '#fff7ed' }}
                           disabled={pending}
-                          onClick={() => act(`${d.full_name}'s pass is cancelled.`, () => setDelegateStatusAction(d.id, 'WITHDRAWN'))}
+                          onClick={() => act(`Pass ${d.pass_no} is cancelled.`, () => setDelegateStatusAction(d.id, 'WITHDRAWN'))}
                         >
                           Cancel pass
                         </button>
@@ -306,8 +382,8 @@ export default function OfficialsClient({ delegates, filters, colleges }: Props)
                         style={{ ...BTN_TINY, color: '#b91c1c', borderColor: '#fecaca', background: '#fef2f2' }}
                         disabled={pending}
                         onClick={() => {
-                          if (!confirm(`Delete ${d.full_name} and their meal history? Cancelling the pass is usually enough.`)) return;
-                          act(`${d.full_name} deleted.`, () => deleteAdminDelegateAction(d.id));
+                          if (!confirm(`Delete ${passDisplayName(d)} and its meal history? Cancelling the pass is usually enough.`)) return;
+                          act(`Pass ${d.pass_no} deleted.`, () => deleteAdminDelegateAction(d.id));
                         }}
                       >
                         Delete
@@ -357,7 +433,7 @@ function AdminDelegateForm({
   const [category, setCategory] = useState<DelegateCategory>(delegate?.category || 'OFFICIAL');
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
-  const isOfficial = category === 'OFFICIAL';
+  const nameOptional = BLANK_PASS_CATEGORIES.includes(category);
 
   async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -372,7 +448,7 @@ function AdminDelegateForm({
       setError(res.error || 'Could not save.');
       return;
     }
-    onSaved(`${form.get('fullName')} ${delegate ? 'updated' : 'added'}.`);
+    onSaved(`${form.get('fullName') || 'Pass'} ${delegate ? 'updated' : 'added'}.`);
   }
 
   return (
@@ -382,7 +458,7 @@ function AdminDelegateForm({
           {delegate ? `Edit pass ${delegate.pass_no}` : 'Add a pass'}
         </h2>
         <p style={{ margin: '0 0 1rem', fontSize: '0.82rem', color: '#64748b' }}>
-          {CATEGORY_LABEL[category]} · the pass number is issued automatically.
+          {CATEGORY_LABEL[category]} · {nameOptional ? 'leave the name empty for a blank pass written by hand' : 'the pass number is issued automatically'}.
         </p>
 
         {error && (
@@ -393,15 +469,16 @@ function AdminDelegateForm({
 
         <form onSubmit={onSubmit}>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(230px, 1fr))', gap: '0.75rem' }}>
-            <Field label="Category *">
-              <select value={category} onChange={(e) => setCategory(e.target.value as DelegateCategory)} style={INPUT}>
-                <option value="OFFICIAL">Meet official / volunteer</option>
-                <option value="FACULTY">College faculty</option>
-                <option value="PED">Physical Education Director</option>
+            <Field label="Pass type *">
+              <select value={category} onChange={(e) => setCategory(e.target.value as DelegateCategory)} style={INPUT} disabled={!!delegate}>
+                <option value="OFFICIAL">Technical official / referee</option>
+                <option value="VOLUNTEER">Volunteer</option>
+                <option value="FACULTY">ACS faculty</option>
+                <option value="PED">PED of a participating college</option>
               </select>
             </Field>
 
-            {!isOfficial && (
+            {category === 'PED' && (
               <Field label="College *">
                 <select name="collegeCode" defaultValue={delegate?.colleges?.code || ''} required style={INPUT}>
                   <option value="">— choose —</option>
@@ -414,30 +491,41 @@ function AdminDelegateForm({
               </Field>
             )}
 
-            <Field label="Full name *">
-              <input name="fullName" defaultValue={delegate?.full_name || ''} required maxLength={80} style={INPUT} />
+            <Field label={nameOptional ? 'Full name (optional)' : 'Full name *'}>
+              <input name="fullName" defaultValue={delegate?.full_name || ''} required={!nameOptional} maxLength={80} style={INPUT} />
             </Field>
 
-            <Field label={isOfficial ? 'Role *' : 'Designation *'}>
-              <select
-                name="designation"
-                defaultValue={delegate?.designation || (isOfficial ? 'Referee' : category === 'PED' ? PED_DESIGNATION : 'Team Manager')}
-                required
-                style={INPUT}
-              >
-                {(isOfficial ? OFFICIAL_ROLES : category === 'PED' ? [PED_DESIGNATION, ...FACULTY_DESIGNATIONS] : FACULTY_DESIGNATIONS).map((v) => (
-                  <option key={v} value={v}>
-                    {v}
-                  </option>
-                ))}
-              </select>
-            </Field>
+            {category === 'OFFICIAL' && (
+              <Field label="Role *">
+                <select name="designation" defaultValue={delegate?.designation || 'Track Referee'} required style={INPUT}>
+                  {OFFICIAL_ROLES.filter((r) => r !== 'Volunteer').map((v) => (
+                    <option key={v} value={v}>
+                      {v}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+            )}
+            {category === 'FACULTY' && (
+              <Field label="Designation">
+                <select name="designation" defaultValue={delegate?.designation || ''} style={INPUT}>
+                  <option value="">—</option>
+                  {FACULTY_DESIGNATIONS.map((v) => (
+                    <option key={v} value={v}>
+                      {v}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+            )}
+            {category === 'PED' && <input type="hidden" name="designation" value={PED_DESIGNATION} />}
 
-            {isOfficial ? (
-              <Field label="Organisation / deputed by">
+            {category === 'OFFICIAL' && (
+              <Field label="Deputed by">
                 <input name="organisation" defaultValue={delegate?.organisation || ''} maxLength={80} style={INPUT} />
               </Field>
-            ) : (
+            )}
+            {category === 'FACULTY' && (
               <Field label="Department">
                 <input name="department" defaultValue={delegate?.department || ''} maxLength={60} style={INPUT} />
               </Field>
@@ -445,10 +533,6 @@ function AdminDelegateForm({
 
             <Field label="Mobile number">
               <input name="phone" defaultValue={delegate?.phone || ''} inputMode="numeric" placeholder="10 digits" style={INPUT} />
-            </Field>
-
-            <Field label="Email">
-              <input name="email" type="email" defaultValue={delegate?.email || ''} style={INPUT} />
             </Field>
 
             <Field label="Gender">
@@ -471,10 +555,10 @@ function AdminDelegateForm({
               </select>
             </Field>
 
-            {!isOfficial && (
-              <Field label="Contingent">
+            {category === 'PED' && (
+              <Field label="In charge of">
                 <select name="scope" defaultValue={delegate?.squad_scope || 'BOTH'} style={INPUT}>
-                  <option value="BOTH">Whole contingent</option>
+                  <option value="BOTH">Men&rsquo;s &amp; Women&rsquo;s squads</option>
                   <option value="MEN">Men&rsquo;s squad</option>
                   <option value="WOMEN">Women&rsquo;s squad</option>
                 </select>
@@ -483,7 +567,7 @@ function AdminDelegateForm({
 
             <Field label="Meals">
               <select name="meals" defaultValue={delegate?.meals_included === false ? 'no' : 'yes'} style={INPUT}>
-                <option value="yes">Meal coupon on the pass</option>
+                <option value="yes">Yes</option>
                 <option value="no">No meals</option>
               </select>
             </Field>
@@ -524,15 +608,20 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 }
 
 function StatusPill({ status }: { status: string }) {
-  const map: Record<string, { bg: string; fg: string; text: string }> = {
-    ACCREDITED: { bg: '#ecfdf5', fg: '#047857', text: 'Active' },
-    REGISTERED: { bg: '#ecfdf5', fg: '#047857', text: 'Active' },
-    WITHDRAWN: { bg: '#fef2f2', fg: '#b91c1c', text: 'Cancelled' },
-  };
-  const s = map[status] || map.REGISTERED;
+  const cancelled = status === 'WITHDRAWN';
   return (
-    <span style={{ display: 'inline-block', padding: '0.18rem 0.55rem', borderRadius: 999, fontSize: '0.72rem', fontWeight: 800, background: s.bg, color: s.fg }}>
-      {s.text}
+    <span
+      style={{
+        display: 'inline-block',
+        padding: '0.18rem 0.55rem',
+        borderRadius: 999,
+        fontSize: '0.72rem',
+        fontWeight: 800,
+        background: cancelled ? '#fef2f2' : '#ecfdf5',
+        color: cancelled ? '#b91c1c' : '#047857',
+      }}
+    >
+      {cancelled ? 'Cancelled' : 'Active'}
     </span>
   );
 }
@@ -550,6 +639,8 @@ function Td({ children, align }: { children: React.ReactNode; align?: 'right' })
 }
 
 const CARD: React.CSSProperties = { background: '#fff', border: '1px solid var(--border-color, #e2e8f0)', borderRadius: 12, padding: '1rem 1.1rem' };
+const H3: React.CSSProperties = { margin: '0 0 0.3rem', fontSize: '0.98rem', fontWeight: 850, color: '#0f172a' };
+const P: React.CSSProperties = { margin: '0 0 0.7rem', fontSize: '0.8rem', color: '#64748b', lineHeight: 1.45 };
 const BTN_PRIMARY: React.CSSProperties = {
   display: 'inline-flex',
   alignItems: 'center',

@@ -21,10 +21,12 @@ export default async function AdminOfficialsPage({
   const one = (k: string) => (Array.isArray(sp[k]) ? sp[k]?.[0] : sp[k]) || '';
 
   const cat = one('category').toUpperCase();
+  const names = one('names');
   const filters: AdminDelegateFilters = {
-    category: (['FACULTY', 'PED', 'OFFICIAL'].includes(cat) ? cat : 'ALL') as DelegateCategory | 'ALL',
+    category: (['FACULTY', 'PED', 'VOLUNTEER', 'OFFICIAL'].includes(cat) ? cat : 'ALL') as DelegateCategory | 'ALL',
     college: one('college'),
     q: one('q'),
+    names: names === 'blank' || names === 'named' ? names : '',
   };
 
   const [delegates, colleges] = await Promise.all([
