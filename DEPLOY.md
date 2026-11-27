@@ -318,6 +318,9 @@ The App Store listing text and the reviewer notes are in `docs/app-store/athlete
 | 0054 college check-in (one scan per college) | ✅ 2026-11-26 | ✅ 2026-11-26 |
 | 0055 re-sync functions after 0001–0018 were re-run on production | ✅ 2026-11-26 (no-op) | ✅ 2026-11-26 |
 | 0056 Mixed relay max 3 nominations per squad (DB) | ✅ 2026-11-27 | ✅ 2026-11-27 (+ history row) |
+| 0057 passes for ACS faculty / PEDs / volunteers / officials (`delegates`) | ✅ 2026-11-27 | ✅ 2026-11-27 (+ history row) |
+| 0058 heats for 800m / 1500m | ✅ | ✅ (+ history row) |
+| 0059 athletes' meal-scan reply exactly as before 0057 | ✅ 2026-11-27 | ✅ 2026-11-27 (+ history row) |
 
 **Never re-run an old migration file.** Re-running 0001–0018 on production on 26 Nov silently put back the
 oldest versions of 10 functions (points, standings, field ranking, call room, check-in, payment trigger);
@@ -347,3 +350,7 @@ triggers, indexes, constraints, policies, grants) — they must have 0 differenc
 | 2026-11-26 | API | production | `PED_CRON_SECRET` | revision `aura-api-00015-8f2`; Cloud Scheduler `ped-alerts-tick` every minute |
 | 2026-11-26 | API | staging | `65bbc42` | revision `aura-api-staging-00014-fl6` (with `PED_CRON_SECRET_STAGING`) |
 | — | Website | production | still `700e1d5` | not deployed (unchanged) |
+| 2026-11-27 | Database | production + staging | 0057, 0059 | non-athlete passes; check_in_college / process_accreditation_scan unchanged (diffed before/after), meal scan adds the pass branch only |
+| 2026-11-27 | API | staging | `3ed6852` | revision `aura-api-staging-00022-dtv`; pass in roster + typed pass number served once, refused twice |
+| 2026-11-27 | API | production | `3ed6852` | revision `aura-api-00029-r4z`, normal sizing (min 1 / max 20 / 512 MiB); health 200 |
+| 2026-11-27 | Website | staging + production | `3ed6852` | passes: `/admin/officials`, `/squad/faculty` (PED Passes), template download |
