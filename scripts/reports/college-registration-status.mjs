@@ -95,10 +95,9 @@ function principalCell(c) {
   return parts.length ? parts.join('<br>') : overlay[c.code]?.principal || dash;
 }
 
-function collegeCell(c, { counts } = {}) {
+function collegeCell(c) {
   const bits = [c.district, c.code].filter(Boolean).map(esc).join(' · ');
-  const tail = counts ? ` · M ${Number(c.men || 0)} / W ${Number(c.women || 0)}` : '';
-  return `<b>${esc(c.name)}</b><br><span class="sub">${bits}${tail}</span>`;
+  return `<b>${esc(c.name)}</b><br><span class="sub">${bits}</span>`;
 }
 
 /** Colleges grouped by VTU division, divisions in a fixed order. */
@@ -135,8 +134,7 @@ function registeredTable(rows) {
     const p = list.reduce((a, c) => a + Number(c.paid || 0), 0);
     const b = list.reduce((a, c) => a + balanceOf(c), 0);
     out.push(
-      `<tr class="reg"><td colspan="4">${esc(region)} Division — ${list.length} colleges · ` +
-        `${list.reduce((a, c) => a + Number(c.athletes || 0), 0)} athletes</td>` +
+      `<tr class="reg"><td colspan="4">${esc(region)} Division — ${list.length} colleges</td>` +
         `<td class="r">${money(t)}</td><td class="r">${money(p)}</td><td class="r">${money(b)}</td></tr>`
     );
     for (const c of list) {
@@ -145,7 +143,7 @@ function registeredTable(rows) {
       const pending = Number(c.pending || 0);
       const paidSub = pending > 0 ? `<br><span class="sub">${money(pending)} awaiting verification</span>` : '';
       out.push(
-        `<tr><td class="n">${n}</td><td>${collegeCell(c, { counts: true })}</td>` +
+        `<tr><td class="n">${n}</td><td>${collegeCell(c)}</td>` +
           `<td>${pedCell(c, { withDivision: true })}</td><td>${principalCell(c)}</td>` +
           `<td class="r">${money(c.total_amount)}</td>` +
           `<td class="r">${Number(c.paid || 0) > 0 ? money(c.paid) : dash}${paidSub}</td>` +
@@ -199,7 +197,6 @@ function render(data) {
     hour12: true,
   }).format(new Date());
 
-  const athletes = reg.reduce((a, c) => a + Number(c.athletes || 0), 0);
   const T = reg.reduce((a, c) => a + Number(c.total_amount || 0), 0);
   const P = reg.reduce((a, c) => a + Number(c.paid || 0), 0);
   const B = reg.reduce((a, c) => a + balanceOf(c), 0);
@@ -230,7 +227,7 @@ td.due { color:#a40000; font-weight:bold; } td.ok { color:#0a6b1e; }
 <h1>28th VTU Inter-Collegiate State Level Athletic Meet 2026 (Dr. ACS-AURA 2026)</h1>
 <h2>College Registration Status — Registered &amp; Not Registered</h2>
 <div class="meta">Generated ${esc(stamp)} IST · ${reg.length + not.length} VTU colleges on the portal</div>
-<div class="sum"><b>${reg.length}</b> registered (${athletes} athletes) · <b>${not.length}</b> not registered ·
+<div class="sum"><b>${reg.length}</b> colleges registered · <b>${not.length}</b> not registered ·
 fee ${money(T)} · paid ${money(P)} · <b>balance ${money(B)}</b> across <b>${dueCount}</b> colleges
 (${nilPay} registered colleges have paid nothing yet)</div>
 
