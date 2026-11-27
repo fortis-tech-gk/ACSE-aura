@@ -306,8 +306,10 @@ SELECT chk('B2', try_sql($$INSERT INTO registrations (profile_id, event_id, kind
 -- withdrawals / substitutions change locked rosters (see migration 0030).
 SELECT chk('B4', try_sql($$SELECT audit_athlete(audit_sq('CB'), 'Dup USN', '1AA23BS001')$$) <> '',
        '[backstop] USN is unique across the championship');
-SELECT chk('B5', try_sql($$UPDATE profiles SET aadhaar_number = '12AB34' WHERE sslc_name = 'Backstop B'$$) <> '',
-       '[backstop] Aadhaar must be 12 digits');
+-- Since 0050 a 6–15 character A–Z/0–9 value is a valid passport number, so test with a value
+-- that is neither an Aadhaar nor a passport (too short, and lower case with a dash).
+SELECT chk('B5', try_sql($$UPDATE profiles SET aadhaar_number = '12-ab' WHERE sslc_name = 'Backstop B'$$) <> '',
+       '[backstop] ID must be a 12-digit Aadhaar or a 6–15 character passport number');
 INSERT INTO relay_teams (squad_id, event_id) VALUES (audit_sq('CA'), audit_ev('4X400M-M'));
 SELECT chk('B6', try_sql($$INSERT INTO relay_members (relay_team_id, profile_id, leg_order, is_reserve)
                            VALUES ((SELECT id FROM relay_teams WHERE squad_id = audit_sq('CA') AND event_id = audit_ev('4X400M-M')), audit_pid('Woman W1'), 1, false)$$) <> '',
