@@ -320,6 +320,41 @@ export default function AdminDashboardClient({ initialStats }: Props) {
         </p>
       </div>
 
+      {/* College lists: registered / not registered, as Excel */}
+      <div style={{ marginTop: '2rem' }} id="college-list-downloads">
+        <h3 style={{ fontSize: '1.15rem', fontWeight: 800, color: '#0f172a', marginBottom: '1rem' }}>
+          College Registration Lists
+        </h3>
+        <div className="metric-card">
+          <p style={{ fontSize: '0.825rem', color: '#64748b', marginBottom: '1rem' }}>
+            Download, as Excel (.xlsx), the colleges that have registered (at least one athlete) with PED and
+            principal contacts and the college fee account (total, paid, balance), or the colleges not yet
+            registered with their contacts and a Remarks / Called column. Built from the live database at the
+            moment you click.
+          </p>
+          <div className="admin-actions-group" style={{ flexWrap: 'wrap' }}>
+            <a
+              href="/api/admin/college-list?list=registered"
+              className="btn-admin btn-admin-primary"
+              id="btn-download-registered-colleges"
+              download
+            >
+              <span>⬇</span>
+              <span>Registered Colleges</span>
+            </a>
+            <a
+              href="/api/admin/college-list?list=not-registered"
+              className="btn-admin btn-admin-secondary"
+              id="btn-download-unregistered-colleges"
+              download
+            >
+              <span>⬇</span>
+              <span>Colleges Not Registered</span>
+            </a>
+          </div>
+        </div>
+      </div>
+
       {/* Administrative Operations Modules */}
       <div style={{ marginTop: '2rem' }}>
         <h3 style={{ fontSize: '1.15rem', fontWeight: 800, color: '#0f172a', marginBottom: '1rem' }}>

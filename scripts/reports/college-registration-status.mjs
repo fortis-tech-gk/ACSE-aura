@@ -5,6 +5,9 @@
  *      (total amount, amount paid, balance to be paid).
  *   2. Colleges NOT registered, with PED + principal contacts and a "called" column.
  *
+ * Also writes the not-registered table on its own as colleges-not-registered.html/.pdf
+ * (the standalone contact list for the calling desk).
+ *
  * Data comes from scripts/reports/college-registration-status.sql (run through psql);
  * fees mirror frontend/web/src/lib/payments.ts. Output: HTML + PDF in docs/reports/
  * (gitignored — the tables carry personal phone numbers and e-mail addresses).
@@ -24,6 +27,8 @@ const SQL = resolve(HERE, 'college-registration-status.sql');
 const OUT_DIR = resolve(ROOT, 'docs/reports');
 const OUT_HTML = resolve(OUT_DIR, 'college-registration-status.html');
 const OUT_PDF = resolve(OUT_DIR, 'college-registration-status.pdf');
+const NOT_HTML = resolve(OUT_DIR, 'colleges-not-registered.html');
+const NOT_PDF = resolve(OUT_DIR, 'colleges-not-registered.pdf');
 const OVERLAY = resolve(OUT_DIR, 'contacts-overlay.json');
 
 /**
@@ -184,27 +189,7 @@ function notRegisteredTable(rows) {
   return out.join('');
 }
 
-function render(data) {
-  const reg = data.registered || [];
-  const not = data.not_registered || [];
-  const stamp = new Intl.DateTimeFormat('en-GB', {
-    timeZone: 'Asia/Kolkata',
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-    hour12: true,
-  }).format(new Date());
-
-  const T = reg.reduce((a, c) => a + Number(c.total_amount || 0), 0);
-  const P = reg.reduce((a, c) => a + Number(c.paid || 0), 0);
-  const B = reg.reduce((a, c) => a + balanceOf(c), 0);
-  const dueCount = reg.filter((c) => balanceOf(c) > 0).length;
-  const nilPay = reg.filter((c) => Number(c.paid || 0) === 0).length;
-
-  return `<!doctype html><html><head><meta charset="utf-8"><title>College Registration Status</title><style>
-@page { size: A4 landscape; margin: 10mm 10mm 12mm; }
+const CSS = `@page { size: A4 landscape; margin: 10mm 10mm 12mm; }
 body { font-family: Arial, Helvetica, sans-serif; color:#111; margin:0; }
 h1 { font-size: 15px; text-align:center; margin:0 0 2px; } h2 { font-size: 13px; text-align:center; margin:0 0 3px; }
 h3 { font-size: 12.5px; margin:0 0 4px; padding:4px 6px; background:#1f3a68; color:#fff; }
@@ -223,7 +208,61 @@ td.due { color:#a40000; font-weight:bold; } td.ok { color:#0a6b1e; }
 .sub { color:#555; font-size:9px; } .em { color:#0b4fa8; } .na { color:#999; }
 .note { font-size: 8.5px; color:#444; margin-top:6px; line-height:1.4; }
 .page-break { page-break-before: always; }
-</style></head><body>
+`;
+
+const nowStamp = () =>
+  new Intl.DateTimeFormat('en-GB', {
+    timeZone: 'Asia/Kolkata',
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: true,
+  })
+    .format(new Date())
+    .replace(/\//g, '-')
+    .replace(',', '')
+    .replace(/\b(am|pm)\b/, (m) => m.toUpperCase());
+
+const SOURCES_NOTE = `Sources: registration database (squad PED details, college principal details); “VTU all principal
+MAILS” sheet; “All PED’s Phone Numbers as on 2025-26”; active PED contact list. PED and principal details from the
+2025-26 lists were matched to colleges by name and may be out of date — please confirm when calling.`;
+
+/** Contact-coverage line for a not-registered list. */
+function notRegisteredSummary(not) {
+  return `<b>${not.length}</b> colleges not registered · PED contact available for
+<b>${not.filter((c) => pedCell(c) !== dash).length}</b> · principal contact available for
+<b>${not.filter((c) => principalCell(c) !== dash).length}</b> · no contact found for
+<b>${not.filter((c) => pedCell(c) === dash && principalCell(c) === dash).length}</b>`;
+}
+
+/** Standalone "Colleges Not Yet Registered — Contact List" (same layout as the 26-11-2026 list). */
+function renderNotRegistered(not) {
+  return `<!doctype html><html><head><meta charset="utf-8"><title>Colleges Not Registered</title><style>
+${CSS}</style></head><body>
+<h1>28th VTU Inter-Collegiate State Level Athletic Meet 2026 (Dr. ACS-AURA 2026)</h1>
+<h2>Colleges Not Yet Registered — Contact List</h2>
+<div class="meta">Generated ${esc(nowStamp())} IST · colleges with no athlete registered on the portal</div>
+<div class="sum">${notRegisteredSummary(not)}</div>
+${notRegisteredTable(not)}
+<div class="note">${SOURCES_NOTE}</div>
+</body></html>`;
+}
+
+function render(data) {
+  const reg = data.registered || [];
+  const not = data.not_registered || [];
+  const stamp = nowStamp();
+
+  const T = reg.reduce((a, c) => a + Number(c.total_amount || 0), 0);
+  const P = reg.reduce((a, c) => a + Number(c.paid || 0), 0);
+  const B = reg.reduce((a, c) => a + balanceOf(c), 0);
+  const dueCount = reg.filter((c) => balanceOf(c) > 0).length;
+  const nilPay = reg.filter((c) => Number(c.paid || 0) === 0).length;
+
+  return `<!doctype html><html><head><meta charset="utf-8"><title>College Registration Status</title><style>
+${CSS}</style></head><body>
 <h1>28th VTU Inter-Collegiate State Level Athletic Meet 2026 (Dr. ACS-AURA 2026)</h1>
 <h2>College Registration Status — Registered &amp; Not Registered</h2>
 <div class="meta">Generated ${esc(stamp)} IST · ${reg.length + not.length} VTU colleges on the portal</div>
@@ -242,14 +281,9 @@ entries after paying shows a balance again.</div>
 
 <div class="page-break"></div>
 <h3>Table 2 — Colleges Not Yet Registered (no athlete on the portal) — Contact List</h3>
-<div class="sum"><b>${not.length}</b> colleges not registered · PED contact available for
-<b>${not.filter((c) => pedCell(c) !== dash).length}</b> · principal contact available for
-<b>${not.filter((c) => principalCell(c) !== dash).length}</b> · no contact found for
-<b>${not.filter((c) => pedCell(c) === dash && principalCell(c) === dash).length}</b></div>
+<div class="sum">${notRegisteredSummary(not)}</div>
 ${notRegisteredTable(not)}
-<div class="note">Sources: registration database (squad PED details, college principal details); “VTU all principal
-MAILS” sheet; “All PED’s Phone Numbers as on 2025-26”; active PED contact list. PED and principal details from the
-2025-26 lists were matched to colleges by name and may be out of date — please confirm when calling.</div>
+<div class="note">${SOURCES_NOTE}</div>
 </body></html>`;
 }
 
@@ -258,7 +292,9 @@ const json = execFileSync('psql', [url, '-At', '-f', SQL], { encoding: 'utf8', m
 const data = JSON.parse(json);
 mkdirSync(OUT_DIR, { recursive: true });
 writeFileSync(OUT_HTML, render(data));
+writeFileSync(NOT_HTML, renderNotRegistered(data.not_registered || []));
 console.log(`HTML  ${OUT_HTML}`);
+console.log(`HTML  ${NOT_HTML}`);
 
 const chrome = ['google-chrome', 'google-chrome-stable', 'chromium', 'chromium-browser'].find((bin) => {
   try {
@@ -269,15 +305,18 @@ const chrome = ['google-chrome', 'google-chrome-stable', 'chromium', 'chromium-b
   }
 });
 if (!chrome) {
-  console.warn('No Chrome/Chromium found — PDF not generated. Print the HTML to PDF by hand.');
+  console.warn('No Chrome/Chromium found — PDFs not generated. Print the HTML to PDF by hand.');
 } else {
-  execFileSync(
-    chrome,
-    ['--headless', '--disable-gpu', '--no-sandbox', '--no-pdf-header-footer', `--print-to-pdf=${OUT_PDF}`, `file://${OUT_HTML}`],
-    { stdio: 'pipe' }
-  );
-  console.log(`PDF   ${OUT_PDF}`);
+  for (const [html, pdf] of [
+    [OUT_HTML, OUT_PDF],
+    [NOT_HTML, NOT_PDF],
+  ]) {
+    execFileSync(
+      chrome,
+      ['--headless', '--disable-gpu', '--no-sandbox', '--no-pdf-header-footer', `--print-to-pdf=${pdf}`, `file://${html}`],
+      { stdio: 'pipe' }
+    );
+    console.log(`PDF   ${pdf}`);
+  }
 }
-console.log(
-  `registered ${data.registered.length} · not registered ${data.not_registered.length}`
-);
+console.log(`registered ${data.registered.length} · not registered ${data.not_registered.length}`);

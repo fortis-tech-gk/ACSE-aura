@@ -25,6 +25,18 @@ environment), writes `docs/reports/college-registration-status.html` and prints 
 A balance against a college whose squads read VERIFIED means entries were added after the
 payment was verified — those colleges owe the difference.
 
+The same run also writes the not-registered table on its own, as
+`docs/reports/colleges-not-registered.html` / `.pdf` (the calling desk's contact list).
+
+## Admin dashboard download
+
+The Meet Admin dashboard has a **College Registration Lists** card with two Excel downloads
+(`/api/admin/college-list?list=registered|not-registered`, built by
+`frontend/web/src/lib/college-registration-report.ts` from the live database). Same split and
+fee figures as this report, but contacts come from the database only: the 2025-26 contact
+overlay below lives outside the repository, so the printed list has more PED / principal
+contacts for colleges that never registered.
+
 ## Contact overlay
 
 Colleges that never registered mostly have no contacts in the database; theirs were matched
