@@ -348,10 +348,49 @@ def peak(users=3000, minutes=8, ramp=3, workers=150):
     for v in st.values():
         out = v.report(); log('peak', **out)
 
+# ----------------------------------------------------------------------------- decathlon / heptathlon
+COMBINED_RANGE = {
+    'DEC-M': {'100M': (11.0, 12.8), 'LJ': (5.6, 7.0), 'SP': (9.0, 13.0), 'HJ': (1.60, 1.95), '400M': (50.0, 58.0),
+              '110H': (15.5, 19.0), 'DT': (25.0, 38.0), 'PV': (2.6, 4.0), 'JT': (38.0, 58.0), '1500M': (270.0, 330.0)},
+    'HEP-W': {'100H': (14.5, 18.0), 'HJ': (1.35, 1.65), 'SP': (8.0, 11.5), '200M': (25.5, 29.0), 'LJ': (4.6, 5.6),
+              'JT': (25.0, 38.0), '800M': (140.0, 170.0)},
+}
+
+
+def combined(code, upto=99, finalize=True):
+    """Schedule slot (Day 1 morning) if missing, admin draw, call room, marks for disciplines 1..upto, finalize."""
+    tokens(); TOK.setdefault('adm', md.admin_login())
+    eid = sql(f"select id from events where code='{code}'")[0][0]
+    if not sql(f"select 1 from schedule_items where event_id='{eid}'"):
+        sess = sql("select id from schedule_sessions where session_name='Day 1 — Morning'")[0][0]
+        sql(f"insert into schedule_items (session_id, event_id, stage, scheduled_time, call_room_time, status) values "
+            f"('{sess}', '{eid}', 'FINAL', '{'09:00' if code == 'DEC-M' else '09:30'}', '{'08:30' if code == 'DEC-M' else '09:00'}', 'SCHEDULED');", False)
+    if not sql(f"select 1 from heats where event_id='{eid}'"):
+        s, j = api('POST', '/schedule/draw', {'eventId': eid, 'stage': 'FINAL', 'numLanes': 8}, 'adm'); print('draw', s, j.get('draw', j))
+    hid, status = sql(f"select id, status from heats where event_id='{eid}' order by heat_number limit 1")[0]
+    if status in ('SCHEDULED', 'DELAYED'):
+        s, j = call_room(hid, absent_rate=0.1); print('call room', s, j.get('error', 'closed, sent to track'))
+    rep = [r[0] for r in sql(f"select id from heat_athletes where heat_id='{hid}' and call_room_reported")]
+    have = {(r[0], r[1]) for r in sql(f"select heat_athlete_id, discipline from combined_results cr join heat_athletes ha on ha.id=cr.heat_athlete_id where ha.heat_id='{hid}'")}
+    for seq, disc, kind in sql(f"select seq, code, kind from combined_disciplines where event_code='{code}' order by seq"):
+        if int(seq) > upto: break
+        lo, hi = COMBINED_RANGE[code][disc]
+        for k, ha in enumerate(rep):
+            if (ha, disc) in have: continue
+            st, mark = 'FINISHED', round(rnd.uniform(lo, hi), 2)
+            if disc in ('1500M', '800M') and k == len(rep) - 1: st, mark = 'DNF', None      # one did not finish the last race
+            api('POST', '/combined/result', {'heatAthleteId': ha, 'discipline': disc, 'mark': mark, 'status': st}, 'ref')
+        print(f'  {code} {disc}: {len(rep)} marks', flush=True)
+    if finalize and upto >= 99:
+        s, j = api('POST', '/combined/finalize', {'heatId': hid}, 'ref'); print('finalize', s, {k: j.get(k) for k in ('error', 'message', 'pointsAwarded') if k in j})
+    API.report()
+    return hid
+
 
 CMDS = {'accredit': lambda a: accredit(set(a[a.index('--late') + 1].split(',')) if '--late' in a else set()),
         'hostel': lambda a: hostel(),
         'redate': lambda a: redate(int(a[0])),
+        'combined': lambda a: combined(a[0], int(a[1]) if len(a) > 1 else 99),
         'peak': lambda a: peak(int(a[0]), int(a[1])),
         'meals': lambda a: meals(int(a[0]), int(a[1]) if len(a) > 1 else 15000),
         'day': lambda a: day(int(a[0]), set(a[a.index('--hold') + 1].split(',')) if '--hold' in a else set()),
